@@ -1,19 +1,22 @@
 import { Stack } from "expo-router";
 
+import { AuthProvider } from "../src/contexts/AuthContext";
+
 /**
  * UniServe — Mobile Application Root Layout
  *
- * This is the entry point for the React Native + Expo mobile app.
- * Navigation structure will be built out in Phase 2+.
+ * Wraps the app with AuthProvider for authentication state management.
  */
 export default function RootLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen name="(tabs)" />
-    </Stack>
+    <AuthProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </AuthProvider>
   );
 }

@@ -10,11 +10,19 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from app.core.audit import SecurityAuditEvent  # noqa: F401
 from app.core.config import settings
 from app.core.database import Base
+from app.modules.cafeterias.models import Cafeteria  # noqa: F401
 
-# Import all models here so Alembic can detect them
-# from app.modules.users.models import *  # noqa: F401, F403
+# Import all models so Alembic can detect them
+from app.modules.users.models import (  # noqa: F401
+    CafeteriaAssignment,
+    OTPChallenge,
+    User,
+    UserCredential,
+    UserSession,
+)
 
 config = context.config
 

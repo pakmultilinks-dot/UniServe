@@ -89,8 +89,14 @@ module/
 
 ### Security Model
 
-- JWT-based authentication (Phase 2)
-- Role-based access control (RBAC)
-- Cafeteria-scoped permissions for staff
+- JWT-based authentication (access tokens + refresh tokens with rotation & reuse detection)
+- Role-based access control (RBAC) via `RequireRole` dependency
+- Cafeteria-scoped permissions via `RequireCafeteriaScope` dependency
 - Backend-enforced authorization (never trust frontend)
-- Environment-variable-based secrets
+- Argon2 password hashing (bcrypt fallback)
+- PBKDF2 PIN hashing with constant-time comparison
+- Hashed OTPs with expiry, max attempts, and rate limiting
+- Brute-force protection (login lockout, PIN lockout)
+- Comprehensive audit logging (24+ event types)
+- Generic error messages (no user enumeration)
+- Biometric authentication handled client-side only (see `biometric-boundary.md`)

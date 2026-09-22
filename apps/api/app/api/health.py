@@ -3,7 +3,7 @@
 Provides basic health and readiness checks for the API.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import APIRouter, Depends
@@ -22,7 +22,7 @@ async def health_check() -> dict[str, str]:
     return {
         "status": "healthy",
         "service": "uniserve-api",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -40,5 +40,5 @@ async def readiness_check(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
         "status": "ready" if db_status == "connected" else "degraded",
         "service": "uniserve-api",
         "database": db_status,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }

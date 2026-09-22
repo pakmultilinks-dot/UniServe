@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { AuthProvider } from "@/contexts/AuthContext";
+
 export const metadata: Metadata = {
   title: "UniServe — University Cafeteria Platform",
   description: "Order food from your university cafeteria",
@@ -8,8 +10,8 @@ export const metadata: Metadata = {
 /**
  * UniServe — Root Layout
  *
- * This is the entry point for the Next.js web application.
- * Role-based layouts (cafeteria, university admin) will be added in Phase 2+.
+ * Wraps the app with AuthProvider for authentication state management.
+ * Role-based layouts (cafeteria, university admin) will be added in future phases.
  */
 export default function RootLayout({
   children,
@@ -18,7 +20,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

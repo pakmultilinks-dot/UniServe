@@ -1,22 +1,56 @@
 """UniServe — University Cafeteria Management API."""
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.database import engine
+from app.core.exceptions import (
+    AccountLockedError,
+    AccountSuspendedError,
+    AuthenticationError,
+    AuthorizationError,
+    EmailNotVerifiedError,
+    OTPError,
+    PINError,
+    PINLockedError,
+    RateLimitError,
+    TokenExpiredError,
+    TokenRevokedError,
+    UniServeException,
+)
+from app.core.logging import setup_logging
 
 logger = structlog.get_logger()
+
+
+# ---- Exception → HTTP status mapping ----
+
+_EXCEPTION_STATUS_MAP: dict[type[UniServeException], int] = {
+    AuthenticationError: 401,
+    AuthorizationError: 403,
+    AccountLockedError: 423,
+    AccountSuspendedError: 403,
+    EmailNotVerifiedError: 403,
+    TokenExpiredError: 401,
+    TokenRevokedError: 401,
+    OTPError: 400,
+    RateLimitError: 429,
+    PINError: 400,
+    PINLockedError: 423,
+}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan — startup and shutdown events."""
+    setup_logging()
     logger.info("Starting UniServe API", env=settings.APP_ENV)
 
     # Startup
@@ -38,6 +72,27 @@ def create_application() -> FastAPI:
         openapi_url="/api/openapi.json" if settings.APP_DEBUG else None,
         lifespan=lifespan,
     )
+
+    # ---- Global exception handler for UniServe exceptions ----
+    @application.exception_handler(UniServeException)
+    async def uniserve_exception_handler(request: Request, exc: UniServeException) -> JSONResponse:
+        """Convert UniServe exceptions to structured JSON responses.
+
+        Never leaks internal details — only returns the safe message and code.
+        """
+        status = _EXCEPTION_STATUS_MAP.get(type(exc), 400)
+        logger.warning(
+            "UniServe exception",
+            code=exc.code,
+            message=exc.message,
+            path=request.url.path,
+            method=request.method,
+            status_code=status,
+        )
+        return JSONResponse(
+            status_code=status,
+            content={"detail": exc.message, "code": exc.code},
+        )
 
     # CORS middleware
     application.add_middleware(

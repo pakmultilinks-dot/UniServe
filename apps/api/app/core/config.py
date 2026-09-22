@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "uniserve_dev"
 
     @property
-    def DATABASE_URL(self) -> str:
+    def DATABASE_URL(self) -> str:  # noqa: N802
         """Construct the async database URL."""
         return (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
         )
 
     @property
-    def DATABASE_URL_SYNC(self) -> str:
+    def DATABASE_URL_SYNC(self) -> str:  # noqa: N802
         """Construct the synchronous database URL (for Alembic)."""
         return (
             f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
@@ -55,7 +55,33 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "change-me-in-production-use-a-strong-random-string"
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    # ---- OTP ----
+    OTP_LENGTH: int = 6
+    OTP_EXPIRE_MINUTES: int = 10
+    OTP_MAX_ATTEMPTS: int = 5
+    OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    OTP_MAX_RESENDS: int = 3
+
+    # ---- PIN ----
+    PIN_LENGTH: int = 4
+    PIN_MAX_FAILED_ATTEMPTS: int = 5
+    PIN_LOCKOUT_MINUTES: int = 15
+
+    # ---- Rate Limiting ----
+    LOGIN_MAX_ATTEMPTS: int = 10
+    LOGIN_LOCKOUT_MINUTES: int = 30
+    PASSWORD_RESET_MAX_REQUESTS: int = 5
+
+    # ---- Email University Rules ----
+    # University email patterns mapped to user categories.
+    # The system derives user category from email pattern matching.
+    # Add new patterns here when the university email format changes.
+    UNIVERSITY_EMAIL_PATTERNS: dict[str, list[str]] = {
+        "student": [r"^fa\d{2}-.+@lgu\.edu\.pk$", r".+@student\.lgu\.edu\.pk$"],
+        "faculty": [r"^[a-z].*@lgu\.edu\.pk$", r".+@faculty\.lgu\.edu\.pk$"],
+    }
 
     # ---- CORS ----
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8081"]
@@ -68,8 +94,11 @@ class Settings(BaseSettings):
     @classmethod
     def reject_default_secrets(cls, v: str, info: object) -> str:
         """Reject default secret keys in production."""
-        if hasattr(info, "data") and info.data.get("APP_ENV") == "production":  # type: ignore[attr-defined]
-            defaults = {"change-me-in-production", "change-me-in-production-use-a-strong-random-string"}
+        if hasattr(info, "data") and info.data.get("APP_ENV") == "production":
+            defaults = {
+                "change-me-in-production",
+                "change-me-in-production-use-a-strong-random-string",
+            }
             if v in defaults:
                 raise ValueError(f"Secret key must be changed for production. Got: {v[:10]}...")
         return v

@@ -1,20 +1,294 @@
-"""Shared test fixtures for the UniServe test suite."""
+"""Shared test fixtures for the UniServe test suite.
+
+Provides:
+- In-memory SQLite async database for tests
+- Database session fixtures
+- Pre-authenticated test users (all roles)
+- Authenticated client fixtures
+"""
+
+import asyncio
+from collections.abc import AsyncGenerator
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    create_async_engine,
+)
 
+from app.core.database import Base
+from app.core.security import hash_password
 from app.main import app
+from app.modules.users.models import (
+    AccountStatus,
+    Role,
+    User,
+    UserCategory,
+    UserCredential,
+    UserSession,
+)
+
+# ---------------------------------------------------------------------------
+# Async engine — in-memory SQLite per test module (shared across the session)
+# ---------------------------------------------------------------------------
+
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-@pytest.fixture
-def anyio_backend():
-    """Use asyncio as the async backend for tests."""
-    return "asyncio"
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create a single event loop for the entire test session."""
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
 
-@pytest.fixture
-async def client() -> AsyncClient:
-    """Provide an async HTTP client for testing API endpoints."""
+@pytest_asyncio.fixture(scope="session")
+async def engine():
+    """Async engine for the in-memory test database."""
+    eng = create_async_engine(TEST_DATABASE_URL, echo=False)
+    async with eng.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield eng
+    async with eng.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await eng.dispose()
+
+
+@pytest_asyncio.fixture
+async def db(engine) -> AsyncGenerator[AsyncSession, None]:
+    """Yield a transactional session that rolls back after each test."""
+    connection = await engine.connect()
+    transaction = await connection.begin()
+    session = AsyncSession(bind=connection, expire_on_commit=False)
+    try:
+        yield session
+    finally:
+        await session.close()
+        await transaction.rollback()
+        await connection.close()
+
+
+# ---------------------------------------------------------------------------
+# HTTPX async client — wired to the FastAPI app
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def client(engine) -> AsyncGenerator[AsyncClient, None]:
+    """Provide an async HTTP client for testing API endpoints.
+
+    Each test gets its own DB session via the ``db`` fixture, but the
+    FastAPI ``get_db`` dependency is overridden per-test so requests
+    hit the same in-memory database.
+    """
+    from app.core.database import get_db
+
+    connection = await engine.connect()
+    transaction = await connection.begin()
+    test_session = AsyncSession(bind=connection, expire_on_commit=False)
+
+    async def _override_get_db():
+        yield test_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+    app.dependency_overrides.clear()
+    await test_session.close()
+    await transaction.rollback()
+    await connection.close()
+
+
+# ---------------------------------------------------------------------------
+# Helper — create a user directly in the DB (bypasses registration)
+# ---------------------------------------------------------------------------
+
+
+async def create_test_user(
+    db: AsyncSession,
+    *,
+    first_name: str = "Test",
+    last_name: str = "User",
+    university_id: str = "FA22-BSE-001",
+    university_email: str = "test.user@lgu.edu.pk",
+    password: str = "StrongPass1!",
+    role: Role = Role.STUDENT,
+    category: UserCategory = UserCategory.STUDENT,
+    status: AccountStatus = AccountStatus.ACTIVE,
+    email_verified: bool = True,
+) -> User:
+    """Insert a user + credential directly and return the User object."""
+    user = User(
+        first_name=first_name,
+        last_name=last_name,
+        university_id=university_id,
+        university_email=university_email.lower().strip(),
+        category=category,
+        role=role,
+        status=status,
+        email_verified=email_verified,
+    )
+    db.add(user)
+    await db.flush()
+
+    credential = UserCredential(
+        user_id=user.id,
+        password_hash=hash_password(password),
+    )
+    db.add(credential)
+    await db.flush()
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Helper — create a session + tokens for a user
+# ---------------------------------------------------------------------------
+
+
+async def create_user_session(
+    db: AsyncSession,
+    user: User,
+) -> tuple[UserSession, str, str]:
+    """Create a session for a user and return (session, access_token, refresh_token)."""
+    import secrets
+
+    from app.core.security import create_access_token, create_refresh_token
+
+    session_id = secrets.token_hex(18)
+    refresh_jti = secrets.token_hex(18)
+
+    session = UserSession(
+        id=session_id,
+        user_id=user.id,
+        refresh_token_jti=refresh_jti,
+        is_active=True,
+    )
+    db.add(session)
+    await db.flush()
+
+    access_token = create_access_token(
+        subject=user.id,
+        extra_claims={"sid": session_id, "role": user.role.value},
+    )
+    refresh_token = create_refresh_token(
+        subject=user.id,
+        session_id=session_id,
+        jti=refresh_jti,
+    )
+    return session, access_token, refresh_token
+
+
+# ---------------------------------------------------------------------------
+# Pre-built user fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def student_user(db: AsyncSession) -> User:
+    return await create_test_user(
+        db,
+        first_name="Ali",
+        last_name="Khan",
+        university_id="FA22-BSE-001",
+        university_email="fa22-bse-001@lgu.edu.pk",
+        role=Role.STUDENT,
+        category=UserCategory.STUDENT,
+    )
+
+
+@pytest_asyncio.fixture
+async def faculty_user(db: AsyncSession) -> User:
+    return await create_test_user(
+        db,
+        first_name="Dr. Sara",
+        last_name="Ahmed",
+        university_id="FAC-1001",
+        university_email="sara.ahmed@lgu.edu.pk",
+        role=Role.FACULTY,
+        category=UserCategory.FACULTY,
+    )
+
+
+@pytest_asyncio.fixture
+async def staff_user(db: AsyncSession) -> User:
+    return await create_test_user(
+        db,
+        first_name="Staff",
+        last_name="Member",
+        university_id="STF-2001",
+        university_email="staff@lgu.edu.pk",
+        role=Role.CAFETERIA_STAFF,
+        category=UserCategory.FACULTY,
+    )
+
+
+@pytest_asyncio.fixture
+async def manager_user(db: AsyncSession) -> User:
+    return await create_test_user(
+        db,
+        first_name="Manager",
+        last_name="Person",
+        university_id="MGR-3001",
+        university_email="manager@lgu.edu.pk",
+        role=Role.CAFETERIA_MANAGER,
+        category=UserCategory.FACULTY,
+    )
+
+
+@pytest_asyncio.fixture
+async def admin_user(db: AsyncSession) -> User:
+    return await create_test_user(
+        db,
+        first_name="Admin",
+        last_name="User",
+        university_id="ADM-4001",
+        university_email="admin@lgu.edu.pk",
+        role=Role.UNIVERSITY_ADMIN,
+        category=UserCategory.FACULTY,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Authenticated client fixtures — include Authorization header
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def student_client(client: AsyncClient, student_user: User, db: AsyncSession) -> AsyncClient:
+    _, access_token, _ = await create_user_session(db, student_user)
+    client.headers["Authorization"] = f"Bearer {access_token}"
+    return client
+
+
+@pytest_asyncio.fixture
+async def faculty_client(client: AsyncClient, faculty_user: User, db: AsyncSession) -> AsyncClient:
+    _, access_token, _ = await create_user_session(db, faculty_user)
+    client.headers["Authorization"] = f"Bearer {access_token}"
+    return client
+
+
+@pytest_asyncio.fixture
+async def staff_client(client: AsyncClient, staff_user: User, db: AsyncSession) -> AsyncClient:
+    _, access_token, _ = await create_user_session(db, staff_user)
+    client.headers["Authorization"] = f"Bearer {access_token}"
+    return client
+
+
+@pytest_asyncio.fixture
+async def manager_client(client: AsyncClient, manager_user: User, db: AsyncSession) -> AsyncClient:
+    _, access_token, _ = await create_user_session(db, manager_user)
+    client.headers["Authorization"] = f"Bearer {access_token}"
+    return client
+
+
+@pytest_asyncio.fixture
+async def admin_client(client: AsyncClient, admin_user: User, db: AsyncSession) -> AsyncClient:
+    _, access_token, _ = await create_user_session(db, admin_user)
+    client.headers["Authorization"] = f"Bearer {access_token}"
+    return client

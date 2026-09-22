@@ -21,21 +21,34 @@ UniServe is developed in controlled, incremental phases. Each phase builds on th
 - Testing foundation
 - Documentation
 
-**Status:** Current phase
+**Status:** Completed ✓
 
 ---
 
-## Phase 2 — Authentication & Authorization
+## Phase 2 — Authentication & Authorization ✓
 
 **Objective:** Implement secure user authentication and role-based access control.
 
 **Deliverables:**
-- User registration and login
-- JWT authentication
-- Role-based authorization (student, faculty, staff, manager, admin)
-- Cafeteria-scoped permissions
-- Password/OTP authentication
-- Session management
+- User registration with email classification (student, faculty, staff, manager, admin)
+- Email verification via OTP (6-digit, hashed, rate-limited)
+- JWT authentication (access tokens 30min + refresh tokens 30 days with rotation & reuse detection)
+- Role-based authorization (RequireRole dependency)
+- Cafeteria-scoped permissions (RequireCafeteriaScope dependency)
+- Password authentication (Argon2 primary, bcrypt fallback)
+- PIN authentication (PBKDF2-HMAC-SHA256, 4-digit numeric)
+- Session management (create, list, revoke, revoke-all)
+- Account lifecycle (register → verify → active → suspend → delete)
+- Admin user management (create, suspend, activate, recover, role change)
+- Password reset flow (OTP-based, all sessions revoked)
+- Rate limiting (login lockout, PIN lockout, OTP cooldown, password reset throttle)
+- Comprehensive audit logging (24+ event types)
+- Exception handling (custom exceptions → HTTP status codes)
+- Security review (see `security-review-phase2.md`)
+- Biometric architecture boundary (see `biometric-boundary.md`)
+- 74 tests across 6 test files (all passing)
+
+**Status:** Completed ✓
 
 ---
 
