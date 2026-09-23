@@ -7,6 +7,7 @@ from app.modules.auth.router import router as auth_router
 
 # Phase 3 routers
 from app.modules.cafeterias.router import router as cafeterias_router
+from app.modules.carts.router import router as carts_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.menus.router import (
     daily_menus_router,
@@ -14,6 +15,7 @@ from app.modules.menus.router import (
     menu_items_router,
     search_router,
 )
+from app.modules.orders.router import router as orders_router
 from app.modules.users.router import router as users_router
 
 api_router = APIRouter()
@@ -57,6 +59,15 @@ api_router.include_router(favorites_router, prefix="/favorites", tags=["favorite
 # Menu search (standalone)
 api_router.include_router(search_router, prefix="/menu-search", tags=["menu-search"])
 
+# Carts (user-scoped, cafeteria-scoped)
+api_router.include_router(
+    carts_router,
+    prefix="/cafeterias/{cafeteria_id}/cart",
+    tags=["carts"],
+)
+
+# Orders
+api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
+
 # Future module routers:
-# api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 # api_router.include_router(payments_router, prefix="/payments", tags=["payments"])

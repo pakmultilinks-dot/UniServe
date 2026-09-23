@@ -1,4 +1,1 @@
-"""Orders module — order management.
-
-To be implemented in Phase 4.
-"""
+"""Orders module — orders, order items, and collection."""

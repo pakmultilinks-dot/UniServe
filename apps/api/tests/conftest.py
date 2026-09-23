@@ -274,36 +274,61 @@ async def admin_user(db: AsyncSession) -> User:
 @pytest_asyncio.fixture
 async def student_client(client: AsyncClient, student_user: User, db: AsyncSession) -> AsyncClient:
     _, access_token, _ = await create_user_session(db, student_user)
-    client.headers["Authorization"] = f"Bearer {access_token}"
-    return client
+    new_client = AsyncClient(
+        transport=client._transport,
+        base_url=str(client.base_url),
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    yield new_client
+    await new_client.aclose()
 
 
 @pytest_asyncio.fixture
 async def faculty_client(client: AsyncClient, faculty_user: User, db: AsyncSession) -> AsyncClient:
     _, access_token, _ = await create_user_session(db, faculty_user)
-    client.headers["Authorization"] = f"Bearer {access_token}"
-    return client
+    new_client = AsyncClient(
+        transport=client._transport,
+        base_url=str(client.base_url),
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    yield new_client
+    await new_client.aclose()
 
 
 @pytest_asyncio.fixture
 async def staff_client(client: AsyncClient, staff_user: User, db: AsyncSession) -> AsyncClient:
     _, access_token, _ = await create_user_session(db, staff_user)
-    client.headers["Authorization"] = f"Bearer {access_token}"
-    return client
+    new_client = AsyncClient(
+        transport=client._transport,
+        base_url=str(client.base_url),
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    yield new_client
+    await new_client.aclose()
 
 
 @pytest_asyncio.fixture
 async def manager_client(client: AsyncClient, manager_user: User, db: AsyncSession) -> AsyncClient:
     _, access_token, _ = await create_user_session(db, manager_user)
-    client.headers["Authorization"] = f"Bearer {access_token}"
-    return client
+    new_client = AsyncClient(
+        transport=client._transport,
+        base_url=str(client.base_url),
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    yield new_client
+    await new_client.aclose()
 
 
 @pytest_asyncio.fixture
 async def admin_client(client: AsyncClient, admin_user: User, db: AsyncSession) -> AsyncClient:
     _, access_token, _ = await create_user_session(db, admin_user)
-    client.headers["Authorization"] = f"Bearer {access_token}"
-    return client
+    new_client = AsyncClient(
+        transport=client._transport,
+        base_url=str(client.base_url),
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    yield new_client
+    await new_client.aclose()
 
 
 # ---------------------------------------------------------------------------
