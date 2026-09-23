@@ -52,18 +52,24 @@ UniServe is developed in controlled, incremental phases. Each phase builds on th
 
 ---
 
-## Phase 3 — Menu & Cafeteria Management
+## Phase 3 — Menu & Cafeteria Management ✓
 
 **Objective:** Implement cafeteria and menu management.
 
 **Deliverables:**
-- Cafeteria configuration
-- Menu creation and management
-- Category management
-- Menu item management
-- Dietary information and allergens
-- Operating hours
-- Active/inactive menu scheduling
+- Cafeteria configuration (name, type, description, phone, email, location, operating hours, timezone, operational status)
+- Cafeteria CRUD (admin create/update, scoped read, manager status update)
+- Menu item management (create, list, filter, get, update, soft-delete)
+- Daily menus with draft → published workflow
+- Daily menu item composition (add/remove items, special pricing, display order)
+- Menu favorites (add, list, remove, user-scoped)
+- Menu search (across cafeterias, by category, by name)
+- Inventory management (create items, adjust quantities, track stock levels, low-stock alerts)
+- Alembic migration 0003 (extends cafeterias, creates 6 new tables)
+- Comprehensive tests (45 new tests across 3 files, 119 total)
+- Security review: all endpoints auth-protected, scoped access enforced on reads
+
+**Status:** Completed ✓
 
 ---
 

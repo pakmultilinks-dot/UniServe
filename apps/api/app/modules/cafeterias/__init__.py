@@ -1,4 +1,1 @@
-"""Cafeterias module — cafeteria management.
-
-To be implemented in Phase 3.
-"""
+"""Cafeterias module — cafeteria configuration and management."""

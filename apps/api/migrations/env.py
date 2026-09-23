@@ -13,7 +13,20 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.audit import SecurityAuditEvent  # noqa: F401
 from app.core.config import settings
 from app.core.database import Base
-from app.modules.cafeterias.models import Cafeteria  # noqa: F401
+from app.modules.cafeterias.models import Cafeteria, OperationalStatus  # noqa: F401
+from app.modules.inventory.models import (  # noqa: F401
+    InventoryAdjustment,
+    InventoryItem,
+    InventoryUnit,
+)
+from app.modules.menus.models import (  # noqa: F401
+    DailyMenu,
+    DailyMenuItem,
+    DailyMenuStatus,
+    MenuCategory,
+    MenuFavorite,
+    MenuItem,
+)
 
 # Import all models so Alembic can detect them
 from app.modules.users.models import (  # noqa: F401

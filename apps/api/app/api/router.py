@@ -4,6 +4,16 @@ from fastapi import APIRouter
 
 from app.api.health import router as health_router
 from app.modules.auth.router import router as auth_router
+
+# Phase 3 routers
+from app.modules.cafeterias.router import router as cafeterias_router
+from app.modules.inventory.router import router as inventory_router
+from app.modules.menus.router import (
+    daily_menus_router,
+    favorites_router,
+    menu_items_router,
+    search_router,
+)
 from app.modules.users.router import router as users_router
 
 api_router = APIRouter()
@@ -17,8 +27,36 @@ api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 # User management module
 api_router.include_router(users_router, prefix="/users", tags=["users"])
 
+# Cafeteria management
+api_router.include_router(cafeterias_router, prefix="/cafeterias", tags=["cafeterias"])
+
+# Menu items (nested under cafeterias)
+api_router.include_router(
+    menu_items_router,
+    prefix="/cafeterias/{cafeteria_id}/menu-items",
+    tags=["menu-items"],
+)
+
+# Daily menus (nested under cafeterias)
+api_router.include_router(
+    daily_menus_router,
+    prefix="/cafeterias/{cafeteria_id}/daily-menus",
+    tags=["daily-menus"],
+)
+
+# Inventory (nested under cafeterias)
+api_router.include_router(
+    inventory_router,
+    prefix="/cafeterias/{cafeteria_id}/inventory",
+    tags=["inventory"],
+)
+
+# Favorites (standalone, user-scoped)
+api_router.include_router(favorites_router, prefix="/favorites", tags=["favorites"])
+
+# Menu search (standalone)
+api_router.include_router(search_router, prefix="/menu-search", tags=["menu-search"])
+
 # Future module routers:
-# api_router.include_router(cafeterias_router, prefix="/cafeterias", tags=["cafeterias"])
-# api_router.include_router(menus_router, prefix="/menus", tags=["menus"])
 # api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 # api_router.include_router(payments_router, prefix="/payments", tags=["payments"])

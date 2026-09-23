@@ -14,9 +14,11 @@ from app.core.database import engine
 from app.core.exceptions import (
     AccountLockedError,
     AccountSuspendedError,
+    AlreadyExistsException,
     AuthenticationError,
     AuthorizationError,
     EmailNotVerifiedError,
+    NotFoundException,
     OTPError,
     PINError,
     PINLockedError,
@@ -24,6 +26,7 @@ from app.core.exceptions import (
     TokenExpiredError,
     TokenRevokedError,
     UniServeException,
+    ValidationError,
 )
 from app.core.logging import setup_logging
 
@@ -33,6 +36,9 @@ logger = structlog.get_logger()
 # ---- Exception → HTTP status mapping ----
 
 _EXCEPTION_STATUS_MAP: dict[type[UniServeException], int] = {
+    NotFoundException: 404,
+    AlreadyExistsException: 409,
+    ValidationError: 400,
     AuthenticationError: 401,
     AuthorizationError: 403,
     AccountLockedError: 423,

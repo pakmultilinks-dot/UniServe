@@ -1,0 +1,240 @@
+"""Tests for inventory management endpoints."""
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.modules.inventory.models import InventoryItem, InventoryUnit
+from app.modules.users.models import Role, User
+from tests.conftest import (
+    assign_user_to_cafeteria,
+    create_test_cafeteria,
+    create_test_menu_item,
+)
+
+
+async def _get_manager_user(db: AsyncSession) -> User:
+    """Fetch the manager user from the DB."""
+    result = await db.execute(select(User).where(User.role == Role.CAFETERIA_MANAGER))
+    return result.scalar_one()
+
+
+async def _get_staff_user(db: AsyncSession) -> User:
+    """Fetch the staff user from the DB."""
+    result = await db.execute(select(User).where(User.role == Role.CAFETERIA_STAFF))
+    return result.scalar_one()
+
+
+# ===================================================================
+# Create Inventory Item
+# ===================================================================
+
+
+@pytest.mark.asyncio
+async def test_create_inventory_item(manager_client: AsyncClient, db):
+    """Manager can create an inventory item."""
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+    menu_item = await create_test_menu_item(db, cafeteria_id=caf.id)
+    response = await manager_client.post(
+        f"/api/v1/cafeterias/{caf.id}/inventory/",
+        json={
+            "menu_item_id": menu_item.id,
+            "quantity": 100,
+            "unit": "portions",
+            "low_threshold": 20,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["quantity"] == 100
+    assert data["unit"] == "portions"
+    assert data["low_threshold"] == 20
+    assert data["is_low"] is False
+
+
+@pytest.mark.asyncio
+async def test_create_inventory_item_staff_forbidden(staff_client: AsyncClient, db):
+    """Staff cannot create inventory items."""
+    caf = await create_test_cafeteria(db)
+    menu_item = await create_test_menu_item(db, cafeteria_id=caf.id)
+    response = await staff_client.post(
+        f"/api/v1/cafeterias/{caf.id}/inventory/",
+        json={
+            "menu_item_id": menu_item.id,
+            "quantity": 50,
+            "unit": "kg",
+        },
+    )
+    assert response.status_code == 403
+
+
+# ===================================================================
+# List Inventory Items
+# ===================================================================
+
+
+@pytest.mark.asyncio
+async def test_list_inventory_items(manager_client: AsyncClient, db):
+    """List inventory items for a cafeteria (scoped access)."""
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+    menu_item1 = await create_test_menu_item(db, cafeteria_id=caf.id, name="Item 1")
+    menu_item2 = await create_test_menu_item(db, cafeteria_id=caf.id, name="Item 2")
+    # Create inventory items directly
+    inv1 = InventoryItem(
+        cafeteria_id=caf.id,
+        menu_item_id=menu_item1.id,
+        quantity=50,
+        unit=InventoryUnit.PORTIONS,
+        low_threshold=10,
+    )
+    inv2 = InventoryItem(
+        cafeteria_id=caf.id,
+        menu_item_id=menu_item2.id,
+        quantity=5,
+        unit=InventoryUnit.KG,
+        low_threshold=10,
+    )
+    db.add(inv1)
+    db.add(inv2)
+    await db.flush()
+
+    response = await manager_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 2
+
+
+# ===================================================================
+# Adjust Inventory
+# ===================================================================
+
+
+@pytest.mark.asyncio
+async def test_adjust_inventory_restock(manager_client: AsyncClient, db):
+    """Staff can restock inventory."""
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+    menu_item = await create_test_menu_item(db, cafeteria_id=caf.id)
+    inv = InventoryItem(
+        cafeteria_id=caf.id,
+        menu_item_id=menu_item.id,
+        quantity=10,
+        unit=InventoryUnit.PORTIONS,
+        low_threshold=20,
+    )
+    db.add(inv)
+    await db.flush()
+
+    response = await manager_client.post(
+        f"/api/v1/cafeterias/{caf.id}/inventory/adjust",
+        json={
+            "inventory_item_id": inv.id,
+            "adjustment_quantity": 50,
+            "reason": "Weekly restock",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["adjustment_quantity"] == 50
+    assert data["reason"] == "Weekly restock"
+
+
+@pytest.mark.asyncio
+async def test_adjust_inventory_consumption(manager_client: AsyncClient, db):
+    """Staff can record inventory consumption."""
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+    menu_item = await create_test_menu_item(db, cafeteria_id=caf.id)
+    inv = InventoryItem(
+        cafeteria_id=caf.id,
+        menu_item_id=menu_item.id,
+        quantity=100,
+        unit=InventoryUnit.PORTIONS,
+        low_threshold=10,
+    )
+    db.add(inv)
+    await db.flush()
+
+    response = await manager_client.post(
+        f"/api/v1/cafeterias/{caf.id}/inventory/adjust",
+        json={
+            "inventory_item_id": inv.id,
+            "adjustment_quantity": -30,
+            "reason": "Lunch service",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["adjustment_quantity"] == -30
+
+
+@pytest.mark.asyncio
+async def test_adjust_inventory_below_zero_fails(manager_client: AsyncClient, db):
+    """Cannot reduce inventory below zero."""
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+    menu_item = await create_test_menu_item(db, cafeteria_id=caf.id)
+    inv = InventoryItem(
+        cafeteria_id=caf.id,
+        menu_item_id=menu_item.id,
+        quantity=10,
+        unit=InventoryUnit.PORTIONS,
+        low_threshold=5,
+    )
+    db.add(inv)
+    await db.flush()
+
+    response = await manager_client.post(
+        f"/api/v1/cafeterias/{caf.id}/inventory/adjust",
+        json={
+            "inventory_item_id": inv.id,
+            "adjustment_quantity": -20,
+            "reason": "Over-consumption",
+        },
+    )
+    assert response.status_code == 400
+
+
+# ===================================================================
+# Low Stock
+# ===================================================================
+
+
+@pytest.mark.asyncio
+async def test_low_stock_items(manager_client: AsyncClient, db):
+    """Get low-stock items (scoped access)."""
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+    menu_item1 = await create_test_menu_item(db, cafeteria_id=caf.id, name="Item 1")
+    menu_item2 = await create_test_menu_item(db, cafeteria_id=caf.id, name="Item 2")
+    inv1 = InventoryItem(
+        cafeteria_id=caf.id,
+        menu_item_id=menu_item1.id,
+        quantity=5,
+        unit=InventoryUnit.PORTIONS,
+        low_threshold=10,
+    )
+    inv2 = InventoryItem(
+        cafeteria_id=caf.id,
+        menu_item_id=menu_item2.id,
+        quantity=100,
+        unit=InventoryUnit.PORTIONS,
+        low_threshold=10,
+    )
+    db.add(inv1)
+    db.add(inv2)
+    await db.flush()
+
+    response = await manager_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/low-stock")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["quantity"] == 5

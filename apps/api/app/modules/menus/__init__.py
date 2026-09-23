@@ -1,4 +1,1 @@
-"""Menus module — menu management.
-
-To be implemented in Phase 3.
-"""
+"""Menus module — menu items, daily menus, and favorites."""

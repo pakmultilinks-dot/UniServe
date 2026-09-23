@@ -21,8 +21,20 @@ from sqlalchemy.ext.asyncio import (
 from app.core.database import Base
 from app.core.security import hash_password
 from app.main import app
+from app.modules.cafeterias.models import (
+    Cafeteria,
+    CafeteriaType,
+    OperationalStatus,
+)
+from app.modules.menus.models import (
+    DailyMenu,
+    DailyMenuStatus,
+    MenuCategory,
+    MenuItem,
+)
 from app.modules.users.models import (
     AccountStatus,
+    CafeteriaAssignment,
     Role,
     User,
     UserCategory,
@@ -292,3 +304,131 @@ async def admin_client(client: AsyncClient, admin_user: User, db: AsyncSession) 
     _, access_token, _ = await create_user_session(db, admin_user)
     client.headers["Authorization"] = f"Bearer {access_token}"
     return client
+
+
+# ---------------------------------------------------------------------------
+# Helper — create a cafeteria directly in the DB
+# ---------------------------------------------------------------------------
+
+
+async def create_test_cafeteria(
+    db: AsyncSession,
+    *,
+    name: str = "Student Cafeteria",
+    cafeteria_type: CafeteriaType = CafeteriaType.STUDENT,
+    description: str | None = "Main student cafeteria",
+    is_active: bool = True,
+    operational_status: OperationalStatus = OperationalStatus.OPEN,
+) -> Cafeteria:
+    """Insert a cafeteria directly and return the Cafeteria object."""
+    cafeteria = Cafeteria(
+        name=name,
+        type=cafeteria_type,
+        description=description,
+        is_active=is_active,
+        operational_status=operational_status,
+    )
+    db.add(cafeteria)
+    await db.flush()
+    return cafeteria
+
+
+# ---------------------------------------------------------------------------
+# Helper — create a menu item directly in the DB
+# ---------------------------------------------------------------------------
+
+
+async def create_test_menu_item(
+    db: AsyncSession,
+    *,
+    cafeteria_id: str,
+    name: str = "Chicken Biryani",
+    category: MenuCategory = MenuCategory.MAIN_COURSE,
+    price: int = 25000,  # 250 PKR in paisa
+    is_available: bool = True,
+) -> MenuItem:
+    """Insert a menu item directly and return the MenuItem object."""
+    item = MenuItem(
+        cafeteria_id=cafeteria_id,
+        name=name,
+        category=category,
+        price=price,
+        is_available=is_available,
+    )
+    db.add(item)
+    await db.flush()
+    return item
+
+
+# ---------------------------------------------------------------------------
+# Helper — create a daily menu directly in the DB
+# ---------------------------------------------------------------------------
+
+
+async def create_test_daily_menu(
+    db: AsyncSession,
+    *,
+    cafeteria_id: str,
+    menu_date=None,
+    status: DailyMenuStatus = DailyMenuStatus.DRAFT,
+    created_by: str | None = None,
+) -> DailyMenu:
+    """Insert a daily menu directly and return the DailyMenu object."""
+    from datetime import date as date_type
+
+    if menu_date is None:
+        menu_date = date_type.today()
+    daily_menu = DailyMenu(
+        cafeteria_id=cafeteria_id,
+        menu_date=menu_date,
+        status=status,
+        created_by=created_by,
+    )
+    db.add(daily_menu)
+    await db.flush()
+    return daily_menu
+
+
+# ---------------------------------------------------------------------------
+# Helper — assign a user to a cafeteria (required for staff/manager scope)
+# ---------------------------------------------------------------------------
+
+
+async def assign_user_to_cafeteria(
+    db: AsyncSession,
+    user_id: str,
+    cafeteria_id: str,
+    role: Role = Role.CAFETERIA_MANAGER,
+) -> CafeteriaAssignment:
+    """Create a CafeteriaAssignment linking a user to a cafeteria."""
+    assignment = CafeteriaAssignment(
+        user_id=user_id,
+        cafeteria_id=cafeteria_id,
+        role=role,
+    )
+    db.add(assignment)
+    await db.flush()
+    return assignment
+
+
+# ---------------------------------------------------------------------------
+# Pre-built cafeteria fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def student_cafeteria(db: AsyncSession) -> Cafeteria:
+    return await create_test_cafeteria(
+        db,
+        name="Student Cafeteria",
+        cafeteria_type=CafeteriaType.STUDENT,
+    )
+
+
+@pytest_asyncio.fixture
+async def faculty_cafeteria(db: AsyncSession) -> Cafeteria:
+    return await create_test_cafeteria(
+        db,
+        name="Faculty Cafeteria",
+        cafeteria_type=CafeteriaType.FACULTY,
+    )

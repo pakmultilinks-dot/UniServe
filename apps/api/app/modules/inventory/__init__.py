@@ -1,4 +1,1 @@
-"""Inventory module — inventory management.
-
-To be implemented in Phase 3.
-"""
+"""Inventory module — inventory tracking and adjustments."""
