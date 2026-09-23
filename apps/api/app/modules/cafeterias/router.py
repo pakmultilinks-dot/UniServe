@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.deps import (
     AuthContext,
     RequireCafeteriaScope,
+    RequireCafeteriaWriteScope,
     RequireRole,
 )
 from app.modules.cafeterias.models import CafeteriaType
@@ -125,7 +126,9 @@ async def update_cafeteria(
 async def update_operational_status(
     cafeteria_id: str,
     body: OperationalStatusUpdateRequest,
-    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> CafeteriaResponse:
     """Update cafeteria operational status (manager/admin only)."""

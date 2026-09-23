@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import AuthContext, RequireCafeteriaScope, RequireRole
+from app.core.deps import (
+    AuthContext,
+    RequireCafeteriaScope,
+    RequireCafeteriaWriteScope,
+    verify_resource_cafeteria,
+)
 from app.modules.inventory.schemas import (
     InventoryAdjustmentRequest,
     InventoryAdjustmentResponse,
@@ -25,11 +30,25 @@ router = APIRouter()
 async def create_inventory_item(
     cafeteria_id: str,
     body: InventoryItemCreateRequest,
-    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> InventoryItemResponse:
     """Create an inventory record for a menu item (manager/admin)."""
     service = InventoryService(db)
+    # Verify the menu item belongs to the claimed cafeteria
+    from app.modules.menus.service import MenuService
+
+    menu_service = MenuService(db)
+    menu_item = await menu_service.get_menu_item(body.menu_item_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=menu_item.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="MenuItem",
+        db=db,
+        auth=auth,
+    )
     item = await service.create_inventory_item(
         cafeteria_id=cafeteria_id,
         menu_item_id=body.menu_item_id,
@@ -74,12 +93,23 @@ async def adjust_inventory(
     cafeteria_id: str,
     body: InventoryAdjustmentRequest,
     auth: AuthContext = Depends(
-        RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)
+        RequireCafeteriaWriteScope(
+            Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF
+        )
     ),
     db: AsyncSession = Depends(get_db),
 ) -> InventoryAdjustmentResponse:
     """Adjust inventory quantity (manager/staff/admin)."""
     service = InventoryService(db)
+    # Load the inventory item and verify it belongs to the claimed cafeteria
+    inventory_item = await service.get_inventory_item(body.inventory_item_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=inventory_item.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="InventoryItem",
+        db=db,
+        auth=auth,
+    )
     adjustment = await service.adjust_inventory(
         inventory_item_id=body.inventory_item_id,
         adjustment_quantity=body.adjustment_quantity,

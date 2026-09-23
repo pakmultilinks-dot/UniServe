@@ -172,6 +172,78 @@ class RequireRole:
         return auth
 
 
+class RequireCafeteriaWriteScope:
+    """Dependency combining role check + cafeteria scope for write operations.
+
+    Enforces that:
+    1. The user has one of the allowed roles (admin, manager, or staff).
+    2. Managers/staff are assigned to the target cafeteria.
+    3. Students and faculty can never perform mutations.
+
+    Usage:
+        @router.post("/cafeterias/{cafeteria_id}/items/",
+            dependencies=[Depends(RequireCafeteriaWriteScope(
+                Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER))])
+        async def create_item(cafeteria_id: str):
+            ...
+    """
+
+    def __init__(self, *allowed_roles: Role) -> None:
+        self.allowed_roles = allowed_roles
+
+    async def __call__(
+        self,
+        cafeteria_id: str,
+        auth: AuthContext = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> AuthContext:
+        # 1. Role check
+        if auth.user.role not in self.allowed_roles:
+            await log_audit_event(
+                session=db,
+                event_type=AuditEventType.AUTHORIZATION_FAILED,
+                user_id=auth.user.id,
+                description=(
+                    f"Write access denied — required roles: "
+                    f"{[r.value for r in self.allowed_roles]}, "
+                    f"actual: {auth.user.role.value}"
+                ),
+                ip_address=auth.ip_address,
+                user_agent=auth.user_agent,
+            )
+            raise AuthorizationError(
+                f"This action requires one of the following roles: "
+                f"{', '.join(r.value for r in self.allowed_roles)}"
+            )
+
+        # 2. University Admin has universal write access
+        if auth.user.role == Role.UNIVERSITY_ADMIN:
+            return auth
+
+        # 3. Manager/Staff must be assigned to the target cafeteria
+        if auth.user.role in (Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF):
+            result = await db.execute(
+                select(CafeteriaAssignment).where(
+                    CafeteriaAssignment.user_id == auth.user.id,
+                    CafeteriaAssignment.cafeteria_id == cafeteria_id,
+                )
+            )
+            if result.scalar_one_or_none() is None:
+                await log_audit_event(
+                    session=db,
+                    event_type=AuditEventType.AUTHORIZATION_FAILED,
+                    user_id=auth.user.id,
+                    description=(f"Write denied — not assigned to cafeteria: {cafeteria_id}"),
+                    ip_address=auth.ip_address,
+                    user_agent=auth.user_agent,
+                )
+                raise AuthorizationError("You are not assigned to this cafeteria")
+            return auth
+
+        # 4. Students and Faculty should never reach write endpoints
+        raise AuthorizationError("Insufficient permissions for this action")
+
+
 class RequireCafeteriaScope:
     """Dependency for cafeteria-scoped access control.
 
@@ -259,3 +331,38 @@ require_staff = RequireRole(Role.CAFETERIA_STAFF)
 require_manager_or_staff = RequireRole(Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)
 require_manager_or_admin = RequireRole(Role.CAFETERIA_MANAGER, Role.UNIVERSITY_ADMIN)
 require_authenticated = Depends(get_current_user)
+
+
+async def verify_resource_cafeteria(
+    *,
+    resource_cafeteria_id: str,
+    expected_cafeteria_id: str,
+    resource_type: str,
+    db: AsyncSession,
+    auth: AuthContext | None = None,
+) -> None:
+    """Verify that a resource belongs to the expected cafeteria.
+
+    Call this in endpoints that accept a resource ID (e.g. menu_item_id)
+    to ensure the resource was not created under a different cafeteria
+    than the one the user is authorized to manage.
+
+    Raises AuthorizationError if the cafeteria IDs do not match.
+    """
+    if resource_cafeteria_id != expected_cafeteria_id:
+        if auth is not None:
+            await log_audit_event(
+                session=db,
+                event_type=AuditEventType.AUTHORIZATION_FAILED,
+                user_id=auth.user.id,
+                description=(
+                    f"{resource_type} ownership mismatch — "
+                    f"resource belongs to cafeteria {resource_cafeteria_id}, "
+                    f"expected {expected_cafeteria_id}"
+                ),
+                ip_address=auth.ip_address,
+                user_agent=auth.user_agent,
+            )
+        raise AuthorizationError(
+            f"This {resource_type.lower()} does not belong to the specified cafeteria"
+        )

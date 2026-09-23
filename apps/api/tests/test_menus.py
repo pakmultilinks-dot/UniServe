@@ -32,6 +32,8 @@ async def _get_manager_user(db: AsyncSession) -> User:
 async def test_create_menu_item(manager_client: AsyncClient, db):
     """Manager can create a menu item."""
     caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
     response = await manager_client.post(
         f"/api/v1/cafeterias/{caf.id}/menu-items/",
         json={
@@ -117,6 +119,8 @@ async def test_get_menu_item(manager_client: AsyncClient, db):
 async def test_update_menu_item(manager_client: AsyncClient, db):
     """Manager can update a menu item."""
     caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
     item = await create_test_menu_item(db, cafeteria_id=caf.id, name="Old Name")
     response = await manager_client.put(
         f"/api/v1/cafeterias/{caf.id}/menu-items/{item.id}",
@@ -155,6 +159,8 @@ async def test_delete_menu_item_manager_forbidden(manager_client: AsyncClient, d
 async def test_create_daily_menu(manager_client: AsyncClient, db):
     """Manager can create a daily menu draft."""
     caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
     today = date.today().isoformat()
     response = await manager_client.post(
         f"/api/v1/cafeterias/{caf.id}/daily-menus/",
@@ -171,6 +177,8 @@ async def test_create_daily_menu(manager_client: AsyncClient, db):
 async def test_create_daily_menu_duplicate(manager_client: AsyncClient, db):
     """Cannot create two daily menus for the same cafeteria and date."""
     caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
     today = date.today()
     await create_test_daily_menu(db, cafeteria_id=caf.id, menu_date=today)
     response = await manager_client.post(
@@ -184,6 +192,8 @@ async def test_create_daily_menu_duplicate(manager_client: AsyncClient, db):
 async def test_add_item_to_daily_menu(manager_client: AsyncClient, db):
     """Manager can add items to a daily menu draft."""
     caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
     menu = await create_test_daily_menu(db, cafeteria_id=caf.id)
     item = await create_test_menu_item(db, cafeteria_id=caf.id)
     response = await manager_client.post(
@@ -204,6 +214,8 @@ async def test_add_item_to_daily_menu(manager_client: AsyncClient, db):
 async def test_publish_daily_menu(manager_client: AsyncClient, db):
     """Manager can publish a daily menu that has items."""
     caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
     menu = await create_test_daily_menu(db, cafeteria_id=caf.id)
     item = await create_test_menu_item(db, cafeteria_id=caf.id)
     # Add an item first
@@ -224,6 +236,8 @@ async def test_publish_daily_menu(manager_client: AsyncClient, db):
 async def test_publish_empty_menu_fails(manager_client: AsyncClient, db):
     """Cannot publish an empty daily menu."""
     caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
     menu = await create_test_daily_menu(db, cafeteria_id=caf.id)
     response = await manager_client.patch(
         f"/api/v1/cafeterias/{caf.id}/daily-menus/{menu.id}/publish",
@@ -235,6 +249,8 @@ async def test_publish_empty_menu_fails(manager_client: AsyncClient, db):
 async def test_remove_item_from_daily_menu(manager_client: AsyncClient, db):
     """Manager can remove items from a draft daily menu."""
     caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
     menu = await create_test_daily_menu(db, cafeteria_id=caf.id)
     item = await create_test_menu_item(db, cafeteria_id=caf.id)
     await manager_client.post(

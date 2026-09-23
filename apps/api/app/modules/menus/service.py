@@ -265,6 +265,8 @@ class MenuService:
         )
         self.db.add(dmi)
         await self.db.flush()
+        # Expire the items relationship so re-fetch picks up the new item
+        self.db.expire(daily_menu, ["items"])
         logger.info(
             "item_added_to_daily_menu",
             daily_menu_id=daily_menu_id,

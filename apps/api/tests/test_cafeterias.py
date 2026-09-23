@@ -2,9 +2,11 @@
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app.modules.cafeterias.models import CafeteriaType
-from tests.conftest import create_test_cafeteria
+from app.modules.users.models import Role, User
+from tests.conftest import assign_user_to_cafeteria, create_test_cafeteria
 
 # ===================================================================
 # Create Cafeteria
@@ -161,8 +163,12 @@ async def test_update_cafeteria_not_admin(manager_client: AsyncClient, db):
 
 @pytest.mark.asyncio
 async def test_update_status_manager(manager_client: AsyncClient, db):
-    """Manager can update operational status."""
+    """Manager can update operational status for their assigned cafeteria."""
     caf = await create_test_cafeteria(db, name="Status Caf")
+    # Assign the manager to this cafeteria
+    result = await db.execute(select(User).where(User.role == Role.CAFETERIA_MANAGER))
+    mgr = result.scalar_one()
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
     response = await manager_client.patch(
         f"/api/v1/cafeterias/{caf.id}/status",
         json={"status": "maintenance"},

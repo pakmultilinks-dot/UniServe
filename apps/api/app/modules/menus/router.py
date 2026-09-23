@@ -9,8 +9,10 @@ from app.core.database import get_db
 from app.core.deps import (
     AuthContext,
     RequireCafeteriaScope,
+    RequireCafeteriaWriteScope,
     RequireRole,
     get_current_user,
+    verify_resource_cafeteria,
 )
 from app.modules.menus.models import DailyMenuStatus, MenuCategory
 from app.modules.menus.schemas import (
@@ -55,7 +57,9 @@ search_router = APIRouter()
 async def create_menu_item(
     cafeteria_id: str,
     body: MenuItemCreateRequest,
-    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> MenuItemResponse:
     """Create a menu item (manager/admin, cafeteria-scoped)."""
@@ -115,11 +119,21 @@ async def update_menu_item(
     cafeteria_id: str,
     menu_item_id: str,
     body: MenuItemUpdateRequest,
-    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> MenuItemResponse:
     """Update a menu item (manager/admin)."""
     service = MenuService(db)
+    item = await service.get_menu_item(menu_item_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=item.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="MenuItem",
+        db=db,
+        auth=auth,
+    )
     item = await service.update_menu_item(
         menu_item_id,
         name=body.name,
@@ -157,7 +171,9 @@ async def delete_menu_item(
 async def create_daily_menu(
     cafeteria_id: str,
     body: DailyMenuCreateRequest,
-    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> DailyMenuResponse:
     """Create a daily menu draft (manager/admin)."""
@@ -224,11 +240,31 @@ async def add_item_to_daily_menu(
     cafeteria_id: str,
     daily_menu_id: str,
     body: DailyMenuAddItemRequest,
-    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> DailyMenuResponse:
     """Add a menu item to a daily menu (must be DRAFT)."""
     service = MenuService(db)
+    # Verify the daily menu belongs to the claimed cafeteria
+    daily_menu = await service.get_daily_menu(daily_menu_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=daily_menu.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="DailyMenu",
+        db=db,
+        auth=auth,
+    )
+    # Verify the menu item belongs to the same cafeteria
+    menu_item = await service.get_menu_item(body.menu_item_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=menu_item.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="MenuItem",
+        db=db,
+        auth=auth,
+    )
     await service.add_item_to_daily_menu(
         daily_menu_id,
         menu_item_id=body.menu_item_id,
@@ -248,11 +284,22 @@ async def remove_item_from_daily_menu(
     cafeteria_id: str,
     daily_menu_id: str,
     menu_item_id: str,
-    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> DailyMenuResponse:
     """Remove a menu item from a daily menu (must be DRAFT)."""
     service = MenuService(db)
+    # Verify the daily menu belongs to the claimed cafeteria
+    daily_menu = await service.get_daily_menu(daily_menu_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=daily_menu.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="DailyMenu",
+        db=db,
+        auth=auth,
+    )
     await service.remove_item_from_daily_menu(daily_menu_id, menu_item_id)
     menu = await service.get_daily_menu(daily_menu_id)
     return DailyMenuResponse.model_validate(menu)
@@ -262,11 +309,22 @@ async def remove_item_from_daily_menu(
 async def publish_daily_menu(
     cafeteria_id: str,
     daily_menu_id: str,
-    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> DailyMenuResponse:
     """Publish a daily menu (manager/admin)."""
     service = MenuService(db)
+    # Verify the daily menu belongs to the claimed cafeteria
+    daily_menu = await service.get_daily_menu(daily_menu_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=daily_menu.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="DailyMenu",
+        db=db,
+        auth=auth,
+    )
     menu = await service.publish_daily_menu(daily_menu_id)
     return DailyMenuResponse.model_validate(menu)
 
