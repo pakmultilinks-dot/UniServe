@@ -22,12 +22,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.cafeterias.models import CafeteriaType, OperationalStatus
 from app.modules.inventory.models import InventoryItem, InventoryUnit
 from app.modules.menus.models import DailyMenuStatus, MenuCategory
-from app.modules.users.models import Role
+from app.modules.users.models import Role, User, UserCategory
 from tests.conftest import (
     assign_user_to_cafeteria,
     create_test_cafeteria,
     create_test_daily_menu,
     create_test_menu_item,
+    create_test_user,
+    create_user_session,
 )
 
 # ---------------------------------------------------------------------------
@@ -396,6 +398,243 @@ class TestOrderRetrieval:
         resp = await student_client.get("/api/v1/orders/?status=completed")
         assert resp.status_code == 200
         assert resp.json()["total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Order Detail IDOR Security Tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestOrderDetailIDOR:
+    """Security regression tests for GET /orders/{order_id} IDOR fix.
+
+    Verifies that an authenticated user cannot access another user's order
+    by guessing or knowing the order UUID.
+    """
+
+    async def test_owner_can_access_own_order(
+        self, student_client: AsyncClient, student_user, db: AsyncSession
+    ):
+        """Test A — Order owner can access their own order."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+
+        resp = await student_client.get(f"/api/v1/orders/{order_id}")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == order_id
+
+    async def test_different_student_cannot_access_order(
+        self, student_client: AsyncClient, db: AsyncSession
+    ):
+        """Test B — A different student cannot access another user's order."""
+
+        # Student A creates an order
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+
+        # Student B (different user) — build a clean client
+        student_b = await create_test_user(
+            db,
+            first_name="Other",
+            last_name="Student",
+            university_id="FA22-BSE-999",
+            university_email="other.student@lgu.edu.pk",
+            role=Role.STUDENT,
+        )
+        _, token_b, _ = await create_user_session(db, student_b)
+        client_b = AsyncClient(
+            transport=student_client._transport,
+            base_url=str(student_client.base_url),
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+
+        resp = await client_b.get(f"/api/v1/orders/{order_id}")
+        assert resp.status_code == 403
+        await client_b.aclose()
+
+    async def test_different_faculty_cannot_access_order(
+        self, student_client: AsyncClient, db: AsyncSession
+    ):
+        """Test C — A different faculty user cannot access another user's order."""
+
+        # Student creates an order
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+
+        # Faculty user (different user)
+        faculty = await create_test_user(
+            db,
+            first_name="Dr.",
+            last_name="Other",
+            university_id="FAC-9999",
+            university_email="other.faculty@lgu.edu.pk",
+            role=Role.FACULTY,
+            category=UserCategory.FACULTY,
+        )
+        _, token_faculty, _ = await create_user_session(db, faculty)
+        client_faculty = AsyncClient(
+            transport=student_client._transport,
+            base_url=str(student_client.base_url),
+            headers={"Authorization": f"Bearer {token_faculty}"},
+        )
+
+        resp = await client_faculty.get(f"/api/v1/orders/{order_id}")
+        assert resp.status_code == 403
+        await client_faculty.aclose()
+
+    async def test_cross_cafeteria_manager_cannot_access_order(
+        self, student_client: AsyncClient, manager_user: User, db: AsyncSession
+    ):
+        """Test D — Manager assigned to a different cafeteria cannot access order."""
+
+        # Order in cafeteria A
+        cafeteria_a, item_a, _ = await _setup_order_test_data(db)
+        await _add_cart_item(student_client, cafeteria_a.id, item_a.id)
+        checkout_resp = await _checkout(student_client, cafeteria_a.id)
+        order_id = checkout_resp.json()["id"]
+
+        # Manager B assigned to cafeteria B (different cafeteria)
+        cafeteria_b = await create_test_cafeteria(
+            db, name="Cafeteria B", cafeteria_type=CafeteriaType.STUDENT
+        )
+        await assign_user_to_cafeteria(db, manager_user.id, cafeteria_b.id, Role.CAFETERIA_MANAGER)
+        _, token_mgr, _ = await create_user_session(db, manager_user)
+        client_mgr = AsyncClient(
+            transport=student_client._transport,
+            base_url=str(student_client.base_url),
+            headers={"Authorization": f"Bearer {token_mgr}"},
+        )
+
+        resp = await client_mgr.get(f"/api/v1/orders/{order_id}")
+        assert resp.status_code == 403
+        await client_mgr.aclose()
+
+    async def test_correct_manager_can_access_order(
+        self, student_client: AsyncClient, manager_user: User, db: AsyncSession
+    ):
+        """Test E — Manager assigned to the order's cafeteria can access it."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await assign_user_to_cafeteria(db, manager_user.id, cafeteria.id, Role.CAFETERIA_MANAGER)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+
+        _, token_mgr, _ = await create_user_session(db, manager_user)
+        client_mgr = AsyncClient(
+            transport=student_client._transport,
+            base_url=str(student_client.base_url),
+            headers={"Authorization": f"Bearer {token_mgr}"},
+        )
+        resp = await client_mgr.get(f"/api/v1/orders/{order_id}")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == order_id
+        await client_mgr.aclose()
+
+    async def test_correct_staff_can_access_order(
+        self, student_client: AsyncClient, staff_user: User, db: AsyncSession
+    ):
+        """Test F — Staff assigned to the order's cafeteria can access it."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await assign_user_to_cafeteria(db, staff_user.id, cafeteria.id, Role.CAFETERIA_STAFF)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+
+        _, token_staff, _ = await create_user_session(db, staff_user)
+        client_staff = AsyncClient(
+            transport=student_client._transport,
+            base_url=str(student_client.base_url),
+            headers={"Authorization": f"Bearer {token_staff}"},
+        )
+        resp = await client_staff.get(f"/api/v1/orders/{order_id}")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == order_id
+        await client_staff.aclose()
+
+    async def test_university_admin_can_access_any_order(
+        self, student_client: AsyncClient, admin_user: User, db: AsyncSession
+    ):
+        """Test G — University Admin can access any order."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+
+        _, token_admin, _ = await create_user_session(db, admin_user)
+        client_admin = AsyncClient(
+            transport=student_client._transport,
+            base_url=str(student_client.base_url),
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        resp = await client_admin.get(f"/api/v1/orders/{order_id}")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == order_id
+        await client_admin.aclose()
+
+    async def test_unauthenticated_blocked(
+        self, student_client: AsyncClient, client: AsyncClient, db: AsyncSession
+    ):
+        """Test H — Unauthenticated request is denied."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+
+        # Use the raw unauthenticated client directly (no Authorization header)
+        resp = await client.get(f"/api/v1/orders/{order_id}")
+        # Without auth header: 422 (validation) or 401/403 (auth rejection)
+        assert resp.status_code in (401, 403, 422)
+
+    async def test_nonexistent_order_returns_not_found(
+        self, student_client: AsyncClient, db: AsyncSession
+    ):
+        """Test I — Nonexistent order returns 404."""
+        resp = await student_client.get("/api/v1/orders/00000000-0000-0000-0000-000000000000")
+        assert resp.status_code == 404
+
+    async def test_idor_uuid_substitution_attack(
+        self, student_client: AsyncClient, db: AsyncSession
+    ):
+        """Test J — Primary IDOR attack: User B requests User A's order UUID."""
+
+        # User A creates an order
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_a_id = checkout_resp.json()["id"]
+
+        # User B authenticates and tries to access User A's order by UUID
+        user_b = await create_test_user(
+            db,
+            first_name="Attacker",
+            last_name="User",
+            university_id="ATTACK-001",
+            university_email="attacker@lgu.edu.pk",
+            role=Role.STUDENT,
+        )
+        _, token_b, _ = await create_user_session(db, user_b)
+        client_b = AsyncClient(
+            transport=student_client._transport,
+            base_url=str(student_client.base_url),
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+
+        resp = await client_b.get(f"/api/v1/orders/{order_a_id}")
+        assert resp.status_code == 403
+        # Verify no sensitive order data is returned
+        assert "total_amount" not in resp.json()
+        assert "items" not in resp.json()
+        await client_b.aclose()
 
 
 # ---------------------------------------------------------------------------

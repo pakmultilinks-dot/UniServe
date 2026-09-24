@@ -106,10 +106,41 @@ async def get_order(
     auth: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
-    """Get order details by ID."""
+    """Get order details by ID.
+
+    Authorization:
+    - Order owner may always access their own order.
+    - University Admin may access any order.
+    - Manager/Staff assigned to the order's cafeteria may access it.
+    """
+    from sqlalchemy import select as sa_select
+
+    from app.core.exceptions import AuthorizationError
+    from app.modules.users.models import CafeteriaAssignment, Role
+
     service = OrderService(db)
     order = await service.get_order(order_id)
-    return OrderResponse.model_validate(order)
+
+    # Owner always allowed
+    if order.user_id == auth.user.id:
+        return OrderResponse.model_validate(order)
+
+    # University Admin — universal access
+    if auth.user.role == Role.UNIVERSITY_ADMIN:
+        return OrderResponse.model_validate(order)
+
+    # Manager / Staff assigned to the order's cafeteria
+    if auth.user.role in (Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF):
+        result = await db.execute(
+            sa_select(CafeteriaAssignment).where(
+                CafeteriaAssignment.user_id == auth.user.id,
+                CafeteriaAssignment.cafeteria_id == order.cafeteria_id,
+            )
+        )
+        if result.scalar_one_or_none() is not None:
+            return OrderResponse.model_validate(order)
+
+    raise AuthorizationError("Order not found")
 
 
 @router.post("/{order_id}/cancel", response_model=OrderResponse)
