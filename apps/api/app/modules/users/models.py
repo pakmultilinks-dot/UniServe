@@ -100,6 +100,14 @@ class User(Base):
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Ordering suspension (Phase 6)
+    ordering_suspended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ordering_suspended_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ordering_suspension_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    no_show_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     # Relationships
     credential: Mapped[Optional["UserCredential"]] = relationship(
         "UserCredential", back_populates="user", uselist=False, lazy="joined"

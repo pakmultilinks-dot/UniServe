@@ -7,6 +7,11 @@ Handles:
 - Cancellation rules (user before deadline, manager anytime)
 - Collection via order number or QR token
 - Order events (audit trail)
+- Order confirmation / rejection by staff/manager (Phase 6)
+- Preparation lifecycle (start, ready, delay, uncollected) (Phase 6)
+- Partial item cancellation (Phase 6)
+- Cafeteria sudden closure (Phase 6)
+- No-show tracking (Phase 6)
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -17,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.exceptions import (
     NotFoundException,
     ValidationError,
@@ -29,6 +35,7 @@ from app.modules.orders.models import (
     OrderEventType,
     OrderItem,
     OrderNumberSequence,
+    OrderRejectionReason,
     OrderStatus,
     OrderType,
     PaymentMethod,
@@ -158,10 +165,10 @@ class OrderService:
             if PaymentMethod(payment_method) == PaymentMethod.CASH:
                 # Cash: reserve inventory immediately, create cash payment record
                 await self._reserve_inventory(order, cart.items, user_id)
-                from app.modules.payments.service import PaymentService
                 from app.modules.payments.providers.test_provider import (
                     TestPaymentProvider,
                 )
+                from app.modules.payments.service import PaymentService
 
                 payment_svc = PaymentService(self.db, TestPaymentProvider())
                 await payment_svc.create_cash_payment(order, user_id)
@@ -512,6 +519,448 @@ class OrderService:
             collector_id=collector_id,
             cafeteria_id=cafeteria_id,
         )
+
+    # ===================================================================
+    # Phase 6: Manager order confirmation / rejection
+    # ===================================================================
+
+    async def confirm_order(
+        self,
+        *,
+        order_id: str,
+        actor_id: str,
+        notes: str | None = None,
+    ) -> Order:
+        """Manager/staff confirms an order for preparation.
+
+        Transitions: PENDING → PENDING (confirmed flag set).
+        """
+        order = await self.get_order(order_id)
+
+        if order.status != OrderStatus.PENDING:
+            raise ValidationError(f"Cannot confirm order in {order.status.value} status")
+
+        if order.confirmed_at is not None:
+            raise ValidationError("Order is already confirmed")
+
+        order.confirmed_at = datetime.now(UTC)
+
+        event = OrderEvent(
+            order_id=order.id,
+            event_type=OrderEventType.CONFIRMED_BY_STAFF,
+            actor_id=actor_id,
+            notes=notes,
+        )
+        self.db.add(event)
+        await self.db.flush()
+        logger.info("order_confirmed", order_id=order.id, actor_id=actor_id)
+        return order
+
+    async def reject_order(
+        self,
+        *,
+        order_id: str,
+        actor_id: str,
+        reason: str,
+        notes: str | None = None,
+    ) -> Order:
+        """Manager rejects an order.
+
+        Transitions: PENDING → CANCELLED.
+        Releases inventory if reserved.
+        """
+        order = await self.get_order(order_id)
+
+        if order.status != OrderStatus.PENDING:
+            raise ValidationError(f"Cannot reject order in {order.status.value} status")
+
+        # Validate rejection reason
+        try:
+            OrderRejectionReason(reason)
+        except ValueError:
+            raise ValidationError(
+                f"Invalid rejection reason. Must be one of: "
+                f"{', '.join(r.value for r in OrderRejectionReason)}"
+            )
+
+        # Release inventory if reserved
+        if order.inventory_reserved:
+            await self._release_inventory(order, actor_id)
+
+        order.status = OrderStatus.CANCELLED
+        order.cancelled_at = datetime.now(UTC)
+        order.cancelled_by = actor_id
+        order.rejection_reason = reason
+        order.rejection_note = notes
+
+        event = OrderEvent(
+            order_id=order.id,
+            event_type=OrderEventType.MANAGER_REJECTED,
+            actor_id=actor_id,
+            notes=f"Reason: {reason}. {notes or ''}",
+        )
+        self.db.add(event)
+        await self.db.flush()
+        logger.info(
+            "order_rejected",
+            order_id=order.id,
+            reason=reason,
+            actor_id=actor_id,
+        )
+        return order
+
+    # ===================================================================
+    # Phase 6: Preparation lifecycle
+    # ===================================================================
+
+    async def start_preparation(
+        self,
+        *,
+        order_id: str,
+        actor_id: str,
+        notes: str | None = None,
+    ) -> Order:
+        """Staff starts preparing an order.
+
+        Transitions: PENDING → PREPARING (must be confirmed first).
+        Sets preparation_started_at, calculates and records ETA.
+        Reserves inventory for scheduled orders.
+        """
+        order = await self.get_order(order_id)
+
+        if order.status != OrderStatus.PENDING:
+            raise ValidationError(
+                f"Cannot start preparation for order in {order.status.value} status"
+            )
+
+        if order.confirmed_at is None:
+            raise ValidationError("Order must be confirmed before starting preparation")
+
+        now = datetime.now(UTC)
+
+        order.status = OrderStatus.PREPARING
+        order.preparation_started_at = now
+        order.preparation_started = True
+
+        # Calculate ETA
+        from app.modules.orders.eta import calculate_eta
+
+        eta_minutes = await calculate_eta(
+            db=self.db,
+            cafeteria_id=order.cafeteria_id,
+            order_id=order.id,
+        )
+        order.eta_minutes = eta_minutes
+
+        # Reserve inventory for scheduled orders
+        if not order.inventory_reserved and order.order_type == OrderType.SCHEDULED:
+            await self._reserve_inventory_for_order(order, actor_id)
+
+        event = OrderEvent(
+            order_id=order.id,
+            event_type=OrderEventType.PREPARATION_STARTED,
+            actor_id=actor_id,
+            notes=notes,
+        )
+        self.db.add(event)
+
+        eta_event = OrderEvent(
+            order_id=order.id,
+            event_type=OrderEventType.ETA_UPDATED,
+            actor_id=actor_id,
+            notes=f"ETA: {eta_minutes} minutes",
+        )
+        self.db.add(eta_event)
+
+        await self.db.flush()
+        logger.info(
+            "preparation_started",
+            order_id=order.id,
+            eta_minutes=eta_minutes,
+        )
+        return order
+
+    async def mark_ready(
+        self,
+        *,
+        order_id: str,
+        actor_id: str,
+        notes: str | None = None,
+    ) -> Order:
+        """Staff marks an order as ready for collection.
+
+        Transitions: PREPARING → READY.
+        Sets ready_at and pickup_deadline.
+        """
+        order = await self.get_order(order_id)
+
+        if order.status != OrderStatus.PREPARING:
+            raise ValidationError(f"Cannot mark ready: order is in {order.status.value} status")
+
+        now = datetime.now(UTC)
+
+        order.status = OrderStatus.READY
+        order.ready_at = now
+        order.pickup_deadline = now + timedelta(minutes=settings.PICKUP_WINDOW_MINUTES)
+
+        event = OrderEvent(
+            order_id=order.id,
+            event_type=OrderEventType.READY_FOR_COLLECTION,
+            actor_id=actor_id,
+            notes=notes,
+        )
+        self.db.add(event)
+        await self.db.flush()
+        logger.info(
+            "order_ready",
+            order_id=order.id,
+            pickup_deadline=order.pickup_deadline.isoformat(),
+        )
+        return order
+
+    async def mark_delayed(
+        self,
+        *,
+        order_id: str,
+        actor_id: str,
+        additional_minutes: int = 15,
+        notes: str | None = None,
+    ) -> Order:
+        """Staff marks an order as delayed with updated ETA.
+
+        Updates eta_minutes and extends pickup_deadline if order is READY.
+        """
+        order = await self.get_order(order_id)
+
+        if order.status not in (OrderStatus.PREPARING, OrderStatus.READY):
+            raise ValidationError(f"Cannot delay order in {order.status.value} status")
+
+        if additional_minutes < 1 or additional_minutes > 120:
+            raise ValidationError("Additional minutes must be between 1 and 120")
+
+        # Update ETA
+        if order.eta_minutes is not None:
+            order.eta_minutes += additional_minutes
+        else:
+            order.eta_minutes = additional_minutes
+
+        # Extend pickup deadline if ready
+        if order.status == OrderStatus.READY and order.pickup_deadline:
+            order.pickup_deadline = order.pickup_deadline + timedelta(minutes=additional_minutes)
+
+        event = OrderEvent(
+            order_id=order.id,
+            event_type=OrderEventType.DELAYED,
+            actor_id=actor_id,
+            notes=f"Delayed by {additional_minutes} minutes. {notes or ''}",
+        )
+        self.db.add(event)
+        await self.db.flush()
+        logger.info(
+            "order_delayed",
+            order_id=order.id,
+            new_eta=order.eta_minutes,
+        )
+        return order
+
+    async def mark_uncollected(
+        self,
+        *,
+        order_id: str,
+        actor_id: str,
+        notes: str | None = None,
+    ) -> Order:
+        """System marks an order as uncollected after pickup deadline.
+
+        Transitions: READY → COMPLETED (marked uncollected).
+        Records no-show event and may suspend user.
+        """
+        order = await self.get_order(order_id)
+
+        if order.status != OrderStatus.READY:
+            raise ValidationError(
+                f"Cannot mark uncollected: order is in {order.status.value} status"
+            )
+
+        # Record no-show
+        from app.modules.orders.noshow import record_no_show
+
+        await record_no_show(
+            db=self.db,
+            user_id=order.user_id,
+            order_id=order.id,
+            cafeteria_id=order.cafeteria_id,
+        )
+
+        event = OrderEvent(
+            order_id=order.id,
+            event_type=OrderEventType.UNCOLLECTED,
+            actor_id=actor_id,
+            notes=notes,
+        )
+        self.db.add(event)
+        await self.db.flush()
+        logger.info(
+            "order_uncollected",
+            order_id=order.id,
+            user_id=order.user_id,
+        )
+        return order
+
+    # ===================================================================
+    # Phase 6: Partial item cancellation
+    # ===================================================================
+
+    async def partial_item_cancel(
+        self,
+        *,
+        order_id: str,
+        item_id: str,
+        actor_id: str,
+        reason: str | None = None,
+    ) -> Order:
+        """Cancel individual items from an order.
+
+        Only allowed for PENDING orders. If all items cancelled, order is cancelled.
+        If inventory was reserved, releases inventory for the cancelled items.
+        """
+        order = await self.get_order(order_id)
+
+        if order.status not in (OrderStatus.PENDING,):
+            raise ValidationError(f"Cannot cancel items from order in {order.status.value} status")
+
+        # Find the item
+        target_item = None
+        for item in order.items:
+            if item.id == item_id:
+                target_item = item
+                break
+
+        if target_item is None:
+            raise NotFoundException("Order item", item_id)
+
+        # Release inventory for this item
+        if order.inventory_reserved:
+            await self._release_inventory_item(order, target_item, actor_id)
+
+        # Remove item
+        await self.db.delete(target_item)
+        await self.db.flush()
+
+        # Recalculate total
+        result = await self.db.execute(select(OrderItem).where(OrderItem.order_id == order.id))
+        remaining_items = list(result.scalars().all())
+
+        if not remaining_items:
+            # All items cancelled — cancel the entire order
+            order.status = OrderStatus.CANCELLED
+            order.cancelled_at = datetime.now(UTC)
+            order.cancelled_by = actor_id
+            order.cancellation_reason = reason or "All items cancelled"
+            event_type = OrderEventType.CANCELLED
+        else:
+            # Update total amount
+            order.total_amount = sum(i.subtotal for i in remaining_items)
+            event_type = OrderEventType.PARTIAL_CANCELLED
+
+        event = OrderEvent(
+            order_id=order.id,
+            event_type=event_type,
+            actor_id=actor_id,
+            notes=f"Cancelled item: {target_item.item_name}. {reason or ''}",
+        )
+        self.db.add(event)
+        await self.db.flush()
+        logger.info(
+            "partial_item_cancel",
+            order_id=order.id,
+            item_id=item_id,
+        )
+        return order
+
+    async def _release_inventory_item(
+        self,
+        order: Order,
+        item: OrderItem,
+        actor_id: str,
+    ) -> None:
+        """Release inventory for a single cancelled item."""
+        from app.modules.inventory.models import InventoryItem
+
+        if item.menu_item_id is None:
+            return
+
+        inv_result = await self.db.execute(
+            select(InventoryItem).where(
+                InventoryItem.menu_item_id == item.menu_item_id,
+                InventoryItem.cafeteria_id == order.cafeteria_id,
+            )
+        )
+        inv = inv_result.scalar_one_or_none()
+        if inv is not None:
+            inv.quantity += item.quantity
+
+    # ===================================================================
+    # Phase 6: Cafeteria sudden closure
+    # ===================================================================
+
+    async def cafeteria_sudden_close(
+        self,
+        *,
+        cafeteria_id: str,
+        actor_id: str,
+        notes: str | None = None,
+    ) -> list[Order]:
+        """Cancel all PENDING and PREPARING orders when cafeteria closes suddenly.
+
+        Releases inventory for each order. Returns list of cancelled orders.
+        """
+        from app.modules.cafeterias.models import Cafeteria, OperationalStatus
+
+        # Update cafeteria status
+        caf_result = await self.db.execute(select(Cafeteria).where(Cafeteria.id == cafeteria_id))
+        cafeteria = caf_result.scalar_one_or_none()
+        if cafeteria is None:
+            raise NotFoundException("Cafeteria", cafeteria_id)
+
+        cafeteria.operational_status = OperationalStatus.CLOSED
+
+        # Find affected orders
+        result = await self.db.execute(
+            select(Order).where(
+                Order.cafeteria_id == cafeteria_id,
+                Order.status.in_([OrderStatus.PENDING, OrderStatus.PREPARING]),
+            )
+        )
+        affected_orders = list(result.scalars().all())
+
+        cancelled_orders = []
+        for order in affected_orders:
+            # Release inventory
+            if order.inventory_reserved:
+                await self._release_inventory(order, actor_id)
+
+            order.status = OrderStatus.CANCELLED
+            order.cancelled_at = datetime.now(UTC)
+            order.cancelled_by = actor_id
+            order.cancellation_reason = notes or "Cafeteria closed suddenly"
+
+            event = OrderEvent(
+                order_id=order.id,
+                event_type=OrderEventType.CAFETERIA_CLOSED,
+                actor_id=actor_id,
+                notes=notes,
+            )
+            self.db.add(event)
+            cancelled_orders.append(order)
+
+        await self.db.flush()
+        logger.info(
+            "cafeteria_sudden_close",
+            cafeteria_id=cafeteria_id,
+            orders_cancelled=len(cancelled_orders),
+        )
+        return cancelled_orders
 
     # ===================================================================
     # Order number allocation

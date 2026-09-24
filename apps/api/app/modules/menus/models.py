@@ -91,6 +91,7 @@ class MenuItem(Base):
     allergens: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )  # JSON: nuts, dairy, gluten, etc.
+    preparation_time_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     is_available: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)

@@ -77,6 +77,19 @@ class Settings(BaseSettings):
     # ---- Refund Policy ----
     REFUND_DEADLINE_HOURS: int = 72
 
+    # ---- Phase 6: Order Operations ----
+    PICKUP_WINDOW_MINUTES: int = 30
+    DEFAULT_PREPARATION_TIME_MINUTES: int = 15
+    DEFAULT_CAPACITY: int = 10
+
+    # No-show policy
+    NOSHOW_STUDENT_THRESHOLD: int = 3
+    NOSHOW_STUDENT_WINDOW_DAYS: int = 30
+    NOSHOW_STUDENT_SUSPENSION_DAYS: int = 7
+    NOSHOW_FACULTY_THRESHOLD: int = 5
+    NOSHOW_FACULTY_WINDOW_DAYS: int = 30
+    NOSHOW_FACULTY_SUSPENSION_DAYS: int = 3
+
     # ---- Email University Rules ----
     # University email patterns mapped to user categories.
     # The system derives user category from email pattern matching.

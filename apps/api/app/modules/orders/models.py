@@ -60,6 +60,7 @@ class OrderEventType(str, enum.Enum):
     PAYMENT_PENDING = "payment_pending"
     PAYMENT_CONFIRMED = "payment_confirmed"
     CONFIRMED_BY_STAFF = "confirmed_by_staff"
+    MANAGER_REJECTED = "manager_rejected"
     PREPARATION_STARTED = "preparation_started"
     READY_FOR_COLLECTION = "ready_for_collection"
     COLLECTED = "collected"
@@ -67,6 +68,13 @@ class OrderEventType(str, enum.Enum):
     CANCELLED_BY_MANAGER = "cancelled_by_manager"
     INVENTORY_RESERVED = "inventory_reserved"
     INVENTORY_RELEASED = "inventory_released"
+    UNCOLLECTED = "uncollected"
+    DELAYED = "delayed"
+    ETA_UPDATED = "eta_updated"
+    CAFETERIA_CLOSED = "cafeteria_closed"
+    ITEM_UNAVAILABLE = "item_unavailable"
+    PARTIAL_CANCELLED = "partial_cancelled"
+    NO_SHOW_RECORDED = "no_show_recorded"
 
 
 # ---- Order ----
@@ -133,6 +141,25 @@ class Order(Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Operational timestamps
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    preparation_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pickup_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    eta_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Collection details
+    collection_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Rejection
+    rejection_reason: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    rejection_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Flags
+    preparation_started: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Note
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -243,3 +270,45 @@ class OrderNumberSequence(Base):
 
     def __repr__(self) -> str:
         return f"<OrderNumberSequence last={self.last_number}>"
+
+
+class OrderRejectionReason(str, enum.Enum):
+    """Reasons for manager rejection of an order."""
+
+    CAPACITY = "capacity"
+    ITEM_UNAVAILABLE = "item_unavailable"
+    CAFETERIA_ISSUE = "cafeteria_issue"
+    OPERATIONAL_ISSUE = "operational_issue"
+    OTHER = "other"
+
+
+# ---- No-Show Tracking ----
+
+
+class NoShow(Base):
+    """Records a no-show event when an order goes uncollected past its pickup deadline.
+
+    Used for suspension policy enforcement.
+    """
+
+    __tablename__ = "no_shows"
+    __table_args__ = (
+        Index("idx_noshow_user", "user_id"),
+        Index("idx_noshow_cafeteria", "cafeteria_id"),
+        Index("idx_noshow_created", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
+    )
+    cafeteria_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("cafeterias.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<NoShow user={self.user_id} order={self.order_id}>"
