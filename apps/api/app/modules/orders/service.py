@@ -156,13 +156,21 @@ class OrderService:
         # 10. Handle inventory reservation
         if parsed_order_type == OrderType.IMMEDIATE:
             if PaymentMethod(payment_method) == PaymentMethod.CASH:
+                # Cash: reserve inventory immediately, create cash payment record
                 await self._reserve_inventory(order, cart.items, user_id)
+                from app.modules.payments.service import PaymentService
+                from app.modules.payments.providers.test_provider import (
+                    TestPaymentProvider,
+                )
+
+                payment_svc = PaymentService(self.db, TestPaymentProvider())
+                await payment_svc.create_cash_payment(order, user_id)
             elif PaymentMethod(payment_method) == PaymentMethod.ONLINE:
-                # Online: inventory reserved after successful payment (Phase 5 boundary)
+                # Online: inventory reserved after successful payment (Phase 5)
                 event_pending = OrderEvent(
                     order_id=order.id,
                     event_type=OrderEventType.PAYMENT_PENDING,
-                    notes="Awaiting online payment integration (Phase 5)",
+                    notes="Awaiting online payment",
                 )
                 self.db.add(event_pending)
         # Scheduled: inventory reserved when preparation starts (not at checkout)
@@ -606,6 +614,45 @@ class OrderService:
         )
         self.db.add(event)
         logger.info("scheduled_inventory_reserved", order_id=order.id)
+
+    async def _reserve_inventory_for_online_payment(self, order: Order) -> None:
+        """Reserve inventory after successful online payment.
+
+        Called by the payment service when an online payment succeeds.
+        Reads from OrderItems (already created at checkout).
+        """
+        from app.modules.inventory.models import InventoryItem
+
+        result = await self.db.execute(select(OrderItem).where(OrderItem.order_id == order.id))
+        order_items = result.scalars().all()
+
+        for oi in order_items:
+            inv_result = await self.db.execute(
+                select(InventoryItem)
+                .where(
+                    InventoryItem.menu_item_id == oi.menu_item_id,
+                    InventoryItem.cafeteria_id == order.cafeteria_id,
+                )
+                .with_for_update()
+            )
+            inv = inv_result.scalar_one_or_none()
+            if inv is None:
+                raise ValidationError(f"No inventory record for item {oi.menu_item_id}")
+            if inv.quantity < oi.quantity:
+                raise ValidationError(
+                    f"Insufficient inventory for {oi.menu_item_id}: "
+                    f"available={inv.quantity}, requested={oi.quantity}"
+                )
+            inv.quantity -= oi.quantity
+
+        order.inventory_reserved = True
+        event = OrderEvent(
+            order_id=order.id,
+            event_type=OrderEventType.INVENTORY_RESERVED,
+            notes="Reserved after successful online payment",
+        )
+        self.db.add(event)
+        logger.info("online_payment_inventory_reserved", order_id=order.id)
 
     async def _release_inventory(self, order: Order, actor_id: str) -> None:
         """Release reserved inventory when an order is cancelled."""

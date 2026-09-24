@@ -69,5 +69,9 @@ api_router.include_router(
 # Orders
 api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 
-# Future module routers:
-# api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
+# Payments (Phase 5)
+from app.modules.payments.router import router as payments_router
+from app.modules.refunds.router import router as refunds_router
+
+api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
+api_router.include_router(refunds_router, prefix="/refunds", tags=["refunds"])

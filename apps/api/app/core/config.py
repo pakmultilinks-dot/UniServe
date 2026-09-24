@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     LOGIN_LOCKOUT_MINUTES: int = 30
     PASSWORD_RESET_MAX_REQUESTS: int = 5
 
+    # ---- Refund Policy ----
+    REFUND_DEADLINE_HOURS: int = 72
+
     # ---- Email University Rules ----
     # University email patterns mapped to user categories.
     # The system derives user category from email pattern matching.
