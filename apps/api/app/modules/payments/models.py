@@ -179,7 +179,9 @@ class WebhookEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
-    processed_at: Mapped[datetime | None] = mapped_column(default=None, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None, nullable=True
+    )
 
     def __repr__(self) -> str:
         return f"<WebhookEvent id={self.id} provider={self.provider_name} event_id={self.provider_event_id}>"

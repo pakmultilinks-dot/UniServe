@@ -389,11 +389,23 @@ class PaymentService:
 
         # Process based on event type
         if result.event_type == "payment_success":
-            await self.handle_payment_success(
-                payment_id=payment.id,
-                provider_reference=result.payment_reference,
-                provider_metadata=result.metadata,
-            )
+            try:
+                await self.handle_payment_success(
+                    payment_id=payment.id,
+                    provider_reference=result.payment_reference,
+                    provider_metadata=result.metadata,
+                )
+            except ValidationError as exc:
+                # Terminal state (e.g. late webhook for already-refunded payment).
+                # Accept the webhook gracefully — the event is valid but the
+                # payment is no longer processable.  Log and treat as processed.
+                logger.warning(
+                    "webhook_ignored_terminal_state",
+                    event_id=provider_event_id,
+                    payment_id=payment.id,
+                    status=payment.status.value,
+                    detail=str(exc),
+                )
         elif result.event_type == "payment_failed":
             await self.handle_payment_failure(
                 payment_id=payment.id,

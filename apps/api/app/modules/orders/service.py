@@ -909,6 +909,9 @@ class OrderService:
         await self.db.delete(target_item)
         await self.db.flush()
 
+        # Refresh the order items relationship so callers see current state
+        await self.db.refresh(order, ["items"])
+
         # Recalculate total
         result = await self.db.execute(select(OrderItem).where(OrderItem.order_id == order.id))
         remaining_items = list(result.scalars().all())
