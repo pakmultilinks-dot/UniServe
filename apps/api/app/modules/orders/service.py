@@ -657,6 +657,25 @@ class OrderService:
         if order.confirmed_at is None:
             raise ValidationError("Order must be confirmed before starting preparation")
 
+        # Online orders must have a successful payment before preparation
+        if order.payment_method == PaymentMethod.ONLINE:
+            from app.modules.payments.models import Payment, PaymentStatus
+
+            result = await self.db.execute(
+                select(Payment).where(Payment.order_id == order.id)
+            )
+            payment = result.scalar_one_or_none()
+
+            if payment is None:
+                raise ValidationError(
+                    "Payment not found for online order"
+                )
+            if payment.status != PaymentStatus.SUCCEEDED:
+                raise ValidationError(
+                    f"Cannot start preparation: payment is {payment.status.value}, "
+                    f"must be succeeded"
+                )
+
         now = datetime.now(UTC)
 
         order.status = OrderStatus.PREPARING
