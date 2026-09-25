@@ -8,10 +8,10 @@ import enum
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import Enum, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.database import Base
+from app.core.database import Base, StrEnum
 
 logger = structlog.get_logger(__name__)
 
@@ -82,13 +82,15 @@ class SecurityAuditEvent(Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     event_type: Mapped[AuditEventType] = mapped_column(
-        Enum(AuditEventType, name="audit_event_type"), nullable=False
+        StrEnum(AuditEventType, name="audit_event_type"), nullable=False
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # IPv6 max
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # Extra context as JSON
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
 
 
 async def log_audit_event(

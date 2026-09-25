@@ -39,8 +39,8 @@ from app.modules.users.models import (  # noqa: F401
 
 config = context.config
 
-# Override sqlalchemy.url with the synchronous URL for Alembic
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL_SYNC)
+# Override sqlalchemy.url with the async URL for Alembic async engine
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

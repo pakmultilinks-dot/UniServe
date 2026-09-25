@@ -11,7 +11,6 @@ from typing import Optional
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -21,7 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base
+from app.core.database import Base, StrEnum
 
 # ---- User Category (derived from email) ----
 
@@ -83,17 +82,20 @@ class User(Base):
     university_id: Mapped[str] = mapped_column(String(50), nullable=False)
     university_email: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[UserCategory] = mapped_column(
-        Enum(UserCategory, name="user_category"), nullable=False
+        StrEnum(UserCategory, name="user_category", create_type=False), nullable=False
     )
-    role: Mapped[Role] = mapped_column(Enum(Role, name="user_role"), nullable=False)
+    role: Mapped[Role] = mapped_column(StrEnum(Role, name="user_role", create_type=False), nullable=False)
     status: Mapped[AccountStatus] = mapped_column(
-        Enum(AccountStatus, name="account_status"),
+        StrEnum(AccountStatus, name="account_status", create_type=False),
         default=AccountStatus.PENDING_VERIFICATION,
         nullable=False,
     )
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
@@ -157,8 +159,11 @@ class UserCredential(Base):
     password_changed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
@@ -193,9 +198,11 @@ class UserSession(Base):
     device_info: Mapped[str | None] = mapped_column(String(512), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     last_activity_at: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(UTC), nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -232,14 +239,16 @@ class OTPChallenge(Base):
     )
     otp_hash: Mapped[str] = mapped_column(Text, nullable=False)
     purpose: Mapped[OTPPurpose] = mapped_column(
-        Enum(OTPPurpose, name="otp_purpose"), nullable=False
+        StrEnum(OTPPurpose, name="otp_purpose", create_type=False), nullable=False
     )
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False)
     is_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -267,11 +276,13 @@ class CafeteriaAssignment(Base):
     cafeteria_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("cafeterias.id", ondelete="CASCADE"), nullable=False
     )
-    role: Mapped[Role] = mapped_column(Enum(Role, name="user_role"), nullable=False)
+    role: Mapped[Role] = mapped_column(StrEnum(Role, name="user_role", create_type=False), nullable=False)
     assigned_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
 
     # Relationships
     user: Mapped["User"] = relationship(

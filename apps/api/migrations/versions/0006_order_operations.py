@@ -5,11 +5,11 @@ Revises: 0005_payments_and_refunds
 Create Date: 2026-09-24
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0006"
-down_revision = "0005_payments_and_refunds"
+down_revision = "0005"
 branch_labels = None
 depends_on = None
 
@@ -26,25 +26,25 @@ def upgrade() -> None:
     op.add_column("orders", sa.Column("collection_method", sa.String(20), nullable=True))
     op.add_column("orders", sa.Column("rejection_reason", sa.String(30), nullable=True))
     op.add_column("orders", sa.Column("rejection_note", sa.Text, nullable=True))
-    op.add_column("orders", sa.Column("preparation_started", sa.Boolean, nullable=False, server_default=sa.text("0")))
+    op.add_column("orders", sa.Column("preparation_started", sa.Boolean(), nullable=False, server_default=sa.text("false")))
 
     # ===================================================================
     # users table — ordering suspension fields
     # ===================================================================
-    op.add_column("users", sa.Column("ordering_suspended", sa.Boolean, nullable=False, server_default=sa.text("0")))
+    op.add_column("users", sa.Column("ordering_suspended", sa.Boolean(), nullable=False, server_default=sa.text("false")))
     op.add_column("users", sa.Column("ordering_suspended_until", sa.DateTime(timezone=True), nullable=True))
     op.add_column("users", sa.Column("ordering_suspension_reason", sa.Text, nullable=True))
-    op.add_column("users", sa.Column("no_show_count", sa.Integer, nullable=False, server_default=sa.text("0")))
+    op.add_column("users", sa.Column("no_show_count", sa.Integer(), nullable=False, server_default=sa.text("0")))
 
     # ===================================================================
     # menu_items table — preparation time
     # ===================================================================
-    op.add_column("menu_items", sa.Column("preparation_time_minutes", sa.Integer, nullable=False, server_default=sa.text("15")))
+    op.add_column("menu_items", sa.Column("preparation_time_minutes", sa.Integer(), nullable=False, server_default=sa.text("15")))
 
     # ===================================================================
     # cafeterias table — preparation capacity
     # ===================================================================
-    op.add_column("cafeterias", sa.Column("preparation_capacity", sa.Integer, nullable=False, server_default=sa.text("10")))
+    op.add_column("cafeterias", sa.Column("preparation_capacity", sa.Integer(), nullable=False, server_default=sa.text("10")))
 
     # ===================================================================
     # no_shows table

@@ -15,7 +15,6 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -25,7 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base
+from app.core.database import Base, StrEnum
 
 # ---- Menu Category ----
 
@@ -78,7 +77,7 @@ class MenuItem(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[MenuCategory] = mapped_column(
-        Enum(MenuCategory, name="menu_category"), nullable=False
+        StrEnum(MenuCategory, name="menu_category", create_type=False), nullable=False
     )
     price: Mapped[int] = mapped_column(
         Integer, nullable=False
@@ -94,8 +93,11 @@ class MenuItem(Base):
     preparation_time_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     is_available: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
@@ -138,7 +140,7 @@ class DailyMenu(Base):
     )
     menu_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[DailyMenuStatus] = mapped_column(
-        Enum(DailyMenuStatus, name="daily_menu_status"),
+        StrEnum(DailyMenuStatus, name="daily_menu_status", create_type=False),
         default=DailyMenuStatus.DRAFT,
         nullable=False,
     )
@@ -146,8 +148,11 @@ class DailyMenu(Base):
     created_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
@@ -192,7 +197,9 @@ class DailyMenuItem(Base):
     is_available_today: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
 
     # Relationships
     daily_menu: Mapped["DailyMenu"] = relationship("DailyMenu", back_populates="items")
@@ -225,7 +232,9 @@ class MenuFavorite(Base):
     menu_item_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("menu_items.id", ondelete="CASCADE"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
 
     # Relationships
     user: Mapped[Optional["User"]] = relationship("User")  # noqa: F821

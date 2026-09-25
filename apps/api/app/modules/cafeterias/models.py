@@ -7,10 +7,10 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, Enum, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.database import Base
+from app.core.database import Base, StrEnum
 
 
 class CafeteriaType(str, enum.Enum):
@@ -46,7 +46,7 @@ class Cafeteria(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     type: Mapped[CafeteriaType] = mapped_column(
-        Enum(CafeteriaType, name="cafeteria_type"), nullable=False
+        StrEnum(CafeteriaType, name="cafeteria_type", create_type=False), nullable=False
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -55,7 +55,7 @@ class Cafeteria(Base):
     operating_hours: Mapped[str | None] = mapped_column(Text, nullable=True)
     timezone: Mapped[str] = mapped_column(String(50), default="Asia/Karachi", nullable=False)
     operational_status: Mapped[OperationalStatus] = mapped_column(
-        Enum(OperationalStatus, name="cafeteria_operational_status"),
+        StrEnum(OperationalStatus, name="cafeteria_operational_status", create_type=False),
         default=OperationalStatus.OPEN,
         nullable=False,
     )
@@ -64,8 +64,14 @@ class Cafeteria(Base):
     # Capacity (Phase 6)
     preparation_capacity: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    # Pickup deadline: closing time for earlier-of rule (Phase 6 auto-expiry)
+    closing_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,

@@ -5,11 +5,11 @@ Revises: 0004_cart_and_order_system
 Create Date: 2026-09-23
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0005"
-down_revision = "0004_cart_and_order_system"
+down_revision = "0004"
 branch_labels = None
 depends_on = None
 
@@ -103,7 +103,7 @@ def upgrade() -> None:
         sa.Column("provider_name", sa.String(100), nullable=False),
         sa.Column("provider_event_id", sa.String(255), nullable=False),
         sa.Column("payload_json", sa.Text(), nullable=True),
-        sa.Column("processed", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("processed", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column(
             "created_at",

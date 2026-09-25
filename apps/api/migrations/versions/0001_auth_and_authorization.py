@@ -21,66 +21,6 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # ---- Enums ----
-    user_category_enum = sa.Enum("student", "faculty", name="user_category")
-    user_category_enum.create(op.get_bind(), checkfirst=True)
-
-    user_role_enum = sa.Enum(
-        "student",
-        "faculty",
-        "cafeteria_staff",
-        "cafeteria_manager",
-        "university_admin",
-        name="user_role",
-    )
-    user_role_enum.create(op.get_bind(), checkfirst=True)
-
-    account_status_enum = sa.Enum(
-        "pending_verification",
-        "active",
-        "suspended",
-        "deleted",
-        name="account_status",
-    )
-    account_status_enum.create(op.get_bind(), checkfirst=True)
-
-    cafeteria_type_enum = sa.Enum("student", "faculty", name="cafeteria_type")
-    cafeteria_type_enum.create(op.get_bind(), checkfirst=True)
-
-    otp_purpose_enum = sa.Enum("email_verification", "password_reset", name="otp_purpose")
-    otp_purpose_enum.create(op.get_bind(), checkfirst=True)
-
-    audit_event_type_enum = sa.Enum(
-        "user_registered",
-        "email_verification_requested",
-        "email_verified",
-        "login_success",
-        "login_failed",
-        "logout",
-        "logout_all",
-        "password_changed",
-        "password_reset_requested",
-        "password_reset_completed",
-        "pin_enabled",
-        "pin_disabled",
-        "pin_changed",
-        "pin_login_success",
-        "pin_login_failed",
-        "pin_locked",
-        "account_suspended",
-        "account_activated",
-        "account_recovered",
-        "account_deleted",
-        "role_changed",
-        "cafeteria_scope_changed",
-        "session_created",
-        "session_revoked",
-        "rate_limited",
-        "authorization_failed",
-        name="audit_event_type",
-    )
-    audit_event_type_enum.create(op.get_bind(), checkfirst=True)
-
     # ---- Cafeterias ----
     op.create_table(
         "cafeterias",

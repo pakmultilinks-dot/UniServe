@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from sqlalchemy import (
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -22,7 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base
+from app.core.database import Base, StrEnum
 
 # ---- Inventory Unit ----
 
@@ -62,14 +61,17 @@ class InventoryItem(Base):
     )
     quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     unit: Mapped[InventoryUnit] = mapped_column(
-        Enum(InventoryUnit, name="inventory_unit"), nullable=False
+        StrEnum(InventoryUnit, name="inventory_unit", create_type=False), nullable=False
     )
     low_threshold: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     last_restocked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
@@ -110,7 +112,9 @@ class InventoryAdjustment(Base):
     adjusted_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
 
     # Relationships
     inventory_item: Mapped["InventoryItem"] = relationship(

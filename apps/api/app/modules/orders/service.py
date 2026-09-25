@@ -449,13 +449,27 @@ class OrderService:
     ) -> Order:
         """Collect an order (mark as COMPLETED).
 
+        Uses SELECT FOR UPDATE to prevent race with automatic expiry.
         Validates:
         - Order exists and belongs to the cafeteria
         - Order is READY
         - Not already collected
+        - Not already marked uncollected
         - QR token is valid (if applicable)
         """
-        order = await self.get_order(order_id)
+        # Lock the row to prevent concurrent collection vs expiry.
+        # Skip row-level locking on SQLite (tests/dev) — only supported on PostgreSQL.
+        stmt = select(Order).where(Order.id == order_id)
+        dialect_name = self.db.bind.dialect.name if self.db.bind else ""
+        if dialect_name == "postgresql":
+            stmt = stmt.with_for_update()
+        result = await self.db.execute(stmt)
+        order = result.scalar_one_or_none()
+        if order is None:
+            raise NotFoundException("Order", order_id)
+
+        # Eagerly load relationships after lock
+        await self.db.refresh(order, ["items", "events"])
 
         if order.cafeteria_id != cafeteria_id:
             raise ValidationError("Order does not belong to this cafeteria")
@@ -470,6 +484,9 @@ class OrderService:
             raise ValidationError(
                 f"Order is not ready for collection (current status: {order.status.value})"
             )
+
+        if order.uncollected_at is not None:
+            raise ValidationError("Order has already been marked as uncollected")
 
         order.status = OrderStatus.COMPLETED
         order.collected_at = datetime.now(UTC)
@@ -577,11 +594,11 @@ class OrderService:
         # Validate rejection reason
         try:
             OrderRejectionReason(reason)
-        except ValueError:
+        except ValueError as exc:
             raise ValidationError(
                 f"Invalid rejection reason. Must be one of: "
                 f"{', '.join(r.value for r in OrderRejectionReason)}"
-            )
+            ) from exc
 
         # Release inventory if reserved
         if order.inventory_reserved:
@@ -691,7 +708,12 @@ class OrderService:
 
         Transitions: PREPARING → READY.
         Sets ready_at and pickup_deadline.
+        pickup_deadline = min(ready_at + PICKUP_WINDOW_MINUTES, cafeteria closing time)
         """
+        from datetime import time as dt_time
+
+        from app.modules.cafeterias.models import Cafeteria
+
         order = await self.get_order(order_id)
 
         if order.status != OrderStatus.PREPARING:
@@ -701,7 +723,35 @@ class OrderService:
 
         order.status = OrderStatus.READY
         order.ready_at = now
-        order.pickup_deadline = now + timedelta(minutes=settings.PICKUP_WINDOW_MINUTES)
+
+        # Calculate pickup_deadline: earlier of 30-min window or cafeteria closing
+        deadline_30min = now + timedelta(minutes=settings.PICKUP_WINDOW_MINUTES)
+
+        # Check cafeteria closing time
+        caf_result = await self.db.execute(
+            select(Cafeteria).where(Cafeteria.id == order.cafeteria_id)
+        )
+        cafeteria = caf_result.scalar_one_or_none()
+
+        pickup_deadline = deadline_30min
+        if cafeteria and cafeteria.closing_time:
+            # Parse closing_time string "HH:MM" and combine with today's date
+            try:
+                hour, minute = map(int, cafeteria.closing_time.split(":"))
+                # Closing time is in the cafeteria's local timezone, convert to UTC
+                from zoneinfo import ZoneInfo
+
+                tz = ZoneInfo(cafeteria.timezone)
+                from datetime import date as dt_date
+
+                local_closing = datetime.combine(dt_date.today(), dt_time(hour, minute), tzinfo=tz)
+                utc_closing = local_closing.astimezone(UTC)
+                if utc_closing < deadline_30min:
+                    pickup_deadline = utc_closing
+            except (ValueError, IndexError):
+                pass  # Invalid closing_time format — fall back to 30-min window
+
+        order.pickup_deadline = pickup_deadline
 
         event = OrderEvent(
             order_id=order.id,
@@ -767,13 +817,14 @@ class OrderService:
         self,
         *,
         order_id: str,
-        actor_id: str,
+        actor_id: str | None = None,
         notes: str | None = None,
     ) -> Order:
         """System marks an order as uncollected after pickup deadline.
 
         Transitions: READY → COMPLETED (marked uncollected).
         Records no-show event and may suspend user.
+        Sets uncollected_at for idempotency.
         """
         order = await self.get_order(order_id)
 
@@ -781,6 +832,13 @@ class OrderService:
             raise ValidationError(
                 f"Cannot mark uncollected: order is in {order.status.value} status"
             )
+
+        # Idempotency: skip if already processed
+        if order.uncollected_at is not None:
+            return order
+
+        now = datetime.now(UTC)
+        order.uncollected_at = now
 
         # Record no-show
         from app.modules.orders.noshow import record_no_show
@@ -1212,3 +1270,76 @@ class OrderService:
                 f"Orders can be cancelled up to {CANCELLATION_DEADLINE_MINUTES} "
                 f"minutes before the scheduled collection time."
             )
+
+    # ===================================================================
+    # Automatic pickup expiry processing (Phase 6 background worker)
+    # ===================================================================
+
+    async def process_expired_pickups(self) -> dict[str, int]:
+        """Process orders whose pickup deadline has expired.
+
+        Finds READY orders where pickup_deadline <= now and uncollected_at is NULL.
+        Uses SELECT FOR UPDATE SKIP LOCKED to handle concurrent workers safely
+        on PostgreSQL. On other dialects (SQLite), locking is skipped.
+
+        Returns processing statistics: {examined, processed, skipped, failed}.
+        """
+        stats = {"examined": 0, "processed": 0, "skipped": 0, "failed": 0}
+        now = datetime.now(UTC)
+
+        # Find eligible orders: READY, deadline passed, not yet uncollected
+        eligible_stmt = select(Order).where(
+            Order.status == OrderStatus.READY,
+            Order.pickup_deadline <= now,
+            Order.uncollected_at.is_(None),
+            Order.collected_at.is_(None),
+        )
+
+        # Apply row-level locking only on dialects that support it (PostgreSQL).
+        # SQLite does not support FOR UPDATE — skip locking for tests/dev.
+        dialect_name = self.db.bind.dialect.name if self.db.bind else ""
+        if dialect_name == "postgresql":
+            eligible_stmt = eligible_stmt.with_for_update(skip_locked=True)
+
+        result = await self.db.execute(eligible_stmt)
+        orders = list(result.scalars().all())
+        stats["examined"] = len(orders)
+
+        for order in orders:
+            try:
+                # Re-check status after acquiring lock
+                if (
+                    order.status != OrderStatus.READY
+                    or order.uncollected_at is not None
+                    or order.collected_at is not None
+                ):
+                    stats["skipped"] += 1
+                    continue
+
+                await self.mark_uncollected(
+                    order_id=order.id,
+                    actor_id=None,
+                    notes="Automatic expiry: pickup deadline reached",
+                )
+                stats["processed"] += 1
+            except Exception:
+                stats["failed"] += 1
+                logger.exception(
+                    "failed_to_process_expired_order",
+                    order_id=order.id,
+                )
+                # Continue processing other orders
+                continue
+
+        # Flush all changes — caller is responsible for commit.
+        # (Consistent with the rest of the service pattern; the background
+        #  worker in main.py calls session.commit() after this returns.)
+        await self.db.flush()
+        logger.info(
+            "expired_pickups_processed",
+            examined=stats["examined"],
+            processed=stats["processed"],
+            skipped=stats["skipped"],
+            failed=stats["failed"],
+        )
+        return stats

@@ -4,7 +4,9 @@ Provides async SQLAlchemy engine, session factory, and base model class.
 """
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
+from sqlalchemy import Enum
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -35,6 +37,18 @@ class Base(DeclarativeBase):
     """Base class for all database models."""
 
     pass
+
+
+def StrEnum(*args: Any, **kwargs: Any) -> Enum:
+    """Create an Enum that stores .value (string) instead of .name.
+
+    By default, SQLAlchemy's Enum type uses the Python enum member NAME
+    (e.g. "STUDENT") for PostgreSQL storage. Our migrations create enum
+    types with lowercase VALUES (e.g. "student"). This helper tells
+    SQLAlchemy to use .value instead of .name so they match.
+    """
+    kwargs.setdefault("values_callable", lambda obj: [e.value for e in obj])
+    return Enum(*args, **kwargs)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

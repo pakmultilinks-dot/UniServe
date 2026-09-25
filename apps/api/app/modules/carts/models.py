@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    Enum,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -22,7 +22,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base
+from app.core.database import Base, StrEnum
 
 if TYPE_CHECKING:
     from app.modules.menus.models import MenuItem
@@ -66,10 +66,13 @@ class Cart(Base):
         String(36), ForeignKey("cafeterias.id", ondelete="CASCADE"), nullable=False
     )
     status: Mapped[CartStatus] = mapped_column(
-        Enum(CartStatus, create_type=False), default=CartStatus.ACTIVE, nullable=False
+        StrEnum(CartStatus, create_type=False, native_enum=False), default=CartStatus.ACTIVE, nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
@@ -110,8 +113,11 @@ class CartItem(Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     price_snapshot: Mapped[int] = mapped_column(Integer, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="PKR", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,

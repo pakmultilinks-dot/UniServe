@@ -1,7 +1,8 @@
 """UniServe — University Cafeteria Management API."""
 
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import structlog
 from fastapi import FastAPI, Request
@@ -10,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.database import engine
+from app.core.database import async_session_factory, engine
 from app.core.exceptions import (
     AccountLockedError,
     AccountSuspendedError,
@@ -31,6 +32,9 @@ from app.core.exceptions import (
 from app.core.logging import setup_logging
 
 logger = structlog.get_logger()
+
+# Background worker interval in seconds (configurable)
+_PICKUP_CHECK_INTERVAL = 60
 
 
 # ---- Exception → HTTP status mapping ----
@@ -59,11 +63,51 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     logger.info("Starting UniServe API", env=settings.APP_ENV)
 
-    # Startup
+    # --- Background worker: automatic pickup expiry processing ---
+    _shutdown_event = asyncio.Event()
+
+    async def _pickup_expiry_worker() -> None:
+        """Periodically process expired pickup deadlines.
+
+        Runs every _PICKUP_CHECK_INTERVAL seconds until shutdown.
+        Creates its own DB session to avoid leaking request-scoped state.
+        """
+        while not _shutdown_event.is_set():
+            try:
+                async with async_session_factory() as session:
+                    from app.modules.orders.service import OrderService
+
+                    service = OrderService(session)
+                    stats = await service.process_expired_pickups()
+                    await session.commit()
+                    logger.debug(
+                        "pickup_expiry_worker_tick",
+                        **stats,
+                    )
+            except Exception:
+                logger.exception("pickup_expiry_worker_error")
+            # Wait for the interval or until shutdown is signalled
+            try:
+                await asyncio.wait_for(
+                    _shutdown_event.wait(),
+                    timeout=_PICKUP_CHECK_INTERVAL,
+                )
+                break  # Shutdown signalled
+            except TimeoutError:
+                pass  # Normal timeout — continue loop
+
+    pickup_task = asyncio.create_task(_pickup_expiry_worker())
+    logger.info("pickup_expiry_worker_started", interval=_PICKUP_CHECK_INTERVAL)
+
+    # Startup complete
     yield
 
-    # Shutdown
+    # --- Shutdown: stop background worker ---
     logger.info("Shutting down UniServe API")
+    _shutdown_event.set()
+    pickup_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await pickup_task
     await engine.dispose()
 
 

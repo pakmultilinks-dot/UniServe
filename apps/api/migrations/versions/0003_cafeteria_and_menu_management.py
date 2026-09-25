@@ -21,7 +21,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # ---- New Enums ----
+    # ---- New Enums (needed for op.add_column which doesn't auto-create) ----
     cafeteria_operational_status_enum = sa.Enum(
         "open",
         "closed",
@@ -30,38 +30,6 @@ def upgrade() -> None:
         name="cafeteria_operational_status",
     )
     cafeteria_operational_status_enum.create(op.get_bind(), checkfirst=True)
-
-    menu_category_enum = sa.Enum(
-        "breakfast",
-        "main_course",
-        "side_dish",
-        "dessert",
-        "beverage",
-        "snack",
-        "salad",
-        "soup",
-        name="menu_category",
-    )
-    menu_category_enum.create(op.get_bind(), checkfirst=True)
-
-    daily_menu_status_enum = sa.Enum(
-        "draft",
-        "published",
-        "archived",
-        name="daily_menu_status",
-    )
-    daily_menu_status_enum.create(op.get_bind(), checkfirst=True)
-
-    inventory_unit_enum = sa.Enum(
-        "kg",
-        "g",
-        "L",
-        "mL",
-        "pcs",
-        "portions",
-        name="inventory_unit",
-    )
-    inventory_unit_enum.create(op.get_bind(), checkfirst=True)
 
     # ---- Extend Cafeterias ----
     op.add_column(
@@ -124,7 +92,7 @@ def upgrade() -> None:
                 "snack",
                 "salad",
                 "soup",
-                name="menu_category",
+                name="menu_category"
             ),
             nullable=False,
         ),

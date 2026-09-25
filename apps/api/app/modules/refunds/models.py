@@ -12,7 +12,7 @@ import enum
 from datetime import UTC, datetime
 
 from sqlalchemy import (
-    Enum,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -21,7 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base
+from app.core.database import Base, StrEnum
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -87,12 +87,12 @@ class Refund(Base):
 
     # Status
     status: Mapped[RefundStatus] = mapped_column(
-        Enum(RefundStatus, create_type=False), nullable=False, default=RefundStatus.PENDING
+        StrEnum(RefundStatus, create_type=False, native_enum=False), nullable=False, default=RefundStatus.PENDING
     )
 
     # Reason
     reason: Mapped[RefundReason] = mapped_column(
-        Enum(RefundReason, create_type=False), nullable=False
+        StrEnum(RefundReason, create_type=False, native_enum=False), nullable=False
     )
     reason_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -111,9 +111,12 @@ class Refund(Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     processed_at: Mapped[datetime | None] = mapped_column(default=None, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
@@ -143,7 +146,9 @@ class RefundEvent(Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
 
     # Relationships
     refund: Mapped[Refund] = relationship("Refund", back_populates="events")

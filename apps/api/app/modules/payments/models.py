@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
-    Enum,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -24,7 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base
+from app.core.database import Base, StrEnum
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -94,7 +94,7 @@ class Payment(Base):
 
     # Status
     status: Mapped[PaymentStatus] = mapped_column(
-        Enum(PaymentStatus, create_type=False), nullable=False, default=PaymentStatus.PENDING
+        StrEnum(PaymentStatus, create_type=False, native_enum=False), nullable=False, default=PaymentStatus.PENDING
     )
 
     # Provider information (no sensitive credentials stored)
@@ -106,8 +106,11 @@ class Payment(Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
@@ -138,7 +141,7 @@ class PaymentAttempt(Base):
     )
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[PaymentAttemptStatus] = mapped_column(
-        Enum(PaymentAttemptStatus, create_type=False),
+        StrEnum(PaymentAttemptStatus, create_type=False, native_enum=False),
         nullable=False,
         default=PaymentAttemptStatus.PENDING,
     )
@@ -147,7 +150,9 @@ class PaymentAttempt(Base):
     provider_response_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
 
     # Relationships
     payment: Mapped[Payment] = relationship("Payment", back_populates="attempts")
@@ -171,7 +176,9 @@ class WebhookEvent(Base):
     payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     processed_at: Mapped[datetime | None] = mapped_column(default=None, nullable=True)
 
     def __repr__(self) -> str:
