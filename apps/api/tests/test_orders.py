@@ -305,6 +305,47 @@ class TestCheckout:
         assert resp.status_code == 201
         assert resp.json()["inventory_reserved"] is False
 
+    async def test_checkout_scheduled_rejects_past_time(
+        self, student_client: AsyncClient, student_user, db: AsyncSession
+    ):
+        """Scheduled order rejects a collection time that is already past."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+
+        # Use "00:00" which is always in the past (even at midnight edge,
+        # the check is utc_collection <= now, so exactly midnight is also rejected).
+        resp = await student_client.post(
+            f"/api/v1/cafeterias/{cafeteria.id}/cart/checkout",
+            json={
+                "payment_method": "cash",
+                "order_type": "scheduled",
+                "scheduled_collection_time": "00:00",
+            },
+        )
+        assert resp.status_code == 400
+
+    async def test_checkout_scheduled_rejects_after_closing(
+        self, student_client: AsyncClient, student_user, db: AsyncSession
+    ):
+        """Scheduled order rejects collection time after cafeteria closing."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+
+        # Set cafeteria closing time to 17:00
+        cafeteria.closing_time = "17:00"
+        await db.flush()
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        resp = await student_client.post(
+            f"/api/v1/cafeterias/{cafeteria.id}/cart/checkout",
+            json={
+                "payment_method": "cash",
+                "order_type": "scheduled",
+                "scheduled_collection_time": "23:00",
+            },
+        )
+        assert resp.status_code == 400
+
     async def test_checkout_server_authoritative_price(
         self, student_client: AsyncClient, student_user, db: AsyncSession
     ):

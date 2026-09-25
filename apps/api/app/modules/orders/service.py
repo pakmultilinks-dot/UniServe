@@ -95,6 +95,10 @@ class OrderService:
         if cafeteria.operational_status == OperationalStatus.MAINTENANCE:
             raise ValidationError("Cafeteria is under maintenance")
 
+        # 3b. Validate scheduled order time constraints (requires cafeteria)
+        if parsed_order_type == OrderType.SCHEDULED:
+            self._validate_scheduled_order_time(scheduled_collection_time, cafeteria)
+
         # 4. Validate published menu for today
         await self._validate_published_menu(cafeteria_id)
 
@@ -1243,6 +1247,60 @@ class OrderService:
 
         if not (0 <= hour <= 23 and 0 <= minute <= 59):
             raise ValidationError("Invalid time values")
+
+    def _validate_scheduled_order_time(
+        self,
+        scheduled_collection_time: str | None,
+        cafeteria,
+    ) -> None:
+        """Validate scheduled order time against current time and operating hours.
+
+        Called after cafeteria is loaded so we can access closing_time.
+        """
+        if not scheduled_collection_time:
+            return  # Already validated by _validate_scheduled_order
+
+        from datetime import time as dt_time
+
+        parts = scheduled_collection_time.split(":")
+        hour = int(parts[0])
+        minute = int(parts[1])
+
+        # 1. Future-time enforcement: collection time must be after current local time
+        now = datetime.now(UTC)
+        try:
+            from zoneinfo import ZoneInfo
+
+            tz = ZoneInfo(cafeteria.timezone)
+        except (ValueError, KeyError):
+            tz = UTC
+        collection_time = dt_time(hour, minute)
+        local_today = date.today()
+        collection_dt = datetime.combine(local_today, collection_time, tzinfo=tz)
+        utc_collection = collection_dt.astimezone(UTC)
+
+        if utc_collection <= now:
+            raise ValidationError(
+                f"Scheduled collection time {scheduled_collection_time} is in the past. "
+                f"Orders must be scheduled for a future time today."
+            )
+
+        # 2. Operating-hours enforcement: collection time must be before closing
+        if cafeteria.closing_time:
+            try:
+                close_hour, close_minute = map(int, cafeteria.closing_time.split(":"))
+                close_time = dt_time(close_hour, close_minute)
+                close_dt = datetime.combine(local_today, close_time, tzinfo=tz)
+                utc_close = close_dt.astimezone(UTC)
+
+                if utc_collection >= utc_close:
+                    raise ValidationError(
+                        f"Scheduled collection time {scheduled_collection_time} "
+                        f"is after cafeteria closing time ({cafeteria.closing_time}). "
+                        f"Orders must be scheduled before closing."
+                    )
+            except (ValueError, IndexError):
+                pass  # Invalid closing_time format — skip operating-hours check
 
     def _check_scheduled_cancellation_deadline(self, order: Order) -> None:
         """Check if a scheduled order can still be cancelled by the user.
