@@ -1,4 +1,4 @@
 """Reports module — reporting and analytics.
 
-To be implemented in Phase 7.
+Phase 7: Sales reports, order analytics, cafeteria performance, inventory reports.
 """

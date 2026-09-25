@@ -80,3 +80,8 @@ api_router.include_router(refunds_router, prefix="/refunds", tags=["refunds"])
 from app.modules.notifications.router import router as notifications_router
 
 api_router.include_router(notifications_router, prefix="/notifications", tags=["notifications"])
+
+# Reports (Phase 7)
+from app.modules.reports.router import router as reports_router
+
+api_router.include_router(reports_router, prefix="/reports", tags=["reports"])
