@@ -29,6 +29,7 @@ from app.core.exceptions import (
 )
 from app.modules.carts.models import Cart, CartStatus
 from app.modules.menus.models import DailyMenuStatus
+from app.modules.notifications.service import emit_order_notification
 from app.modules.orders.models import (
     Order,
     OrderEvent,
@@ -52,6 +53,19 @@ class OrderService:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+
+    async def _emit_notification(self, order: Order, event: OrderEvent) -> None:
+        """Fire-and-forget: emit a notification for an order event."""
+        await emit_order_notification(
+            self.db,
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            event_type=event.event_type.value,
+            source_event_id=event.id,
+            notes=event.notes,
+            cafeteria_id=order.cafeteria_id,
+        )
 
     # ===================================================================
     # Checkout
@@ -163,6 +177,7 @@ class OrderService:
             actor_id=user_id,
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
 
         # 10. Handle inventory reservation
         if parsed_order_type == OrderType.IMMEDIATE:
@@ -366,6 +381,7 @@ class OrderService:
             notes=reason,
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
         await self.db.flush()
         logger.info(
             "order_cancelled",
@@ -422,6 +438,7 @@ class OrderService:
             notes=notes,
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
 
         # For scheduled orders: reserve inventory when preparation starts
         if (
@@ -573,6 +590,7 @@ class OrderService:
             notes=notes,
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
         await self.db.flush()
         logger.info("order_confirmed", order_id=order.id, actor_id=actor_id)
         return order
@@ -621,6 +639,7 @@ class OrderService:
             notes=f"Reason: {reason}. {notes or ''}",
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
         await self.db.flush()
         logger.info(
             "order_rejected",
@@ -703,6 +722,7 @@ class OrderService:
             notes=notes,
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
 
         eta_event = OrderEvent(
             order_id=order.id,
@@ -783,6 +803,7 @@ class OrderService:
             notes=notes,
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
         await self.db.flush()
         logger.info(
             "order_ready",
@@ -828,6 +849,7 @@ class OrderService:
             notes=f"Delayed by {additional_minutes} minutes. {notes or ''}",
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
         await self.db.flush()
         logger.info(
             "order_delayed",
@@ -880,6 +902,7 @@ class OrderService:
             notes=notes,
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
         await self.db.flush()
         logger.info(
             "order_uncollected",
@@ -954,6 +977,7 @@ class OrderService:
             notes=f"Cancelled item: {target_item.item_name}. {reason or ''}",
         )
         self.db.add(event)
+        await self._emit_notification(order, event)
         await self.db.flush()
         logger.info(
             "partial_item_cancel",
@@ -1036,6 +1060,7 @@ class OrderService:
                 notes=notes,
             )
             self.db.add(event)
+            await self._emit_notification(order, event)
             cancelled_orders.append(order)
 
         await self.db.flush()

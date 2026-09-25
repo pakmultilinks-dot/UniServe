@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 
 from app.core.config import settings
 from app.core.exceptions import AuthorizationError, NotFoundException, ValidationError
+from app.modules.notifications.service import emit_refund_notification
 from app.modules.orders.models import Order
 from app.modules.payments.models import Payment, PaymentStatus
 from app.modules.refunds.models import Refund, RefundEvent, RefundReason, RefundStatus
@@ -129,6 +130,19 @@ class RefundService:
             notes=f"Reason: {reason}" + (f" — {reason_note}" if reason_note else ""),
         )
         self.db.add(event)
+
+        # Emit notification (fire-and-forget)
+        await emit_refund_notification(
+            self.db,
+            refund_id=refund.id,
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            event_type="refund_requested",
+            source_event_id=event.id,
+            cafeteria_id=order.cafeteria_id,
+        )
+
         await self.db.flush()
 
         logger.info(
@@ -221,6 +235,18 @@ class RefundService:
             )
             self.db.add(event)
 
+            # Emit notification (fire-and-forget)
+            await emit_refund_notification(
+                self.db,
+                refund_id=refund.id,
+                order_id=order.id,
+                order_number=order.order_number,
+                user_id=order.user_id,
+                event_type="refund_succeeded",
+                source_event_id=event.id,
+                cafeteria_id=order.cafeteria_id,
+            )
+
             # Release inventory if order had reserved inventory
             if order.inventory_reserved:
                 from app.modules.orders.service import OrderService
@@ -243,6 +269,19 @@ class RefundService:
                 notes=result.error_message,
             )
             self.db.add(event)
+
+            # Emit notification (fire-and-forget)
+            await emit_refund_notification(
+                self.db,
+                refund_id=refund.id,
+                order_id=order.id,
+                order_number=order.order_number,
+                user_id=order.user_id,
+                event_type="refund_failed",
+                source_event_id=event.id,
+                cafeteria_id=order.cafeteria_id,
+            )
+
             logger.warning(
                 "refund_failed",
                 refund_id=refund.id,

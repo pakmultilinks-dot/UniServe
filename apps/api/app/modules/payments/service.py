@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, NotFoundException, ValidationError
+from app.modules.notifications.service import emit_order_notification
 from app.modules.orders.models import (
     Order,
     OrderEvent,
@@ -268,6 +269,18 @@ class PaymentService:
             notes=f"Payment {payment.id} confirmed via {payment.provider_name}",
         )
         self.db.add(event)
+
+        # Emit notification (fire-and-forget)
+        await emit_order_notification(
+            self.db,
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            event_type=OrderEventType.PAYMENT_CONFIRMED.value,
+            source_event_id=event.id,
+            notes=event.notes,
+            cafeteria_id=order.cafeteria_id,
+        )
 
         await self.db.flush()
         logger.info(

@@ -75,3 +75,8 @@ from app.modules.refunds.router import router as refunds_router
 
 api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
 api_router.include_router(refunds_router, prefix="/refunds", tags=["refunds"])
+
+# Notifications (Phase 6)
+from app.modules.notifications.router import router as notifications_router
+
+api_router.include_router(notifications_router, prefix="/notifications", tags=["notifications"])
