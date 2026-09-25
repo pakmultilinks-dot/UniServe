@@ -6,8 +6,8 @@ Covers:
 - Partial cancel returns updated order items (db.refresh fix)
 """
 
-from datetime import UTC, date, datetime, timedelta
 import time
+from datetime import UTC, date, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -21,12 +21,10 @@ from app.modules.orders.models import Order, OrderStatus, OrderType, PaymentMeth
 from app.modules.payments.models import Payment, PaymentStatus, WebhookEvent
 from app.modules.refunds.models import Refund, RefundStatus
 from tests.conftest import (
-    assign_user_to_cafeteria,
     create_test_cafeteria,
     create_test_daily_menu,
     create_test_menu_item,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -116,10 +114,6 @@ async def _create_order_with_items(db: AsyncSession, user_id, cafeteria_id, item
     await db.flush()
 
     for mid in item_ids:
-        item = await db.execute(
-            select(InventoryItem.menu_item_id).where(InventoryItem.menu_item_id == mid)
-        )
-        menu_item_id = item.scalar()
         order_item = OrderItem(
             order_id=order.id,
             menu_item_id=mid,
@@ -235,9 +229,7 @@ class TestTimezoneAwareProcessedAt:
         db.add(refund)
         await db.flush()
 
-        result = await db.execute(
-            select(Refund).where(Refund.idempotency_key == "reg_refund_001")
-        )
+        result = await db.execute(select(Refund).where(Refund.idempotency_key == "reg_refund_001"))
         fetched = result.scalar_one()
         assert fetched.processed_at is not None
         assert fetched.processed_at.tzinfo is not None
@@ -290,9 +282,7 @@ class TestTimezoneAwareProcessedAt:
         db.add(refund)
         await db.flush()
 
-        result = await db.execute(
-            select(Refund).where(Refund.idempotency_key == "reg_refund_002")
-        )
+        result = await db.execute(select(Refund).where(Refund.idempotency_key == "reg_refund_002"))
         fetched = result.scalar_one()
         assert fetched.processed_at is None
 
