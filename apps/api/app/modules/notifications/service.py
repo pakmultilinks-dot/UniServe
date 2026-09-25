@@ -10,9 +10,10 @@ Handles:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import structlog
 from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
 from app.modules.notifications.models import (
@@ -20,6 +21,9 @@ from app.modules.notifications.models import (
     Notification,
     NotificationType,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
@@ -394,7 +398,7 @@ class NotificationService:
             .execution_options(synchronize_session=False)
         )
         await self.db.flush()
-        return result.rowcount  # type: ignore[return-value]
+        return result.rowcount  # type: ignore[attr-defined]
 
     # ====================================================================
     # Private helpers

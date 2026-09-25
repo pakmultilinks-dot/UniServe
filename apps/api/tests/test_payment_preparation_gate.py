@@ -13,7 +13,7 @@ Covers:
 """
 
 import uuid
-from datetime import date, datetime, UTC
+from datetime import UTC, date, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -30,14 +30,12 @@ from app.modules.orders.models import (
     PaymentMethod,
 )
 from app.modules.payments.models import Payment, PaymentStatus
-from app.modules.users.models import Role, User, UserCategory
+from app.modules.users.models import Role, User
 from tests.conftest import (
     assign_user_to_cafeteria,
     create_test_cafeteria,
     create_test_daily_menu,
     create_test_menu_item,
-    create_test_user,
-    create_user_session,
 )
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 # EVIDENCE_NOTIFICATIONS.md — Phase 6: Notifications Foundation
 
 **Date:** 2026-09-25  
-**Git HEAD:** `1b6dbf1` (main)  
+**Git HEAD:** `f9f55b8` (main)  
 **Status:** ✅ ALL CHECKS PASSED
 
 ---

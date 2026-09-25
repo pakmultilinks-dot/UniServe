@@ -17,11 +17,9 @@ Covers:
 """
 
 import uuid
-from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.notifications.models import (
@@ -35,12 +33,9 @@ from app.modules.notifications.service import (
     emit_refund_notification,
 )
 from tests.conftest import (
-    create_test_cafeteria,
     create_test_user,
     create_user_session,
-    assign_user_to_cafeteria,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1142,7 +1137,7 @@ class TestAPIOwnershipIsolation:
         self, client: AsyncClient, student_user, db: AsyncSession
     ):
         """User A's notifications don't appear for User B."""
-        from tests.conftest import create_test_user, create_user_session
+        from tests.conftest import create_test_user
 
         # Create user B
         user_b = await create_test_user(
@@ -1184,7 +1179,6 @@ class TestEventTypeMapping:
 
     def test_all_order_event_types_map(self):
         """Every order event type that generates a notification maps correctly."""
-        svc = NotificationService.__new__(NotificationService)
         mapping = {
             "created": NotificationType.ORDER_CREATED,
             "confirmed_by_staff": NotificationType.ORDER_CONFIRMED,

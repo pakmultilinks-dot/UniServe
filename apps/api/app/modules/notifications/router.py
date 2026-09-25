@@ -70,6 +70,7 @@ async def mark_notification_read(
         notification_id=notification_id,
         user_id=auth.user.id,
     )
+    assert notification.read_at is not None, "mark_as_read must set read_at"
     return MarkReadResponse(
         id=notification.id,
         is_read=notification.is_read,
