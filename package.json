@@ -1,0 +1,17 @@
+{
+  "name": "uniserve",
+  "version": "0.1.0",
+  "private": true,
+  "description": "University Cafeteria Platform — Monorepo",
+  "workspaces": [
+    "apps/web",
+    "apps/mobile",
+    "packages/shared-types"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace=packages/shared-types",
+    "type-check:web": "npm run type-check --workspace=apps/web",
+    "type-check:mobile": "npm run type-check --workspace=apps/mobile",
+    "type-check:all": "npm run build:shared && npm run type-check:web && npm run type-check:mobile"
+  }
+}

@@ -2,12 +2,22 @@
   "name": "@uniserve/shared-types",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared TypeScript type definitions for UniServe",
+  "description": "Shared TypeScript types and API client for UniServe",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
     "typescript": "~5.3.0"

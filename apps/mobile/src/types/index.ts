@@ -1,27 +1,22 @@
 /**
- * UniServe — TypeScript type definitions
+ * UniServe — Mobile Application Type Definitions
  *
- * Shared types for the mobile application.
- * These will be expanded as features are implemented.
+ * Re-exports from @uniserve/shared-types.
+ * App-specific types can be added here when needed.
  */
-
-export type UserRole = "student" | "faculty" | "cafeteria_staff" | "cafeteria_manager" | "admin";
-
-export interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: UserRole;
-  createdAt: string;
-}
-
-export interface ApiResponse<T> {
-  data: T;
-  message?: string;
-}
-
-export interface ApiError {
-  detail: string;
-  status_code: number;
-}
+export {
+  type UserRole,
+  type UserCategory,
+  type AccountStatus,
+  type User,
+  type TokenPair,
+  type LoginRequest,
+  type LoginResponse,
+  type RegisterRequest,
+  type RegisterResponse,
+  type AuthState,
+  type ApiResponse,
+  type ApiErrorResponse,
+  type PaginatedResponse,
+  type PaginatedQuery,
+} from "@uniserve/shared-types";

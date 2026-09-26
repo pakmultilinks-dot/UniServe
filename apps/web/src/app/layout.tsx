@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AuthProvider } from "@/contexts/AuthContext";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "UniServe — University Cafeteria Platform",
@@ -11,7 +12,6 @@ export const metadata: Metadata = {
  * UniServe — Root Layout
  *
  * Wraps the app with AuthProvider for authentication state management.
- * Role-based layouts (cafeteria, university admin) will be added in future phases.
  */
 export default function RootLayout({
   children,
@@ -20,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body className="bg-gray-50 text-gray-900 antialiased">
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

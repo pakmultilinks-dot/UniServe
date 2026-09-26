@@ -2,21 +2,24 @@
  * UniServe — Auth Context & Provider
  *
  * Manages authentication state across the mobile app.
- * Handles token storage, refresh, and user state.
+ * Uses shared ApiClient with SecureStore-backed TokenProvider.
+ * Handles token persistence, refresh, and user state.
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import * as SecureStore from "expo-secure-store";
 
-import type { User, AuthState, TokenPair } from "../types/auth";
+import type { User, TokenPair } from "@uniserve/shared-types";
 import * as authApi from "../services/auth";
+import { loadPersistedTokens, setOnAuthFailure } from "../services/api";
 
-// Token storage keys
-const ACCESS_TOKEN_KEY = "uniserve_access_token";
-const REFRESH_TOKEN_KEY = "uniserve_refresh_token";
 const USER_KEY = "uniserve_user";
 
-interface AuthContextType extends AuthState {
+interface AuthContextType {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  isEmailVerified: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (data: {
     firstName: string;
@@ -38,50 +41,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
-  // ---- Token Storage ----
+  // Register onAuthFailure to clear user state when token refresh fails
+  useEffect(() => {
+    setOnAuthFailure(() => {
+      setAccessToken(null);
+      setUser(null);
+    });
+  }, []);
+
+  // Load persisted tokens and user on mount
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStoredAuth() {
+      try {
+        await loadPersistedTokens();
+        const userJson = await SecureStore.getItemAsync(USER_KEY);
+
+        if (userJson) {
+          setUser(JSON.parse(userJson));
+        }
+      } catch {
+        // Corrupted storage — clear everything
+        await SecureStore.deleteItemAsync(USER_KEY);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadStoredAuth();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ---- Token helpers ----
 
   const storeTokens = useCallback(async (tokens: TokenPair) => {
-    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, tokens.access_token);
-    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokens.refresh_token);
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(tokens));
     setAccessToken(tokens.access_token);
   }, []);
 
   const clearTokens = useCallback(async () => {
-    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
     await SecureStore.deleteItemAsync(USER_KEY);
     setAccessToken(null);
     setUser(null);
   }, []);
 
-  const loadStoredAuth = useCallback(async () => {
-    try {
-      const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
-      const userJson = await SecureStore.getItemAsync(USER_KEY);
-
-      if (token && userJson) {
-        setAccessToken(token);
-        setUser(JSON.parse(userJson));
-      }
-    } catch {
-      await clearTokens();
-    } finally {
-      setIsLoading(false);
-    }
-  }, [clearTokens]);
-
-  // Load stored auth on mount
-  useEffect(() => {
-    loadStoredAuth();
-  }, [loadStoredAuth]);
-
   // ---- Auth Actions ----
 
   const setTokens = useCallback(
     async (tokens: TokenPair) => {
-      await storeTokens(tokens);
+      setAccessToken(tokens.access_token);
     },
-    [storeTokens]
+    [],
   );
 
   const login = useCallback(
@@ -90,11 +101,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         university_email: email,
         password,
       });
-      await storeTokens(response.tokens);
+      setAccessToken(response.tokens.access_token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(response.user));
       setUser(response.user);
     },
-    [storeTokens]
+    [],
   );
 
   const register = useCallback(
@@ -117,42 +128,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: response.university_email,
       };
     },
-    []
+    [],
   );
 
   const logout = useCallback(async () => {
-    if (accessToken) {
-      try {
-        await authApi.logout(accessToken);
-      } catch {
-        // Logout locally even if server call fails
-      }
+    try {
+      await authApi.logout();
+    } catch {
+      // Logout locally even if server call fails
     }
     await clearTokens();
-  }, [accessToken, clearTokens]);
+  }, [clearTokens]);
 
   const logoutAll = useCallback(async () => {
-    if (accessToken) {
-      try {
-        await authApi.logoutAll(accessToken);
-      } catch {
-        // Logout locally even if server call fails
-      }
+    try {
+      await authApi.logoutAll();
+    } catch {
+      // Logout locally even if server call fails
     }
     await clearTokens();
-  }, [accessToken, clearTokens]);
+  }, [clearTokens]);
 
   const refreshUser = useCallback(async () => {
-    if (accessToken) {
-      try {
-        const updatedUser = await authApi.getCurrentUser(accessToken);
-        await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
-        setUser(updatedUser);
-      } catch {
-        await clearTokens();
-      }
+    try {
+      const updatedUser = await authApi.getCurrentUser();
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    } catch {
+      await clearTokens();
     }
-  }, [accessToken, clearTokens]);
+  }, [clearTokens]);
 
   const value: AuthContextType = {
     user,

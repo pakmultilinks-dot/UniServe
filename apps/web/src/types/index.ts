@@ -1,33 +1,22 @@
 /**
  * UniServe — Web Application Type Definitions
+ *
+ * Re-exports from @uniserve/shared-types.
+ * App-specific types can be added here when needed.
  */
-
-export type UserRole =
-  | "student"
-  | "faculty"
-  | "cafeteria_staff"
-  | "cafeteria_manager"
-  | "admin";
-
-export interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: UserRole;
-  cafeteriaId?: string; // For cafeteria-scoped roles
-  createdAt: string;
-}
-
-export interface ApiResponse<T> {
-  data: T;
-  message?: string;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
+export {
+  type UserRole,
+  type UserCategory,
+  type AccountStatus,
+  type User,
+  type TokenPair,
+  type LoginRequest,
+  type LoginResponse,
+  type RegisterRequest,
+  type RegisterResponse,
+  type AuthState,
+  type ApiResponse,
+  type ApiErrorResponse,
+  type PaginatedResponse,
+  type PaginatedQuery,
+} from "@uniserve/shared-types";

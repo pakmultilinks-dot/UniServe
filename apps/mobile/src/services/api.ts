@@ -1,51 +1,74 @@
 /**
- * UniServe — API Client
+ * UniServe — Mobile API Client
  *
- * Centralized HTTP client for communicating with the UniServe backend.
- * Will be built out in Phase 2+.
+ * Uses the shared ApiClient from @uniserve/shared-types.
+ * Mobile-specific TokenProvider stores tokens in expo-secure-store
+ * (encrypted keychain on iOS, encrypted SharedPreferences on Android).
  */
 
+import * as SecureStore from "expo-secure-store";
+
 import { API_BASE_URL } from "../config";
+import {
+  ApiClient,
+  type TokenProvider,
+} from "@uniserve/shared-types";
 
-interface RequestOptions {
-  method?: string;
-  headers?: Record<string, string>;
-  body?: unknown;
+// ---- SecureStore Token Provider ----
+
+const ACCESS_TOKEN_KEY = "uniserve_access_token";
+const REFRESH_TOKEN_KEY = "uniserve_refresh_token";
+
+const secureStoreTokenProvider: TokenProvider = {
+  getAccessToken: () => {
+    // SecureStore is async, but TokenProvider requires sync access.
+    // We cache the token in a module-scope variable for synchronous reads.
+    return inMemoryAccessToken;
+  },
+  getRefreshToken: () => inMemoryRefreshToken,
+  setTokens: (accessToken: string, refreshToken: string) => {
+    inMemoryAccessToken = accessToken;
+    inMemoryRefreshToken = refreshToken;
+    // Persist asynchronously — will be available on next read
+    SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
+    SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
+  },
+  clearTokens: () => {
+    inMemoryAccessToken = null;
+    inMemoryRefreshToken = null;
+    SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
+    SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+  },
+};
+
+// Module-scope cache for synchronous TokenProvider reads
+let inMemoryAccessToken: string | null = null;
+let inMemoryRefreshToken: string | null = null;
+
+/**
+ * Load persisted tokens into memory on startup.
+ * Call this once at app launch (in AuthContext or _layout).
+ */
+export async function loadPersistedTokens(): Promise<void> {
+  const accessToken = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+  const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+  if (accessToken) inMemoryAccessToken = accessToken;
+  if (refreshToken) inMemoryRefreshToken = refreshToken;
 }
 
-class ApiClient {
-  private baseUrl: string;
+// ---- Client Initialization ----
 
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
-  }
+let onAuthFailureCallback: (() => void) | null = null;
 
-  async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { method = "GET", headers = {}, body } = options;
-
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...headers,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json();
-  }
-
-  get<T>(endpoint: string, headers?: Record<string, string>): Promise<T> {
-    return this.request<T>(endpoint, { method: "GET", headers });
-  }
-
-  post<T>(endpoint: string, body: unknown, headers?: Record<string, string>): Promise<T> {
-    return this.request<T>(endpoint, { method: "POST", body, headers });
-  }
+export function setOnAuthFailure(callback: () => void): void {
+  onAuthFailureCallback = callback;
 }
 
-export const apiClient = new ApiClient(API_BASE_URL);
+export const apiClient = new ApiClient(
+  API_BASE_URL,
+  secureStoreTokenProvider,
+  () => onAuthFailureCallback?.(),
+);
+
+// Re-export shared types for convenience
+export { ApiClientError } from "@uniserve/shared-types";
