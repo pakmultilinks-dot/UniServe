@@ -31,13 +31,13 @@
 **New test classes:** 7
 
 ```
-TestAuthorization (5 tests — admin only, 403 for all other roles)
-TestUserAggregation (5 tests — role counts, status counts, suspension)
-TestCafeteriaAggregation (5 tests — total, detail fields, operational status)
-TestOrderAggregation (5 tests — status counts, cancellation rate, date filtering)
-TestFinancialAggregation (4 tests — revenue, refunds, payment method split, currency)
+TestAuthorization (6 tests — unauthenticated, student, faculty, manager, staff, admin)
+TestUserAggregation (3 tests — role counts, active/suspended counts, ordering_suspended)
+TestCafeteriaAggregation (4 tests — both cafeterias, operational status, manager/staff counts, prep capacity)
+TestOrderAggregation (4 tests — status counts, uncollected count, date filtering, cancellation rate)
+TestFinancialAggregation (5 tests — revenue, failed excluded, refunds, online/cash breakdown, net revenue)
 TestExceptionAggregation (4 tests — overdue refunds, suspended users, uncollected, closure)
-TestSecurity (3 tests — unauthenticated 401, no sensitive fields, date range boundaries)
+TestSecurity (2 tests — no sensitive fields, cross-role no leak)
 ```
 
 **Pre-existing failures (not related to Phase 7):**
@@ -200,12 +200,14 @@ mypy app/modules/administration/ --ignore-missing-imports → Success: no issues
 
 | File | Action | Lines | Description |
 |------|--------|-------|-------------|
-| `app/modules/administration/__init__.py` | Created | ~5 | Module docstring |
-| `app/modules/administration/schemas.py` | Created | ~95 | 7 Pydantic response models |
-| `app/modules/administration/service.py` | Created | ~280 | 5 aggregation methods |
-| `app/modules/administration/router.py` | Created | ~65 | Single GET /overview endpoint |
-| `app/api/router.py` | Modified | +3 | Registered administration router |
-| `tests/test_administration.py` | Created | ~760 | 28 tests across 7 classes |
+| `app/modules/administration/__init__.py` | Created | 5 | Module docstring |
+| `app/modules/administration/schemas.py` | Created | 120 | 7 Pydantic response models |
+| `app/modules/administration/service.py` | Created | 300 | 5 aggregation methods |
+| `app/modules/administration/router.py` | Created | 68 | Single GET /overview endpoint |
+| `app/api/router.py` | Modified | 7 | Registered administration router |
+| `tests/test_administration.py` | Created | 744 | 28 tests across 7 classes |
+| `live_verify_administration.py` | Created | 324 | 60 live verification assertions |
+| `EVIDENCE_ADMINISTRATION_PHASE7.md` | Created | ~230 | This evidence document |
 
 ---
 
