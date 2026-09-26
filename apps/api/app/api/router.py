@@ -85,3 +85,10 @@ api_router.include_router(notifications_router, prefix="/notifications", tags=["
 from app.modules.reports.router import router as reports_router
 
 api_router.include_router(reports_router, prefix="/reports", tags=["reports"])
+
+# Administration (Phase 7)
+from app.modules.administration.router import router as administration_router
+
+api_router.include_router(
+    administration_router, prefix="/administration", tags=["administration"]
+)

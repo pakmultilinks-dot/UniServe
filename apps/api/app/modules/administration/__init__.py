@@ -1,4 +1,5 @@
-"""Administration module — university administration.
+"""Administration module — university administration overview APIs.
 
-To be implemented in Phase 7.
+Provides a University Admin-only operational overview of the entire
+cafeteria system: users, cafeterias, orders, financials, and exceptions.
 """
