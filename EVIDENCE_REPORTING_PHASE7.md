@@ -26,7 +26,8 @@
 
 ## 2. Test Results
 
-**Unit tests:** 476 passed (431 baseline + 45 new report tests)
+**Unit tests:** 473 passed, 3 failed (baseline: 430 passed + 45 new report tests = 475, but 3 pre-existing scheduled-order tests fail on every run)
+**45/45 reporting tests passed.**
 **New test classes:** 14, covering all 12 endpoints + authorization + regression
 
 ```
@@ -46,9 +47,16 @@ TestAuthorization (11 tests — IDOR, role-based, cross-cafeteria)
 TestExistingTestsUnaffected (2 tests — health + auth regression)
 ```
 
+**Pre-existing failures (not related to Phase 7):**
+1. `test_scheduled_order_inventory_reserved_at_prep`
+2. `test_checkout_scheduled_does_not_reserve_inventory`
+3. `test_scheduled_inventory_reserved_at_preparation`
+
 ---
 
-## 3. Live Verification Results (28/28 passed)
+## 3. Live Verification Results (not rerun — Docker unavailable)
+
+The live verification script (`live_verify_reporting.py`) exists with 28 assertions covering all 12 endpoints, but was **not executed** during this cleanup because the Docker daemon (PostgreSQL, Redis) was not running. Live verification should be rerun when Docker is available.
 
 ```
 Test 1:  Admin access to sales report ✅
@@ -106,7 +114,7 @@ All 12 endpoints use SQL-level aggregation (`GROUP BY`, `func.sum`, `func.count`
 
 ```
 ruff check app/modules/reports/ tests/test_reports.py → All checks passed!
-ruff format --check → All files formatted
+ruff format --check → 1 cosmetic formatting difference in service.py (indentation only, no functional impact)
 ```
 
 ---

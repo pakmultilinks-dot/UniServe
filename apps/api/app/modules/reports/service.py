@@ -463,9 +463,9 @@ class ReportService:
 
         # Average time to ready: created_at -> ready_at
         ttr_q = select(
-            func.avg(
-                func.extract("epoch", Order.ready_at - Order.created_at) / 60.0
-            ).label("avg_ttr_minutes")
+            func.avg(func.extract("epoch", Order.ready_at - Order.created_at) / 60.0).label(
+                "avg_ttr_minutes"
+            )
         ).where(
             *base_filters,
             Order.ready_at.isnot(None),
