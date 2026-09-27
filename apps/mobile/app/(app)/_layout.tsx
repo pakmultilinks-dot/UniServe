@@ -1,94 +1,49 @@
 /**
  * UniServe — App Route Group Layout
  *
- * Tab navigator for the main (authenticated) application.
- * Uses LGU brand colors and proper Unicode icons.
+ * Stack navigator wrapping the tab navigator and detail screens.
+ * The tabs provide the main navigation, while cart and item detail
+ * are pushed on top (hiding the tab bar).
  */
 import React from "react";
-import { Tabs } from "expo-router";
-import { Text, StyleSheet, Platform } from "react-native";
+import { Stack } from "expo-router";
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { colors, bgColor, textColor } from "../../src/theme";
-
-function TabIcon({ emoji }: { emoji: string; color: string; focused?: boolean }) {
-  return (
-    <Text style={{ fontSize: 22 }}>{emoji}</Text>
-  );
-}
 
 export default function AppLayout() {
   const { resolvedTheme } = useTheme();
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
-  const tcMuted = textColor(resolvedTheme, "muted");
-  const tabBg = bgColor(resolvedTheme, "secondary");
 
   return (
-    <Tabs
+    <Stack
       screenOptions={{
-        headerShown: true,
-        headerStyle: {
-          backgroundColor: bg,
-        },
-        headerTintColor: tc,
-        headerTitleStyle: {
-          fontWeight: "600",
-        },
-        tabBarStyle: {
-          backgroundColor: tabBg,
-          borderTopColor: resolvedTheme === "dark" ? colors.dark.borderDefault : colors.light.borderDefault,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          paddingTop: 4,
-          height: Platform.OS === "ios" ? 88 : 64,
-        },
-        tabBarActiveTintColor: colors.brand[700],
-        tabBarInactiveTintColor: tcMuted,
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "500",
-        },
+        headerShown: false,
       }}
     >
-      <Tabs.Screen
-        name="index"
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen
+        name="cart"
         options={{
-          title: "Home",
-          tabBarLabel: "Home",
-          tabBarIcon: ({ color }) => (
-            <TabIcon emoji="🏠" color={color} />
-          ),
+          headerShown: true,
+          title: "Cart",
+          headerStyle: { backgroundColor: bg },
+          headerTintColor: tc,
+          headerTitleStyle: { fontWeight: "600" },
+          presentation: "card",
         }}
       />
-      <Tabs.Screen
-        name="orders"
+      <Stack.Screen
+        name="item/[id]"
         options={{
-          title: "Orders",
-          tabBarLabel: "Orders",
-          tabBarIcon: ({ color }) => (
-            <TabIcon emoji="📋" color={color} />
-          ),
+          headerShown: true,
+          title: "Item Details",
+          headerStyle: { backgroundColor: bg },
+          headerTintColor: tc,
+          headerTitleStyle: { fontWeight: "600" },
+          presentation: "card",
         }}
       />
-      <Tabs.Screen
-        name="cafeterias"
-        options={{
-          title: "Cafeterias",
-          tabBarLabel: "Cafeterias",
-          tabBarIcon: ({ color }) => (
-            <TabIcon emoji="🍽️" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarLabel: "Profile",
-          tabBarIcon: ({ color }) => (
-            <TabIcon emoji="👤" color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+    </Stack>
   );
 }

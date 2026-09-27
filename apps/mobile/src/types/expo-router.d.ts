@@ -28,6 +28,9 @@ declare module "expo-router" {
     headerShown?: boolean;
     title?: string;
     presentation?: "card" | "modal" | "transparentModal";
+    headerStyle?: Record<string, unknown>;
+    headerTintColor?: string;
+    headerTitleStyle?: Record<string, unknown>;
   }
 
   interface TabScreenOptions {

@@ -12,10 +12,10 @@ import {
   RefreshControl,
 } from "react-native";
 
-import { useTheme } from "../../src/contexts/ThemeContext";
-import { Card, StatusChip, Spinner, EmptyState } from "../../src/components/ui";
-import { textColor, bgColor, borderColor, colors } from "../../src/theme";
-import { getOrders, type Order } from "../../src/services/data";
+import { useTheme } from "../../../src/contexts/ThemeContext";
+import { Card, StatusChip, Spinner, EmptyState } from "../../../src/components/ui";
+import { textColor, bgColor, borderColor, colors } from "../../../src/theme";
+import { getOrders, type Order } from "../../../src/services/data";
 
 export default function OrdersScreen() {
   const { resolvedTheme } = useTheme();

@@ -12,6 +12,7 @@ import { StatusBar } from "expo-status-bar";
 
 import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
 import { ThemeProvider, useTheme } from "../src/contexts/ThemeContext";
+import { CartProvider } from "../src/contexts/CartContext";
 
 function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -39,7 +40,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <RootNavigator />
+        <CartProvider>
+          <RootNavigator />
+        </CartProvider>
       </AuthProvider>
     </ThemeProvider>
   );

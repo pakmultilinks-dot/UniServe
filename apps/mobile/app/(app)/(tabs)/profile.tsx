@@ -6,11 +6,11 @@
 import React from "react";
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from "react-native";
 
-import { useAuth } from "../../src/contexts/AuthContext";
-import { useTheme } from "../../src/contexts/ThemeContext";
-import { LguSeal } from "../../src/components/LguSeal";
-import { Card } from "../../src/components/ui";
-import { textColor, bgColor, borderColor, colors } from "../../src/theme";
+import { useAuth } from "../../../src/contexts/AuthContext";
+import { useTheme } from "../../../src/contexts/ThemeContext";
+import { LguSeal } from "../../../src/components/LguSeal";
+import { Card } from "../../../src/components/ui";
+import { textColor, bgColor, borderColor, colors } from "../../../src/theme";
 
 export default function ProfileScreen() {
   const { user, logout, logoutAll } = useAuth();
