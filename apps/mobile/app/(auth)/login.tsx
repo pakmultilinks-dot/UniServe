@@ -1,131 +1,199 @@
 /**
- * UniServe — Login Screen Placeholder
+ * UniServe — Login Screen
  *
- * Basic login form. Full implementation in future phases.
+ * LGU-branded login with proper theming, password visibility toggle,
+ * and error/success states.
  */
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { useRouter } from "expo-router";
 
 import { useAuth } from "../../src/contexts/AuthContext";
+import { useTheme } from "../../src/contexts/ThemeContext";
+import { LguSeal } from "../../src/components/LguSeal";
+import { Button } from "../../src/components/ui";
+import { PasswordInput, LguInput } from "../../src/components/ui/Input";
+import { colors, textColor, bgColor, borderColor } from "../../src/theme";
 
 export default function LoginScreen() {
   const router = useRouter();
   const { login } = useAuth();
+  const { resolvedTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const tc = (variant: "primary" | "secondary" | "muted") => textColor(resolvedTheme, variant);
+  const bg = (variant: "primary" | "secondary" | "tertiary") => bgColor(resolvedTheme, variant);
+  const bc = (variant: "default" | "subtle") => borderColor(resolvedTheme, variant);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
+    if (!email.trim() || !password) {
+      setError("Please enter both email and password");
       return;
     }
+    setError("");
     setIsLoading(true);
     try {
-      await login(email, password);
-      // Auth state change will navigate to (app) automatically
+      await login(email.trim(), password);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Login failed";
-      Alert.alert("Login Failed", message);
+      setError(message);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>UniServe</Text>
-      <Text style={styles.subtitle}>University Cafeteria Platform</Text>
+    <KeyboardAvoidingView
+      style={[styles.screen, { backgroundColor: bg("secondary") }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.container}>
+          {/* LGU Seal */}
+          <LguSeal size="lg" />
 
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder="University Email"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        <TouchableOpacity
-          style={[styles.button, isLoading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={isLoading}
-        >
-          <Text style={styles.buttonText}>
-            {isLoading ? "Signing in…" : "Sign In"}
+          {/* Brand */}
+          <Text style={[styles.title, { color: tc("primary") }]}>UniServe</Text>
+          <Text style={[styles.subtitle, { color: tc("muted") }]}>
+            University Cafeteria Platform
           </Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.push("/register")}>
-          <Text style={styles.link}>
-            Don&apos;t have an account? Register
+          {/* Form Card */}
+          <View style={[styles.card, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>⚠ {error}</Text>
+              </View>
+            ) : null}
+
+            <LguInput
+              label="University Email"
+              placeholder="you@lgu.edu.pk"
+              value={email}
+              onChangeText={(text: string) => { setEmail(text); setError(""); }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+            />
+
+            <PasswordInput
+              label="Password"
+              placeholder="Enter your password"
+              value={password}
+              onChangeText={(text: string) => { setPassword(text); setError(""); }}
+              autoComplete="password"
+            />
+
+            <Button
+              title={isLoading ? "Signing in..." : "Sign In"}
+              onPress={handleLogin}
+              loading={isLoading}
+              disabled={isLoading}
+              fullWidth
+            />
+
+            {/* Links */}
+            <View style={styles.links}>
+              <TouchableOpacity onPress={() => router.push("/login")}>
+                <Text style={[styles.link, { color: colors.brand[700] }]}>Forgot password?</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Register link */}
+          <View style={styles.registerRow}>
+            <Text style={{ color: tc("secondary"), fontSize: 14 }}>Don&apos;t have an account? </Text>
+            <TouchableOpacity onPress={() => router.push("/register")}>
+              <Text style={[styles.registerLink, { color: colors.brand[700] }]}>Register</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Footer */}
+          <Text style={[styles.footer, { color: tc("muted") }]}>
+            Larino Technological University
           </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
-    alignItems: "center",
     padding: 24,
-    backgroundColor: "#f9fafb",
+  },
+  container: {
+    alignItems: "center",
   },
   title: {
     fontSize: 28,
-    fontWeight: "bold",
-    color: "#111827",
+    fontWeight: "700",
+    marginTop: 16,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 14,
-    color: "#6b7280",
     marginTop: 4,
     marginBottom: 32,
   },
-  form: {
+  card: {
     width: "100%",
-    maxWidth: 360,
-  },
-  input: {
-    backgroundColor: "#fff",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    padding: 24,
+  },
+  errorBox: {
+    backgroundColor: "#fef2f2",
     borderRadius: 8,
     padding: 12,
-    fontSize: 16,
-    marginBottom: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#fecaca",
   },
-  button: {
-    backgroundColor: "#2563eb",
-    borderRadius: 8,
-    padding: 14,
+  errorText: {
+    color: "#991b1b",
+    fontSize: 14,
+  },
+  links: {
+    marginTop: 16,
     alignItems: "center",
-    marginTop: 4,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
   },
   link: {
-    color: "#2563eb",
-    textAlign: "center",
-    marginTop: 16,
     fontSize: 14,
+    fontWeight: "500",
+  },
+  registerRow: {
+    flexDirection: "row",
+    marginTop: 24,
+    alignItems: "center",
+  },
+  registerLink: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  footer: {
+    fontSize: 12,
+    marginTop: 32,
+    textAlign: "center",
   },
 });

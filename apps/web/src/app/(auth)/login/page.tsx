@@ -1,13 +1,17 @@
 /**
  * UniServe — Login Page
+ * LGU-branded authentication with institutional identity.
  */
 
 "use client";
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { LguBrand, LguSeal } from "@/components/LguBrand";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,7 +22,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect if already authenticated
   if (isAuthenticated) {
     router.push("/dashboard");
     return null;
@@ -42,76 +45,97 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold text-center mb-6">UniServe Login</h1>
+    <div className="w-full max-w-md animate-fade-in">
+      {/* Brand header */}
+      <div className="text-center mb-8">
+        <div className="flex justify-center mb-4">
+          <LguSeal size={56} />
+        </div>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
+          UniServe
+        </h1>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Lahore Garrison University
+        </p>
+      </div>
+
+      {/* Login card */}
+      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl shadow-card p-6 sm:p-8">
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+            Sign in to your account
+          </h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Use your LGU university credentials
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Error alert */}
           {error && (
-            <div className="p-3 bg-red-50 text-red-700 text-sm rounded">
-              {error}
+            <div
+              className="flex items-start gap-2.5 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400"
+              role="alert"
+            >
+              <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <span>{error}</span>
             </div>
           )}
 
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700 mb-1"
+          <Input
+            label="University Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+            placeholder="your.name@lgu.edu.pk"
+          />
+
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+            placeholder="Enter your password"
+            showPasswordToggle
+          />
+
+          <div className="flex items-center justify-end">
+            <Link
+              href="/forgot-password"
+              className="text-sm text-brand-700 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 font-medium transition-colors"
             >
-              University Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="your.name@lgu.edu.pk"
-            />
+              Forgot password?
+            </Link>
           </div>
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter your password"
-            />
-          </div>
-
-          <button
+          <Button
             type="submit"
-            disabled={isLoading}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="primary"
+            size="lg"
+            loading={isLoading}
+            className="w-full"
           >
             {isLoading ? "Signing in..." : "Sign In"}
-          </button>
+          </Button>
         </form>
-
-        <div className="mt-4 text-center text-sm text-gray-600 space-y-2">
-          <a href="/forgot-password" className="text-blue-600 hover:underline">
-            Forgot password?
-          </a>
-          <div>
-            Don&apos;t have an account?{" "}
-            <a href="/register" className="text-blue-600 hover:underline">
-              Create one
-            </a>
-          </div>
-        </div>
       </div>
+
+      {/* Registration link */}
+      <p className="mt-6 text-center text-sm text-[var(--text-muted)]">
+        Don&apos;t have an account?{" "}
+        <Link
+          href="/register"
+          className="font-semibold text-brand-700 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-colors"
+        >
+          Register here
+        </Link>
+      </p>
     </div>
   );
 }

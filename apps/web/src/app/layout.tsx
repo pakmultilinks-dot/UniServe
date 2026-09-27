@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-
 import { AuthProvider } from "@/contexts/AuthContext";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "UniServe — University Cafeteria Platform",
-  description: "Order food from your university cafeteria",
+  title: "UniServe — LGU Cafeteria Platform",
+  description: "Order food from your Lahore Garrison University cafeteria",
 };
 
 /**
@@ -19,8 +18,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="bg-gray-50 text-gray-900 antialiased">
+    <html lang="en" className="scroll-smooth" suppressHydrationWarning>
+      <head>
+        {/* Inline script to apply theme before paint — prevents flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("uniserve_theme");if(t==="dark"||(!t&&window.matchMedia("(prefers-color-scheme:dark)").matches)){document.documentElement.classList.add("dark")}else{document.documentElement.classList.remove("dark")}}catch(e){}})();`,
+          }}
+        />
+      </head>
+      <body className="bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans antialiased min-h-screen">
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

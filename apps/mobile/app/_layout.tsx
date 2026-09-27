@@ -1,38 +1,46 @@
-import { Stack } from "expo-router";
-
-import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
-
 /**
  * UniServe — Mobile Application Root Layout
  *
- * Wraps the app with AuthProvider for authentication state management.
+ * Wraps the app with AuthProvider and ThemeProvider.
  * Routes are organized as:
  *   - (auth): unauthenticated screens (login, register, verify-email)
  *   - (app):  authenticated screens (main app content)
  */
 
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+
+import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
+import { ThemeProvider, useTheme } from "../src/contexts/ThemeContext";
+
 function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
+  const { resolvedTheme } = useTheme();
 
   if (isLoading) {
-    return null; // Or a splash screen component
+    return null;
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      {isAuthenticated ? (
-        <Stack.Screen name="(app)" />
-      ) : (
-        <Stack.Screen name="(auth)" />
-      )}
-    </Stack>
+    <>
+      <StatusBar style={resolvedTheme === "dark" ? "light" : "dark"} />
+      <Stack screenOptions={{ headerShown: false }}>
+        {isAuthenticated ? (
+          <Stack.Screen name="(app)" />
+        ) : (
+          <Stack.Screen name="(auth)" />
+        )}
+      </Stack>
+    </>
   );
 }
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootNavigator />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

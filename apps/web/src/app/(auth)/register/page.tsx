@@ -1,13 +1,17 @@
 /**
  * UniServe — Register Page
+ * LGU-branded registration for students and faculty.
  */
 
 "use client";
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { LguSeal } from "@/components/LguBrand";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -34,19 +38,16 @@ export default function RegisterPage() {
     setError(null);
     setSuccess(null);
 
-    // Client-side validation
     if (form.password !== form.confirmPassword) {
       setError("Passwords do not match");
       return;
     }
-
     if (form.password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
     }
 
     setIsLoading(true);
-
     try {
       const result = await register({
         firstName: form.firstName,
@@ -56,9 +57,8 @@ export default function RegisterPage() {
         password: form.password,
       });
       setSuccess(
-        `Registration successful! A verification code has been sent to ${result.email}. Please verify your email to activate your account.`
+        `Account created! A verification code has been sent to ${result.email}. Please verify your email to activate your account.`
       );
-      // Redirect to OTP verification after 2 seconds
       setTimeout(() => {
         router.push(`/verify-email?userId=${result.userId}`);
       }, 2000);
@@ -74,153 +74,142 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
-      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold text-center mb-6">
+    <div className="w-full max-w-md animate-fade-in">
+      {/* Brand header */}
+      <div className="text-center mb-8">
+        <div className="flex justify-center mb-4">
+          <LguSeal size={56} />
+        </div>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
           Create Account
         </h1>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Join Lahore Garrison University&apos;s cafeteria platform
+        </p>
+      </div>
 
+      {/* Register card */}
+      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl shadow-card p-6 sm:p-8">
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Error alert */}
           {error && (
-            <div className="p-3 bg-red-50 text-red-700 text-sm rounded">
-              {error}
+            <div
+              className="flex items-start gap-2.5 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400"
+              role="alert"
+            >
+              <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <span>{error}</span>
             </div>
           )}
+
+          {/* Success alert */}
           {success && (
-            <div className="p-3 bg-green-50 text-green-700 text-sm rounded">
-              {success}
+            <div
+              className="flex items-start gap-2.5 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-400"
+              role="status"
+            >
+              <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{success}</span>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label
-                htmlFor="firstName"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                First Name
-              </label>
-              <input
-                id="firstName"
-                name="firstName"
-                type="text"
-                value={form.firstName}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="lastName"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Last Name
-              </label>
-              <input
-                id="lastName"
-                name="lastName"
-                type="text"
-                value={form.lastName}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="universityId"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              University ID
-            </label>
-            <input
-              id="universityId"
-              name="universityId"
+          {/* Name fields */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="First Name"
+              name="firstName"
               type="text"
-              value={form.universityId}
+              value={form.firstName}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g., FA22-BSE-001"
+              autoComplete="given-name"
+            />
+            <Input
+              label="Last Name"
+              name="lastName"
+              type="text"
+              value={form.lastName}
+              onChange={handleChange}
+              required
+              autoComplete="family-name"
             />
           </div>
 
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              University Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              value={form.email}
-              onChange={handleChange}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="your.name@lgu.edu.pk"
-            />
-          </div>
+          <Input
+            label="University ID"
+            name="universityId"
+            type="text"
+            value={form.universityId}
+            onChange={handleChange}
+            required
+            placeholder="e.g., FA22-BSE-001"
+          />
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              value={form.password}
-              onChange={handleChange}
-              required
-              minLength={8}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="At least 8 characters"
-            />
-          </div>
+          <Input
+            label="University Email"
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            required
+            autoComplete="email"
+            placeholder="your.name@lgu.edu.pk"
+          />
 
-          <div>
-            <label
-              htmlFor="confirmPassword"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Confirm Password
-            </label>
-            <input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              value={form.confirmPassword}
-              onChange={handleChange}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <Input
+            label="Password"
+            name="password"
+            type="password"
+            value={form.password}
+            onChange={handleChange}
+            required
+            minLength={8}
+            placeholder="Minimum 8 characters"
+            showPasswordToggle
+          />
 
-          <button
+          <Input
+            label="Confirm Password"
+            name="confirmPassword"
+            type="password"
+            value={form.confirmPassword}
+            onChange={handleChange}
+            required
+            placeholder="Re-enter your password"
+            showPasswordToggle
+          />
+
+          <p className="text-xs text-[var(--text-muted)]">
+            This platform is for authorized LGU students and faculty only.
+            By registering, you agree to the university&apos;s acceptable use policy.
+          </p>
+
+          <Button
             type="submit"
-            disabled={isLoading}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="primary"
+            size="lg"
+            loading={isLoading}
+            className="w-full"
           >
             {isLoading ? "Creating Account..." : "Create Account"}
-          </button>
+          </Button>
         </form>
-
-        <div className="mt-4 text-center text-sm text-gray-600">
-          Already have an account?{" "}
-          <a href="/login" className="text-blue-600 hover:underline">
-            Sign in
-          </a>
-        </div>
       </div>
+
+      {/* Login link */}
+      <p className="mt-6 text-center text-sm text-[var(--text-muted)]">
+        Already have an account?{" "}
+        <Link
+          href="/login"
+          className="font-semibold text-brand-700 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-colors"
+        >
+          Sign in
+        </Link>
+      </p>
     </div>
   );
 }

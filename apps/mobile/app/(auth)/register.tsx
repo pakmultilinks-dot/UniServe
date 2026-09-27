@@ -1,162 +1,249 @@
 /**
- * UniServe — Register Screen Placeholder
+ * UniServe — Register Screen
  *
- * Basic registration form. Full implementation in future phases.
+ * LGU-branded registration with two-column name layout,
+ * university ID field, and proper theming.
  */
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { useRouter } from "expo-router";
 
 import { useAuth } from "../../src/contexts/AuthContext";
+import { useTheme } from "../../src/contexts/ThemeContext";
+import { LguSeal } from "../../src/components/LguSeal";
+import { Button } from "../../src/components/ui";
+import { PasswordInput, LguInput } from "../../src/components/ui/Input";
+import { colors, textColor, bgColor, borderColor } from "../../src/theme";
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { register } = useAuth();
+  const { resolvedTheme } = useTheme();
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [universityId, setUniversityId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const tc = (variant: "primary" | "secondary" | "muted") => textColor(resolvedTheme, variant);
+  const bg = (variant: "primary" | "secondary" | "tertiary") => bgColor(resolvedTheme, variant);
+  const bc = (variant: "default" | "subtle") => borderColor(resolvedTheme, variant);
 
   const handleRegister = async () => {
-    if (!firstName || !lastName || !email || !password) {
-      Alert.alert("Error", "Please fill in all fields");
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password) {
+      setError("Please fill in all required fields");
       return;
     }
     if (password.length < 8) {
-      Alert.alert("Error", "Password must be at least 8 characters");
+      setError("Password must be at least 8 characters");
       return;
     }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    setError("");
     setIsLoading(true);
     try {
-      await register({
-        firstName,
-        lastName,
-        universityId: email.split("@")[0],
-        email,
+      const result = await register({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        universityId: universityId.trim() || email.split("@")[0],
+        email: email.trim(),
         password,
       });
-      Alert.alert(
-        "Registration Successful",
-        "Please check your email for a verification code.",
-      );
+      // Navigate to login with success message
       router.replace("/login");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Registration failed";
-      Alert.alert("Registration Failed", message);
+      setError(message);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
+    <KeyboardAvoidingView
+      style={[styles.screen, { backgroundColor: bg("secondary") }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.container}>
+          {/* LGU Seal */}
+          <LguSeal size="md" />
 
-      <View style={styles.form}>
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.halfInput]}
-            placeholder="First Name"
-            value={firstName}
-            onChangeText={setFirstName}
-          />
-          <TextInput
-            style={[styles.input, styles.halfInput]}
-            placeholder="Last Name"
-            value={lastName}
-            onChangeText={setLastName}
-          />
+          {/* Brand */}
+          <Text style={[styles.title, { color: tc("primary") }]}>Create Account</Text>
+          <Text style={[styles.subtitle, { color: tc("muted") }]}>
+            University-only registration
+          </Text>
+
+          {/* Form Card */}
+          <View style={[styles.card, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>⚠ {error}</Text>
+              </View>
+            ) : null}
+
+            {/* Name Row */}
+            <View style={styles.row}>
+              <View style={styles.halfField}>
+                <LguInput
+                  label="First Name"
+                  placeholder="First name"
+                  value={firstName}
+                  onChangeText={(text: string) => { setFirstName(text); setError(""); }}
+                  autoCapitalize="words"
+                />
+              </View>
+              <View style={styles.halfField}>
+                <LguInput
+                  label="Last Name"
+                  placeholder="Last name"
+                  value={lastName}
+                  onChangeText={(text: string) => { setLastName(text); setError(""); }}
+                  autoCapitalize="words"
+                />
+              </View>
+            </View>
+
+            <LguInput
+              label="University ID"
+              placeholder="e.g., 2024-00001"
+              value={universityId}
+              onChangeText={setUniversityId}
+              autoCapitalize="none"
+            />
+
+            <LguInput
+              label="University Email"
+              placeholder="you@lgu.edu.pk"
+              value={email}
+              onChangeText={(text: string) => { setEmail(text); setError(""); }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+            />
+
+            <PasswordInput
+              label="Password"
+              placeholder="Min 8 characters"
+              value={password}
+              onChangeText={(text: string) => { setPassword(text); setError(""); }}
+              autoComplete="new-password"
+            />
+
+            <PasswordInput
+              label="Confirm Password"
+              placeholder="Re-enter password"
+              value={confirmPassword}
+              onChangeText={(text: string) => { setConfirmPassword(text); setError(""); }}
+              autoComplete="new-password"
+            />
+
+            <Button
+              title={isLoading ? "Creating Account..." : "Register"}
+              onPress={handleRegister}
+              loading={isLoading}
+              disabled={isLoading}
+              fullWidth
+            />
+          </View>
+
+          {/* Login link */}
+          <View style={styles.loginRow}>
+            <Text style={{ color: tc("secondary"), fontSize: 14 }}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => router.replace("/login")}>
+              <Text style={[styles.loginLink, { color: colors.brand[700] }]}>Sign in</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Footer */}
+          <Text style={[styles.footer, { color: tc("muted") }]}>
+            Larino Technological University
+          </Text>
         </View>
-        <TextInput
-          style={styles.input}
-          placeholder="University Email"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password (min 8 chars)"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        <TouchableOpacity
-          style={[styles.button, isLoading && styles.buttonDisabled]}
-          onPress={handleRegister}
-          disabled={isLoading}
-        >
-          <Text style={styles.buttonText}>
-            {isLoading ? "Creating Account…" : "Register"}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => router.replace("/login")}>
-          <Text style={styles.link}>
-            Already have an account? Sign in
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
-    alignItems: "center",
     padding: 24,
-    backgroundColor: "#f9fafb",
+  },
+  container: {
+    alignItems: "center",
   },
   title: {
     fontSize: 24,
-    fontWeight: "bold",
-    color: "#111827",
+    fontWeight: "700",
+    marginTop: 12,
+  },
+  subtitle: {
+    fontSize: 14,
+    marginTop: 4,
     marginBottom: 24,
   },
-  form: {
+  card: {
     width: "100%",
-    maxWidth: 360,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 24,
   },
   row: {
     flexDirection: "row",
     gap: 8,
   },
-  input: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  halfInput: {
+  halfField: {
     flex: 1,
   },
-  button: {
-    backgroundColor: "#2563eb",
+  errorBox: {
+    backgroundColor: "#fef2f2",
     borderRadius: 8,
-    padding: 14,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+  errorText: {
+    color: "#991b1b",
+    fontSize: 14,
+  },
+  loginRow: {
+    flexDirection: "row",
+    marginTop: 20,
     alignItems: "center",
-    marginTop: 4,
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
+  loginLink: {
+    fontSize: 14,
     fontWeight: "600",
   },
-  link: {
-    color: "#2563eb",
+  footer: {
+    fontSize: 12,
+    marginTop: 24,
     textAlign: "center",
-    marginTop: 16,
-    fontSize: 14,
   },
 });

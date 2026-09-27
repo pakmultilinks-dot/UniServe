@@ -20,6 +20,7 @@ import {
   type OTPVerifyRequest,
   type OTPResendRequest,
   type PasswordResetRequest,
+  type PasswordResetConfirm,
   type SessionListResponse,
 } from "@uniserve/shared-types";
 
@@ -156,6 +157,15 @@ export async function resendOtp(
   return apiClient.post<OTPResponse>("/auth/otp/resend", data);
 }
 
+export async function confirmPasswordReset(
+  data: PasswordResetConfirm,
+): Promise<{ message: string }> {
+  return apiClient.post<{ message: string }>(
+    "/auth/password/reset/confirm",
+    data,
+  );
+}
+
 export async function refreshTokens(): Promise<TokenPair> {
   const refreshToken = webTokenProvider.getRefreshToken();
   if (!refreshToken) throw new Error("No refresh token available");
@@ -175,3 +185,51 @@ export async function getSessions(): Promise<SessionListResponse> {
 
 // Re-export shared types for convenience
 export { ApiClientError } from "@uniserve/shared-types";
+
+// ---- Dashboard Data API Functions ----
+
+export async function getCafeterias(): Promise<
+  import("@uniserve/shared-types").Cafeteria[]
+> {
+  const response = await apiClient.get<
+    { cafeterias: import("@uniserve/shared-types").Cafeteria[] }
+  >("/cafeterias");
+  return response.cafeterias ?? [];
+}
+
+export async function getOrders(params?: {
+  status?: string;
+  limit?: number;
+}): Promise<import("@uniserve/shared-types").Order[]> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.limit) query.set("limit", String(params.limit));
+  const qs = query.toString();
+  const response = await apiClient.get<{
+    orders: import("@uniserve/shared-types").Order[];
+    total: number;
+  }>(`/orders${qs ? `?${qs}` : ""}`);
+  return response.orders ?? [];
+}
+
+export async function getNotifications(params?: {
+  is_read?: boolean;
+  limit?: number;
+}): Promise<import("@uniserve/shared-types").NotificationListResponse> {
+  const query = new URLSearchParams();
+  if (params?.is_read !== undefined)
+    query.set("is_read", String(params.is_read));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const qs = query.toString();
+  return apiClient.get<import("@uniserve/shared-types").NotificationListResponse>(
+    `/notifications${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function getUnreadNotificationCount(): Promise<
+  import("@uniserve/shared-types").UnreadCountResponse
+> {
+  return apiClient.get<import("@uniserve/shared-types").UnreadCountResponse>(
+    "/notifications/unread-count",
+  );
+}

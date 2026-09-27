@@ -1,8 +1,80 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./src/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        brand: {
+          50:  "#f0fdf4",
+          100: "#dcfce7",
+          200: "#bbf7d0",
+          300: "#86efac",
+          400: "#4ade80",
+          500: "#16a34a",
+          600: "#0d7a2e",
+          700: "#005400",
+          800: "#004000",
+          900: "#002d00",
+          950: "#001a00",
+          DEFAULT: "#0d7a2e",
+        },
+        gold: {
+          50:  "#fffbeb",
+          100: "#fef3c7",
+          200: "#fde68a",
+          300: "#fcd34d",
+          400: "#fbbf24",
+          500: "#ffc000",
+          600: "#d97706",
+          700: "#b45309",
+          800: "#92400e",
+          900: "#78350f",
+          DEFAULT: "#ffc000",
+        },
+        lgu: {
+          green:     "#005400",
+          greenDark: "#003d00",
+          greenLight:"#e8f5e9",
+          gold:      "#ffc000",
+          goldDark:  "#d4a300",
+          navy:      "#212934",
+          charcoal:  "#4a4e57",
+          gray:      "#6b7280",
+          muted:     "#9ca3af",
+          surface:   "#f2f3f5",
+          offWhite:  "#f9f9fb",
+          border:    "#e2e4e8",
+        },
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        display: ["Inter", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "Fira Code", "monospace"],
+      },
+      fontSize: {
+        "2xs": ["0.625rem", { lineHeight: "0.875rem" }],
+      },
+      boxShadow: {
+        "card":      "0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06)",
+        "card-hover":"0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06)",
+        "sidebar":   "1px 0 3px 0 rgba(0, 0, 0, 0.05)",
+      },
+      borderRadius: {
+        "xl":  "0.75rem",
+        "2xl": "1rem",
+      },
+      animation: {
+        "fade-in":    "fadeIn 0.2s ease-out",
+        "slide-in":   "slideIn 0.25s ease-out",
+        "pulse-soft": "pulseSoft 2s ease-in-out infinite",
+      },
+      keyframes: {
+        fadeIn:    { "0%": { opacity: "0" }, "100%": { opacity: "1" } },
+        slideIn:   { "0%": { opacity: "0", transform: "translateY(4px)" }, "100%": { opacity: "1", transform: "translateY(0)" } },
+        pulseSoft: { "0%, 100%": { opacity: "1" }, "50%": { opacity: "0.7" } },
+      },
+    },
   },
   plugins: [],
 };
