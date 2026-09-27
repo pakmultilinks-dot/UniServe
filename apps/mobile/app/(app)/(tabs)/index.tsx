@@ -1,50 +1,66 @@
 /**
- * UniServe — Home Screen (Student Ordering Experience)
+ * UniServe — Home Screen (Food-First Browsing Experience)
  *
- * The primary customer experience: cafeteria selector, category chips,
- * search, and menu item browsing with add-to-cart.
+ * Design spec zones:
+ *   Zone 1: Status bar (system)
+ *   Zone 2: Header — greeting + notification + cafeteria badge
+ *   Zone 3: Search bar
+ *   Zone 4: Category chips (horizontal scroll)
+ *   Zone 5: Food grid (2-column, vertical scroll)
+ *   Zone 6: Floating cart bar (absolute, bottom: 70)
+ *   — Bottom Tab Bar (below cart bar)
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
   ScrollView,
+  FlatList,
   StyleSheet,
   RefreshControl,
-  TouchableOpacity,
-  TextInput,
+  Pressable,
+  Animated,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
-import { Spinner, EmptyState } from "../../../src/components/ui";
-import { textColor, bgColor, borderColor, colors } from "../../../src/theme";
+import { Spinner } from "../../../src/components/ui";
+import { FoodCard } from "../../../src/components/ui";
+import { SearchBar } from "../../../src/components/ui";
+import { CategoryChips, type CategoryKey } from "../../../src/components/ui";
+import { CafeteriaBadge } from "../../../src/components/ui";
+import { CartBar } from "../../../src/components/ui";
+import { Toast } from "../../../src/components/ui";
+import { SkeletonCard } from "../../../src/components/ui";
+import { EmptyState } from "../../../src/components/ui";
+import { textColor, bgColor, borderColor, brandGreen, functionalColor, colors } from "../../../src/theme";
 import { getMenuItems, getTodaysMenu, type MenuItemsParams } from "../../../src/services/data";
 import type { MenuItem, MenuCategory } from "@uniserve/shared-types";
 
 // ── Helpers ──
 
-/** Format paisa (integer) to PKR display string. E.g. 15000 → "PKR 150" */
 function formatPrice(paisa: number): string {
-  const pkr = paisa / 100;
-  return pkr % 1 === 0 ? `PKR ${pkr}` : `PKR ${pkr.toFixed(2)}`;
+  return `PKR ${Math.round(paisa / 100)}`;
 }
 
-/** Human-readable labels for menu categories */
-const CATEGORY_LABELS: Record<MenuCategory, string> = {
-  breakfast: "🍳 Breakfast",
-  main_course: "🍛 Main Course",
-  side_dish: "🥗 Side Dish",
-  dessert: "🍰 Dessert",
-  beverage: "☕ Beverage",
-  snack: "🍿 Snack",
-  salad: "🥬 Salad",
-  soup: "🍜 Soup",
+/** Map MenuCategory to CategoryKey for the chips */
+const CATEGORY_MAP: Record<MenuCategory, CategoryKey> = {
+  breakfast: "breakfast",
+  main_course: "main_course",
+  side_dish: "side_dish",
+  dessert: "dessert",
+  beverage: "beverage",
+  snack: "snack",
+  salad: "salad",
+  soup: "soup",
 };
 
-const ALL_CATEGORIES: MenuCategory[] = [
+const ALL_CATEGORIES: CategoryKey[] = [
+  "all",
   "breakfast",
   "main_course",
   "side_dish",
@@ -55,117 +71,12 @@ const ALL_CATEGORIES: MenuCategory[] = [
   "soup",
 ];
 
-// ── Menu Item Card ──
+// ── Toast State ──
 
-interface MenuItemCardProps {
-  item: MenuItem;
-  onAddToCart: (itemId: string) => void;
-  onPress: (item: MenuItem) => void;
-  theme: "light" | "dark";
-}
-
-function MenuItemCard({ item, onAddToCart, onPress, theme }: MenuItemCardProps) {
-  const tc = (v: "primary" | "secondary" | "muted") => textColor(theme, v);
-  const bg = (v: "primary" | "secondary") => bgColor(theme, v);
-  const bc = (v: "default" | "subtle") => borderColor(theme, v);
-
-  return (
-    <TouchableOpacity
-      style={[styles.itemCard, { backgroundColor: bg("primary"), borderColor: bc("default") }]}
-      onPress={() => onPress(item)}
-      activeOpacity={0.7}
-      disabled={!item.is_available}
-    >
-      {/* Item image placeholder (emoji based on category) */}
-      <View style={[styles.itemImagePlaceholder, { backgroundColor: bg("secondary") }]}>
-        <Text style={styles.itemEmoji}>
-          {item.category === "main_course"
-            ? "🍛"
-            : item.category === "beverage"
-              ? "☕"
-              : item.category === "dessert"
-                ? "🍰"
-                : item.category === "snack"
-                  ? "🍿"
-                  : item.category === "breakfast"
-                    ? "🍳"
-                    : item.category === "salad"
-                      ? "🥬"
-                      : item.category === "soup"
-                        ? "🍜"
-                        : "🍽️"}
-        </Text>
-      </View>
-
-      {/* Item info */}
-      <View style={styles.itemInfo}>
-        <Text style={[styles.itemName, { color: tc("primary") }]} numberOfLines={1}>
-          {item.name}
-        </Text>
-        {item.description ? (
-          <Text style={[styles.itemDesc, { color: tc("muted") }]} numberOfLines={2}>
-            {item.description}
-          </Text>
-        ) : null}
-        <View style={styles.itemBottomRow}>
-          <Text style={[styles.itemPrice, { color: colors.brand[700] }]}>
-            {formatPrice(item.price)}
-          </Text>
-          {item.is_available ? (
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: colors.brand[700] }]}
-              onPress={() => onAddToCart(item.id)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.addButtonText}>+</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={[styles.addButton, { backgroundColor: colors.neutral[300] }]}>
-              <Text style={[styles.addButtonText, { color: colors.neutral[500] }]}>—</Text>
-            </View>
-          )}
-        </View>
-        {!item.is_available && (
-          <Text style={[styles.outOfStockLabel, { color: colors.error }]}>Out of stock</Text>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ── Cart Bottom Bar ──
-
-function CartBar({
-  itemCount,
-  total,
-  onPress,
-}: {
-  itemCount: number;
-  total: number;
-  onPress: () => void;
-}) {
-  if (itemCount === 0) return null;
-
-  return (
-    <TouchableOpacity
-      style={[styles.cartBar, { backgroundColor: colors.brand[700] }]}
-      onPress={onPress}
-      activeOpacity={0.85}
-    >
-      <View style={styles.cartBarLeft}>
-        <View style={styles.cartBadge}>
-          <Text style={styles.cartBadgeText}>{itemCount}</Text>
-        </View>
-        <Text style={styles.cartBarLabel}>
-          {itemCount === 1 ? "1 item" : `${itemCount} items`}
-        </Text>
-      </View>
-      <View style={styles.cartBarRight}>
-        <Text style={styles.cartBarTotal}>{formatPrice(total)}</Text>
-        <Text style={styles.cartBarArrow}>→</Text>
-      </View>
-    </TouchableOpacity>
-  );
+interface ToastState {
+  visible: boolean;
+  message: string;
+  type: "success" | "error" | "info";
 }
 
 // ── Main Home Screen ──
@@ -182,7 +93,7 @@ export default function HomeScreen() {
     addToCart: cartAddToCart,
   } = useCart();
 
-  const theme = resolvedTheme as "light" | "dark";
+  const brand = brandGreen(resolvedTheme);
   const tc = (v: "primary" | "secondary" | "muted") => textColor(resolvedTheme, v);
   const bg = (v: "primary" | "secondary" | "tertiary") => bgColor(resolvedTheme, v);
   const bc = (v: "default" | "subtle") => borderColor(resolvedTheme, v);
@@ -192,11 +103,14 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<MenuCategory | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<CategoryKey>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [hasPublishedMenu, setHasPublishedMenu] = useState<boolean | null>(null);
+  const [toast, setToast] = useState<ToastState>({ visible: false, message: "", type: "success" });
 
-  // Check if cafeteria is open
+  // Track items in cart for quantity display
+  const [cartItemMap, setCartItemMap] = useState<Record<string, number>>({});
+
   const isCafeteriaOpen = selectedCafeteria?.operational_status === "open";
 
   // Load menu items
@@ -204,14 +118,11 @@ export default function HomeScreen() {
     if (!selectedCafeteria) return;
     try {
       setError("");
-
-      // Check for published daily menu first
       const dailyMenu = await getTodaysMenu(selectedCafeteria.id);
       setHasPublishedMenu(dailyMenu !== null);
 
-      // Fetch all available menu items
       const params: MenuItemsParams = {};
-      if (selectedCategory) params.category = selectedCategory;
+      if (selectedCategory !== "all") params.category = selectedCategory as MenuCategory;
       if (searchQuery.trim()) params.search = searchQuery.trim();
 
       const { items } = await getMenuItems(selectedCafeteria.id, params);
@@ -233,10 +144,10 @@ export default function HomeScreen() {
     loadMenu();
   }, [loadMenu]);
 
-  // Search: clear category when searching
+  // Search: switch to "all" when searching
   useEffect(() => {
-    if (searchQuery.trim()) {
-      setSelectedCategory(null);
+    if (searchQuery.trim() && selectedCategory !== "all") {
+      setSelectedCategory("all");
     }
   }, [searchQuery]);
 
@@ -244,7 +155,13 @@ export default function HomeScreen() {
   const handleAddToCart = useCallback(
     async (menuItemId: string) => {
       if (!isCafeteriaOpen) return;
-      await cartAddToCart(menuItemId, 1);
+      try {
+        await cartAddToCart(menuItemId, 1);
+        setCartItemMap((prev) => ({ ...prev, [menuItemId]: (prev[menuItemId] || 0) + 1 }));
+        setToast({ visible: true, message: "Added to cart", type: "success" });
+      } catch {
+        setToast({ visible: true, message: "Failed to add item", type: "error" });
+      }
     },
     [cartAddToCart, isCafeteriaOpen],
   );
@@ -258,188 +175,123 @@ export default function HomeScreen() {
   );
 
   // Handle category chip press
-  const handleCategoryPress = useCallback((cat: MenuCategory) => {
+  const handleCategoryPress = useCallback((cat: CategoryKey) => {
     setSearchQuery("");
-    setSelectedCategory((prev) => (prev === cat ? null : cat));
+    setSelectedCategory(cat);
   }, []);
 
   // Greeting
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
-  // Loading state
+  // Loading skeleton
   if (isLoading && isCafeteriaLoading) {
     return (
-      <View style={[styles.screen, { backgroundColor: bg("secondary") }]}>
+      <View style={[styles.screen, { backgroundColor: bg("primary") }]}>
         <Spinner label="Loading menu..." />
       </View>
     );
   }
 
   return (
-    <View style={[styles.screen, { backgroundColor: bg("secondary") }]}>
+    <View style={[styles.screen, { backgroundColor: bg("primary") }]}>
+      {/* Toast */}
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast((t) => ({ ...t, visible: false }))}
+      />
+
       <ScrollView
         style={styles.scrollContent}
-        contentContainerStyle={styles.scrollContainer}
+        contentContainerStyle={[
+          styles.scrollContainer,
+          { paddingBottom: cartItemCount > 0 ? 140 : 100 },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={onRefresh}
-            colors={[colors.brand[700]]}
+            colors={[brand]}
+            tintColor={brand}
           />
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Header ── */}
+        {/* ── Zone 2: Header ── */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={[styles.greeting, { color: tc("primary") }]}>
               {greeting}, {user?.first_name ?? "Student"}
             </Text>
-            <Text style={[styles.headerSubtext, { color: tc("muted") }]}>
-              What would you like today?
-            </Text>
           </View>
-          <TouchableOpacity
-            style={[styles.iconButton, { backgroundColor: bg("tertiary"), borderColor: bc("default") }]}
-            onPress={() => {}}
+          <Pressable
+            style={[styles.notifBtn, { backgroundColor: bg("secondary") }]}
+            hitSlop={8}
           >
-            <Text style={styles.iconButtonText}>🔔</Text>
-          </TouchableOpacity>
+            <Ionicons name="notifications-outline" size={22} color={tc("secondary")} />
+          </Pressable>
         </View>
 
-        {/* ── Cafeteria Badge ── */}
-        {selectedCafeteria ? (
-          <View
-            style={[
-              styles.cafeteriaBadge,
-              {
-                backgroundColor: bg("primary"),
-                borderColor: bc("default"),
-                opacity: isCafeteriaOpen ? 1 : 0.7,
-              },
-            ]}
-          >
-            <View style={styles.cafeteriaBadgeLeft}>
-              <Text style={styles.cafeteriaEmoji}>🍽️</Text>
-              <View>
-                <Text style={[styles.cafeteriaName, { color: tc("primary") }]}>
-                  {selectedCafeteria.name}
-                </Text>
-                <Text style={[styles.cafeteriaLocation, { color: tc("muted") }]}>
-                  {selectedCafeteria.location ?? "Campus"}
-                </Text>
-              </View>
-            </View>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isCafeteriaOpen ? colors.success : colors.error },
-              ]}
-            />
-          </View>
-        ) : !isCafeteriaLoading ? (
-          <View style={[styles.cafeteriaBadge, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>
-            <Text style={[styles.noCafeteria, { color: tc("muted") }]}>
-              No cafeteria available
-            </Text>
-          </View>
-        ) : null}
-
-        {/* ── Category Chips ── */}
-        {hasPublishedMenu !== false && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoryScroll}
-            contentContainerStyle={styles.categoryContainer}
-          >
-            {ALL_CATEGORIES.map((cat) => {
-              const isActive = selectedCategory === cat;
-              return (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.categoryChip,
-                    {
-                      backgroundColor: isActive ? colors.brand[700] : bg("primary"),
-                      borderColor: isActive ? colors.brand[700] : bc("default"),
-                    },
-                  ]}
-                  onPress={() => handleCategoryPress(cat)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.categoryChipText,
-                      { color: isActive ? "#ffffff" : tc("secondary") },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {CATEGORY_LABELS[cat]}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        {/* Cafeteria badge */}
+        {selectedCafeteria && (
+          <CafeteriaBadge name={selectedCafeteria.name} />
         )}
 
-        {/* ── Search Bar ── */}
-        {hasPublishedMenu !== false && (
-          <View style={[styles.searchBar, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={[styles.searchInput, { color: tc("primary") }]}
-              placeholder="Search menu items..."
-              placeholderTextColor={resolvedTheme === "dark" ? colors.neutral[500] : colors.neutral[400]}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <Text style={[styles.searchClear, { color: tc("muted") }]}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+        {/* ── Zone 3: Search ── */}
+        <View style={{ marginTop: 12 }}>
+          <SearchBar
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search menu..."
+          />
+        </View>
 
-        {/* ── Error State ── */}
+        {/* ── Zone 4: Category Chips ── */}
+        <View style={{ marginTop: 12 }}>
+          <CategoryChips
+            categories={ALL_CATEGORIES}
+            selected={selectedCategory}
+            onSelect={handleCategoryPress}
+          />
+        </View>
+
+        {/* ── Error Banner ── */}
         {error ? (
-          <View style={[styles.errorBanner, { backgroundColor: "#fef2f2", borderColor: "#fecaca" }]}>
-            <Text style={[styles.errorText, { color: "#991b1b" }]}>{error}</Text>
-            <TouchableOpacity onPress={onRefresh}>
-              <Text style={[styles.retryText, { color: colors.brand[700] }]}>Retry</Text>
-            </TouchableOpacity>
+          <View style={[styles.errorBanner, { backgroundColor: functionalColor(resolvedTheme, "error") + "10", borderColor: functionalColor(resolvedTheme, "error") + "30" }]}>
+            <Ionicons name="alert-circle" size={18} color={functionalColor(resolvedTheme, "error")} />
+            <Text style={[styles.errorText, { color: functionalColor(resolvedTheme, "error"), flex: 1, marginLeft: 8 }]}>{error}</Text>
+            <Pressable onPress={onRefresh}>
+              <Text style={[styles.retryText, { color: brand }]}>Retry</Text>
+            </Pressable>
           </View>
         ) : null}
 
         {/* ── Closed Cafeteria Warning ── */}
         {!isCafeteriaOpen && selectedCafeteria && (
-          <View style={[styles.closedBanner, { backgroundColor: "#fff7ed", borderColor: "#fed7aa" }]}>
-            <Text style={styles.closedBannerIcon}>⚠️</Text>
-            <Text style={[styles.closedBannerText, { color: "#9a3412" }]}>
+          <View style={[styles.warningBanner, { backgroundColor: functionalColor(resolvedTheme, "warning") + "10", borderColor: functionalColor(resolvedTheme, "warning") + "30" }]}>
+            <Ionicons name="lock-closed" size={16} color={functionalColor(resolvedTheme, "warning")} />
+            <Text style={[styles.warningText, { color: functionalColor(resolvedTheme, "warning"), flex: 1, marginLeft: 8 }]}>
               {selectedCafeteria.operational_status === "closing_soon"
-                ? "Cafeteria is closing soon"
-                : "Cafeteria is currently closed"}{" "}
-              — ordering is not available right now.
+                ? "Closing soon — ordering may be limited"
+                : "Cafeteria is currently closed"}
             </Text>
           </View>
         )}
 
-        {/* ── No Published Menu State ── */}
+        {/* ── Empty States ── */}
         {hasPublishedMenu === false && !isLoading && (
           <EmptyState
-            emoji="📋"
+            icon="document-text-outline"
             title="Menu not published yet"
             description="Today's menu hasn't been published. Check back later!"
           />
         )}
 
-        {/* ── No Search Results ── */}
         {!isLoading && menuItems.length === 0 && hasPublishedMenu !== false && (
           <EmptyState
-            emoji={searchQuery ? "🔍" : "🍽️"}
+            icon={searchQuery ? "search-outline" : "restaurant-outline"}
             title={searchQuery ? "No items found" : "No menu items available"}
             description={
               searchQuery
@@ -449,46 +301,42 @@ export default function HomeScreen() {
           />
         )}
 
-        {/* ── Menu Items ── */}
+        {/* ── Zone 5: Food Grid ── */}
         {menuItems.length > 0 && (
-          <View style={styles.menuSection}>
-            {searchQuery ? (
-              <Text style={[styles.menuSectionTitle, { color: tc("muted") }]}>
-                Results for "{searchQuery}"
-              </Text>
-            ) : selectedCategory ? (
-              <Text style={[styles.menuSectionTitle, { color: tc("muted") }]}>
-                {CATEGORY_LABELS[selectedCategory]}
-              </Text>
-            ) : (
-              <Text style={[styles.menuSectionTitle, { color: tc("muted") }]}>
-                All items
-              </Text>
-            )}
-            <View style={styles.menuGrid}>
-              {menuItems.map((item) => (
-                <MenuItemCard
-                  key={item.id}
-                  item={item}
-                  onAddToCart={handleAddToCart}
-                  onPress={handleItemPress}
-                  theme={theme}
+          <View style={styles.gridContainer}>
+            {menuItems.map((item) => (
+              <View key={item.id} style={styles.gridItem}>
+                <FoodCard
+                  name={item.name}
+                  description={item.description}
+                  price={item.price}
+                  imageUri={item.image_url}
+                  category={item.category}
+                  quantity={cartItemMap[item.id] || 0}
+                  onPress={() => handleItemPress(item)}
+                  onAdd={() => handleAddToCart(item.id)}
+                  onIncrement={() => handleAddToCart(item.id)}
+                  onDecrement={() => {
+                    setCartItemMap((prev) => ({
+                      ...prev,
+                      [item.id]: Math.max(0, (prev[item.id] || 0) - 1),
+                    }));
+                  }}
                 />
-              ))}
-            </View>
+              </View>
+            ))}
           </View>
         )}
-
-        {/* Bottom padding for cart bar */}
-        {cartItemCount > 0 && <View style={{ height: 80 }} />}
       </ScrollView>
 
-      {/* ── Floating Cart Bar ── */}
-      <CartBar
-        itemCount={cartItemCount}
-        total={cartTotal}
-        onPress={() => router.push("/cart")}
-      />
+      {/* ── Zone 6: Floating Cart Bar ── */}
+      {cartItemCount > 0 && (
+        <CartBar
+          itemCount={cartItemCount}
+          total={cartTotal}
+          onPress={() => router.push("/cart")}
+        />
+      )}
     </View>
   );
 }
@@ -503,16 +351,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContainer: {
-    padding: 16,
-    paddingBottom: 24,
+    paddingTop: 12,
   },
 
   // Header
   header: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
   },
   headerLeft: {
     flex: 1,
@@ -521,118 +369,29 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     letterSpacing: -0.3,
+    lineHeight: 28,
   },
-  headerSubtext: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  iconButton: {
+  notifBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-  },
-  iconButtonText: {
-    fontSize: 18,
-  },
-
-  // Cafeteria badge
-  cafeteriaBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  cafeteriaBadgeLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  cafeteriaEmoji: {
-    fontSize: 28,
-  },
-  cafeteriaName: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  cafeteriaLocation: {
-    fontSize: 12,
-    marginTop: 1,
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  noCafeteria: {
-    fontSize: 14,
-    textAlign: "center",
-    width: "100%",
-  },
-
-  // Category chips
-  categoryScroll: {
-    marginBottom: 12,
-  },
-  categoryContainer: {
-    gap: 8,
-    paddingRight: 16,
-  },
-  categoryChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  categoryChipText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-
-  // Search
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 44,
-    marginBottom: 16,
-    gap: 8,
-  },
-  searchIcon: {
-    fontSize: 16,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: 0,
-  },
-  searchClear: {
-    fontSize: 16,
-    fontWeight: "600",
-    paddingLeft: 4,
   },
 
   // Error
   errorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 12,
+    marginHorizontal: 20,
+    marginTop: 12,
   },
   errorText: {
     fontSize: 13,
     fontWeight: "500",
-    flex: 1,
   },
   retryText: {
     fontSize: 13,
@@ -640,156 +399,32 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
 
-  // Closed banner
-  closedBanner: {
+  // Warning
+  warningBanner: {
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 16,
-    gap: 8,
+    marginHorizontal: 20,
+    marginTop: 12,
   },
-  closedBannerIcon: {
-    fontSize: 18,
-  },
-  closedBannerText: {
+  warningText: {
     fontSize: 13,
     fontWeight: "500",
-    flex: 1,
   },
 
-  // Menu section
-  menuSection: {
-    marginTop: 4,
-  },
-  menuSectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 10,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  menuGrid: {
-    gap: 10,
-  },
-
-  // Menu item card
-  itemCard: {
+  // Grid
+  gridContainer: {
     flexDirection: "row",
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  itemImagePlaceholder: {
-    width: 80,
-    height: 80,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  itemEmoji: {
-    fontSize: 32,
-  },
-  itemInfo: {
-    flex: 1,
-    padding: 12,
-    justifyContent: "space-between",
-  },
-  itemName: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  itemDesc: {
-    fontSize: 12,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  itemBottomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 6,
-  },
-  itemPrice: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  addButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addButtonText: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "700",
-    lineHeight: 20,
-  },
-  outOfStockLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-
-  // Cart bar
-  cartBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    gap: 12,
+    marginTop: 8,
   },
-  cartBarLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  cartBadge: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    minWidth: 24,
-    height: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-  },
-  cartBadgeText: {
-    color: colors.brand[700],
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  cartBarLabel: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  cartBarRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  cartBarTotal: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  cartBarArrow: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
+  gridItem: {
+    flex: 1,
+    minWidth: "45%",
+    maxWidth: "48%",
   },
 });

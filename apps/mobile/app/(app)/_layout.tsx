@@ -8,7 +8,7 @@
 import React from "react";
 import { Stack } from "expo-router";
 import { useTheme } from "../../src/contexts/ThemeContext";
-import { colors, bgColor, textColor } from "../../src/theme";
+import { bgColor, textColor, brandGreen } from "../../src/theme";
 
 export default function AppLayout() {
   const { resolvedTheme } = useTheme();
@@ -29,7 +29,7 @@ export default function AppLayout() {
           title: "Cart",
           headerStyle: { backgroundColor: bg },
           headerTintColor: tc,
-          headerTitleStyle: { fontWeight: "600" },
+          headerTitleStyle: { fontWeight: "600", fontSize: 16 },
           presentation: "card",
         }}
       />
@@ -37,10 +37,10 @@ export default function AppLayout() {
         name="item/[id]"
         options={{
           headerShown: true,
-          title: "Item Details",
+          title: "",
           headerStyle: { backgroundColor: bg },
           headerTintColor: tc,
-          headerTitleStyle: { fontWeight: "600" },
+          headerTitleStyle: { fontWeight: "600", fontSize: 16 },
           presentation: "card",
         }}
       />

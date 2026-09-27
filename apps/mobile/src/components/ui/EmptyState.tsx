@@ -1,23 +1,43 @@
 /**
  * UniServe — Empty State Component (React Native)
+ *
+ * Redesigned per UI_MOBILE_REDESIGN.md spec:
+ * - Ionicons icon (48px, textMuted color)
+ * - Title 18px/600
+ * - Description 14px/400
+ * - Theme-aware via useTheme
  */
 
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { colors } from "../../theme/colors";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../../contexts/ThemeContext";
+import { textColor } from "../../theme";
+
+type IoniconName = keyof typeof Ionicons.glyphMap;
 
 interface EmptyStateProps {
+  icon?: IoniconName;
   emoji?: string;
   title: string;
   description?: string;
 }
 
-export function EmptyState({ emoji = "📭", title, description }: EmptyStateProps) {
+export function EmptyState({ icon = "document-text-outline", emoji, title, description }: EmptyStateProps) {
+  const { resolvedTheme } = useTheme();
+  const tc = (variant: "primary" | "secondary" | "muted") => textColor(resolvedTheme, variant);
+
+  // If emoji is passed, render it as text for backward compatibility
+  // Otherwise use Ionicons
   return (
     <View style={styles.container}>
-      <Text style={styles.emoji}>{emoji}</Text>
-      <Text style={styles.title}>{title}</Text>
-      {description && <Text style={styles.description}>{description}</Text>}
+      {emoji ? (
+        <Text style={styles.emoji}>{emoji}</Text>
+      ) : (
+        <Ionicons name={icon} size={48} color={tc("muted")} style={styles.icon} />
+      )}
+      <Text style={[styles.title, { color: tc("primary") }]}>{title}</Text>
+      {description && <Text style={[styles.description, { color: tc("muted") }]}>{description}</Text>}
     </View>
   );
 }
@@ -29,19 +49,21 @@ const styles = StyleSheet.create({
     padding: 32,
     marginVertical: 16,
   },
+  icon: {
+    marginBottom: 12,
+  },
   emoji: {
-    fontSize: 40,
+    fontSize: 48,
     marginBottom: 12,
   },
   title: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
-    color: colors.neutral[700],
     textAlign: "center",
   },
   description: {
     fontSize: 14,
-    color: colors.neutral[500],
+    fontWeight: "400",
     textAlign: "center",
     marginTop: 6,
     lineHeight: 20,

@@ -54,13 +54,13 @@ export const colors = {
   // Semantic Colors (Light Mode)
   light: {
     bgPrimary: "#ffffff",
-    bgSecondary: "#f2f3f5",
-    bgTertiary: "#e5e7eb",
-    textPrimary: "#111827",
+    bgSecondary: "#f5f5f7",
+    bgTertiary: "#ebedf0",
+    textPrimary: "#1a1c20",
     textSecondary: "#4a4e57",
-    textMuted: "#6b7280",
-    borderDefault: "#e5e7eb",
-    borderSubtle: "#f3f4f6",
+    textMuted: "#8a8f98",
+    borderDefault: "#e2e4e8",
+    borderSubtle: "#f0f1f3",
   },
 
   // Semantic Colors (Dark Mode)
@@ -75,11 +75,17 @@ export const colors = {
     borderSubtle: "#1e2433",
   },
 
-  // Functional
-  success: "#22c55e",
-  warning: "#ffc000",
-  error: "#ef4444",
-  info: "#3b82f6",
+  // Functional (Light)
+  success: "#16a34a",
+  warning: "#f59e0b",
+  error: "#dc2626",
+  info: "#2563eb",
+
+  // Functional (Dark)
+  darkSuccess: "#4ade80",
+  darkWarning: "#fbbf24",
+  darkError: "#f87171",
+  darkInfo: "#60a5fa",
 } as const;
 
 export type ColorToken = keyof typeof colors;

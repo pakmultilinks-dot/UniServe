@@ -10,7 +10,8 @@ import { useAuth } from "../../../src/contexts/AuthContext";
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { LguSeal } from "../../../src/components/LguSeal";
 import { Card } from "../../../src/components/ui";
-import { textColor, bgColor, borderColor, colors } from "../../../src/theme";
+import { textColor, bgColor, borderColor, brandGreen } from "../../../src/theme";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function ProfileScreen() {
   const { user, logout, logoutAll } = useAuth();
@@ -47,15 +48,15 @@ export default function ProfileScreen() {
     >
       {/* Profile Header */}
       <View style={styles.header}>
-        <View style={[styles.avatar, { backgroundColor: colors.brand[700] }]}>
+        <View style={[styles.avatar, { backgroundColor: brandGreen(resolvedTheme) }]}>
           <Text style={styles.avatarText}>{initials}</Text>
         </View>
         <Text style={[styles.name, { color: tc("primary") }]}>
           {user?.first_name} {user?.last_name}
         </Text>
         <Text style={[styles.email, { color: tc("muted") }]}>{user?.university_email}</Text>
-        <View style={[styles.roleBadge, { backgroundColor: colors.brand[700] + "20" }]}>
-          <Text style={[styles.roleText, { color: colors.brand[700] }]}>
+        <View style={[styles.roleBadge, { backgroundColor: brandGreen(resolvedTheme) + "20" }]}>
+          <Text style={[styles.roleText, { color: brandGreen(resolvedTheme) }]}>
             {user?.role?.replace("_", " ").toUpperCase() ?? "USER"}
           </Text>
         </View>

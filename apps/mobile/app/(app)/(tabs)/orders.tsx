@@ -14,7 +14,7 @@ import {
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { Card, StatusChip, Spinner, EmptyState } from "../../../src/components/ui";
-import { textColor, bgColor, borderColor, colors } from "../../../src/theme";
+import { textColor, bgColor, borderColor, brandGreen } from "../../../src/theme";
 import { getOrders, type Order } from "../../../src/services/data";
 
 export default function OrdersScreen() {
@@ -58,10 +58,10 @@ export default function OrdersScreen() {
     <View style={[styles.screen, { backgroundColor: bg("secondary") }]}>
       <ScrollView
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={[colors.brand[700]]} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={[brandGreen(resolvedTheme)]} />}
       >
         {orders.length === 0 ? (
-          <EmptyState emoji="📋" title="No orders yet" description="Your order history will appear here" />
+          <EmptyState icon="document-text-outline" title="No orders yet" description="Your order history will appear here" />
         ) : (
           orders.map((item) => (
             <Card key={item.id} style={{ marginBottom: 12, backgroundColor: bg("primary"), borderColor: bc("default") }}>

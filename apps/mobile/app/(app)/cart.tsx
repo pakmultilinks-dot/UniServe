@@ -16,7 +16,8 @@ import {
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { useCart } from "../../src/contexts/CartContext";
 import { EmptyState, Button } from "../../src/components/ui";
-import { textColor, bgColor, borderColor, colors } from "../../src/theme";
+import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../src/theme";
+import { Ionicons } from "@expo/vector-icons";
 import type { CartItemResponse } from "@uniserve/shared-types";
 
 // ── Helpers ──
@@ -56,7 +57,7 @@ function CartItemRow({ item, onUpdateQuantity, onRemove, theme }: CartItemRowPro
           {item.item_name ?? "Menu item"}
         </Text>
         {isUnavailable && (
-          <Text style={[styles.unavailableLabel, { color: colors.error }]}>
+          <Text style={[styles.unavailableLabel, { color: functionalColor(theme, "error") }]}>
             No longer available
           </Text>
         )}
@@ -129,7 +130,7 @@ export default function CartScreen() {
       {items.length === 0 ? (
         <View style={styles.emptyContainer}>
           <EmptyState
-            emoji="🛒"
+            icon="cart-outline"
             title="Your cart is empty"
             description="Browse the menu and add items to your cart"
           />
@@ -144,7 +145,7 @@ export default function CartScreen() {
             {selectedCafeteria && (
               <View style={[styles.cafeteriaHeader, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>
                 <Text style={[styles.cafeteriaName, { color: tc("primary") }]}>
-                  🍽️ {selectedCafeteria.name}
+                  {selectedCafeteria.name}
                 </Text>
               </View>
             )}
@@ -173,16 +174,17 @@ export default function CartScreen() {
               <View style={[styles.summaryDivider, { backgroundColor: bc("subtle") }]} />
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabelTotal, { color: tc("primary") }]}>Total</Text>
-                <Text style={[styles.summaryValueTotal, { color: colors.brand[700] }]}>
+                <Text style={[styles.summaryValueTotal, { color: brandGreen(resolvedTheme) }]}>
                   {formatPrice(cartTotal)}
                 </Text>
               </View>
             </View>
 
             {/* ── Checkout placeholder ── */}
-            <View style={[styles.checkoutPlaceholder, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>
+            <View style={[styles.checkoutPlaceholder, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>  
+              <Ionicons name="card-outline" size={24} color={tc("muted")} style={{ marginBottom: 8 }} />
               <Text style={[styles.checkoutPlaceholderText, { color: tc("muted") }]}>
-                💳 Checkout and payment will be available in the next update.
+                Checkout and payment will be available in the next update.
               </Text>
             </View>
 

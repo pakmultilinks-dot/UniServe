@@ -4,7 +4,8 @@
 
 import React from "react";
 import { View, Text, StyleSheet, ViewStyle } from "react-native";
-import { colors } from "../../theme/colors";
+import { useTheme } from "../../contexts/ThemeContext";
+import { bgColor, borderColor as getBorderColor, textColor } from "../../theme";
 
 interface CardProps {
   children: React.ReactNode;
@@ -13,8 +14,16 @@ interface CardProps {
 }
 
 export function Card({ children, style, padded = true }: CardProps) {
+  const { resolvedTheme } = useTheme();
   return (
-    <View style={[styles.card, padded && styles.padded, style]}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: bgColor(resolvedTheme, "primary"), borderColor: getBorderColor(resolvedTheme, "default") },
+        padded && styles.padded,
+        style,
+      ]}
+    >
       {children}
     </View>
   );
@@ -40,10 +49,8 @@ export function CardHeader({ title, subtitle, action }: CardHeaderProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.neutral[0],
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.neutral[200],
   },
   padded: {
     padding: 16,
@@ -56,11 +63,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.neutral[900],
   },
   subtitle: {
     fontSize: 13,
-    color: colors.neutral[500],
     marginTop: 2,
   },
 });

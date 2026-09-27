@@ -8,40 +8,43 @@ import { TextStyle } from "react-native";
 import { colors } from "./colors";
 
 export const typography = {
-  // Heading styles
-  h1: {
+  // Display
+  display: {
     fontSize: 28,
     fontWeight: "700" as TextStyle["fontWeight"],
-    lineHeight: 36,
+    lineHeight: 34,
     letterSpacing: -0.5,
   },
-  h2: {
-    fontSize: 24,
+
+  // Heading styles
+  title: {
+    fontSize: 22,
     fontWeight: "700" as TextStyle["fontWeight"],
-    lineHeight: 32,
+    lineHeight: 28,
     letterSpacing: -0.3,
   },
-  h3: {
-    fontSize: 20,
-    fontWeight: "600" as TextStyle["fontWeight"],
-    lineHeight: 28,
+  heading: {
+    fontSize: 18,
+    fontWeight: "700" as TextStyle["fontWeight"],
+    lineHeight: 24,
+    letterSpacing: -0.2,
   },
-  h4: {
+  subheading: {
     fontSize: 16,
     fontWeight: "600" as TextStyle["fontWeight"],
-    lineHeight: 24,
+    lineHeight: 22,
   },
 
   // Body styles
   body: {
-    fontSize: 16,
-    fontWeight: "400" as TextStyle["fontWeight"],
-    lineHeight: 24,
-  },
-  bodySmall: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "400" as TextStyle["fontWeight"],
     lineHeight: 20,
+  },
+  bodySmall: {
+    fontSize: 13,
+    fontWeight: "400" as TextStyle["fontWeight"],
+    lineHeight: 18,
   },
   caption: {
     fontSize: 12,
@@ -49,29 +52,53 @@ export const typography = {
     lineHeight: 16,
   },
 
-  // Label styles
-  label: {
-    fontSize: 14,
-    fontWeight: "500" as TextStyle["fontWeight"],
+  // Price
+  price: {
+    fontSize: 16,
+    fontWeight: "700" as TextStyle["fontWeight"],
     lineHeight: 20,
   },
-  labelSmall: {
-    fontSize: 12,
-    fontWeight: "500" as TextStyle["fontWeight"],
+  priceLarge: {
+    fontSize: 20,
+    fontWeight: "700" as TextStyle["fontWeight"],
+    lineHeight: 24,
+  },
+
+  // Label styles
+  label: {
+    fontSize: 13,
+    fontWeight: "600" as TextStyle["fontWeight"],
     lineHeight: 16,
+  },
+  labelSmall: {
+    fontSize: 11,
+    fontWeight: "700" as TextStyle["fontWeight"],
+    lineHeight: 14,
+    letterSpacing: 0.5,
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: "500" as TextStyle["fontWeight"],
+    lineHeight: 14,
   },
 
   // Button styles
   button: {
-    fontSize: 16,
-    fontWeight: "600" as TextStyle["fontWeight"],
-    lineHeight: 24,
-  },
-  buttonSmall: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600" as TextStyle["fontWeight"],
     lineHeight: 20,
   },
+  buttonSmall: {
+    fontSize: 13,
+    fontWeight: "600" as TextStyle["fontWeight"],
+    lineHeight: 18,
+  },
+
+  // Aliases for backward compat
+  h1: { fontSize: 28, fontWeight: "700" as TextStyle["fontWeight"], lineHeight: 34, letterSpacing: -0.5 },
+  h2: { fontSize: 22, fontWeight: "700" as TextStyle["fontWeight"], lineHeight: 28, letterSpacing: -0.3 },
+  h3: { fontSize: 20, fontWeight: "600" as TextStyle["fontWeight"], lineHeight: 28 },
+  h4: { fontSize: 16, fontWeight: "600" as TextStyle["fontWeight"], lineHeight: 24 },
 } as const;
 
 /**
@@ -116,4 +143,31 @@ export function borderColor(
     subtle: theme === "dark" ? colors.dark.borderSubtle : colors.light.borderSubtle,
   };
   return map[variant];
+}
+
+/**
+ * Get the brand green color for the current theme.
+ * Light: #005400, Dark: #22c55e
+ */
+export function brandGreen(theme: "light" | "dark"): string {
+  return theme === "dark" ? colors.brand[500] : colors.brand[700];
+}
+
+/**
+ * Get a functional color for the current theme.
+ */
+export function functionalColor(
+  theme: "light" | "dark",
+  variant: "success" | "warning" | "error" | "info",
+): string {
+  if (theme === "dark") {
+    const darkMap = {
+      success: colors.darkSuccess,
+      warning: colors.darkWarning,
+      error: colors.darkError,
+      info: colors.darkInfo,
+    };
+    return darkMap[variant];
+  }
+  return colors[variant];
 }

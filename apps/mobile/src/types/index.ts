@@ -19,4 +19,6 @@ export {
   type ApiErrorResponse,
   type PaginatedResponse,
   type PaginatedQuery,
+  type MenuCategory,
+  type MenuItem,
 } from "@uniserve/shared-types";
