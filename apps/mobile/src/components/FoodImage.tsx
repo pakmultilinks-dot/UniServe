@@ -2,25 +2,14 @@
  * FoodImage — Food item image with category-based placeholder.
  *
  * When no image URL is available, shows a colored background
- * with the category emoji. When image URL exists, loads the image.
+ * with the category icon. When image URL exists, loads the image.
  */
 
 import React from "react";
 import { View, Image, StyleSheet, ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { MenuCategory } from "../types";
+import type { MenuCategory } from "@uniserve/shared-types";
 import { bgColor } from "../theme";
-
-const CATEGORY_EMOJI: Record<string, string> = {
-  breakfast: "🍳",
-  main_course: "🍛",
-  side_dish: "🥗",
-  dessert: "🍰",
-  beverage: "☕",
-  snack: "🍿",
-  salad: "🥬",
-  soup: "🍜",
-};
 
 const CATEGORY_COLORS: Record<string, string> = {
   breakfast: "#fef3c7",
@@ -48,7 +37,6 @@ export default function FoodImage({
   borderRadius = 12,
   style,
 }: FoodImageProps) {
-  const emoji = CATEGORY_EMOJI[category ?? ""] ?? "🍽️";
   const bgColorHex = CATEGORY_COLORS[category ?? ""] ?? "#f5f5f7";
 
   const containerStyle: ViewStyle[] = [

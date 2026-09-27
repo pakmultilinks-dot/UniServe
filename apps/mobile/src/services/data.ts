@@ -15,7 +15,9 @@ import type {
   CartItemResponse,
   CartAddItemRequest,
   CartUpdateQuantityRequest,
+  CartCheckoutRequest,
   MenuCategory,
+  Order,
 } from "@uniserve/shared-types";
 
 // ---- Cafeterias ----
@@ -119,31 +121,30 @@ export async function removeCartItem(
   await apiClient.delete(`/cafeterias/${cafeteriaId}/cart/items/${cartItemId}`);
 }
 
+/** Checkout the cart and create an order. */
+export async function checkoutCart(
+  cafeteriaId: string,
+  params: {
+    payment_method?: "cash" | "online";
+    order_type?: "immediate" | "scheduled";
+    scheduled_collection_time?: string;
+    note?: string;
+  },
+): Promise<Order> {
+  const body: CartCheckoutRequest = {
+    payment_method: params.payment_method ?? "cash",
+    order_type: params.order_type ?? "immediate",
+  };
+  if (params.scheduled_collection_time) body.scheduled_collection_time = params.scheduled_collection_time;
+  if (params.note) body.note = params.note;
+  return apiClient.post<Order>(`/cafeterias/${cafeteriaId}/checkout`, body);
+}
+
 // ---- Orders ----
 
 interface OrderListResponse {
   orders: Order[];
   total: number;
-}
-
-export interface Order {
-  id: string;
-  order_number: string;
-  status: string;
-  total_amount: number;
-  currency: string;
-  items: OrderItem[];
-  cafeteria_name: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface OrderItem {
-  id: string;
-  menu_item_name: string;
-  quantity: number;
-  unit_price: number;
-  subtotal: number;
 }
 
 export interface OrderParams {
@@ -158,6 +159,11 @@ export async function getOrders(params?: OrderParams): Promise<Order[]> {
   const qs = queryParams.toString();
   const data = await apiClient.get<OrderListResponse>(`/orders${qs ? `?${qs}` : ""}`);
   return data.orders ?? [];
+}
+
+/** Fetch a single order by ID. */
+export async function getOrder(orderId: string): Promise<Order> {
+  return apiClient.get<Order>(`/orders/${orderId}`);
 }
 
 // ---- Notifications ----

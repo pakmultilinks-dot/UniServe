@@ -1,8 +1,8 @@
 /**
  * UniServe — Cart Screen
  *
- * Shows cart items with quantity controls, line totals, and overall total.
- * NO checkout/payment in this slice — that's next slice.
+ * Shows cart items with quantity controls, line totals, summary, and checkout button.
+ * Cart is contextual (not a tab) — user arrives here from home/cart bar.
  */
 import React, { useCallback } from "react";
 import {
@@ -10,21 +10,22 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
 } from "react-native";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { useCart } from "../../src/contexts/CartContext";
-import { EmptyState, Button } from "../../src/components/ui";
+import { EmptyState } from "../../src/components/ui";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../src/theme";
-import { Ionicons } from "@expo/vector-icons";
 import type { CartItemResponse } from "@uniserve/shared-types";
 
 // ── Helpers ──
 
 function formatPrice(paisa: number): string {
-  const pkr = paisa / 100;
-  return pkr % 1 === 0 ? `PKR ${pkr}` : `PKR ${pkr.toFixed(2)}`;
+  return `PKR ${Math.round(paisa / 100)}`;
 }
 
 // ── Cart Item Row ──
@@ -32,14 +33,15 @@ function formatPrice(paisa: number): string {
 interface CartItemRowProps {
   item: CartItemResponse;
   onUpdateQuantity: (cartItemId: string, quantity: number) => void;
-  onRemove: (cartItemId: string) => void;
   theme: "light" | "dark";
 }
 
-function CartItemRow({ item, onUpdateQuantity, onRemove, theme }: CartItemRowProps) {
-  const tc = (v: "primary" | "secondary" | "muted") => textColor(theme, v);
-  const bg = (v: "primary" | "secondary") => bgColor(theme, v);
-  const bc = (v: "default" | "subtle") => borderColor(theme, v);
+function CartItemRow({ item, onUpdateQuantity, theme }: CartItemRowProps) {
+  const tc = textColor(theme, "primary");
+  const tcMuted = textColor(theme, "muted");
+  const bg = bgColor(theme, "secondary");
+  const bc = borderColor(theme, "default");
+  const brand = brandGreen(theme);
 
   const isUnavailable = item.item_available === false;
 
@@ -47,13 +49,13 @@ function CartItemRow({ item, onUpdateQuantity, onRemove, theme }: CartItemRowPro
     <View
       style={[
         styles.cartItem,
-        { backgroundColor: bg("primary"), borderColor: bc("default") },
-        isUnavailable && { opacity: 0.5 },
+        { backgroundColor: bg, borderColor: bc },
+        isUnavailable && styles.cartItemUnavailable,
       ]}
     >
       {/* Item Info */}
       <View style={styles.cartItemInfo}>
-        <Text style={[styles.cartItemName, { color: tc("primary") }]} numberOfLines={1}>
+        <Text style={[styles.cartItemName, { color: tc }]} numberOfLines={1}>
           {item.item_name ?? "Menu item"}
         </Text>
         {isUnavailable && (
@@ -61,32 +63,40 @@ function CartItemRow({ item, onUpdateQuantity, onRemove, theme }: CartItemRowPro
             No longer available
           </Text>
         )}
-        <Text style={[styles.cartItemUnitPrice, { color: tc("muted") }]}>
+        <Text style={[styles.cartItemUnitPrice, { color: tcMuted }]}>
           {formatPrice(item.price_snapshot)} each
         </Text>
       </View>
 
-      {/* Quantity Controls */}
+      {/* Quantity + Subtotal */}
       <View style={styles.cartItemRight}>
-        <View style={[styles.qtyControl, { borderColor: bc("default") }]}>
-          <TouchableOpacity
+        <View style={[styles.qtyControl, { borderColor: bc, backgroundColor: bgColor(theme, "primary") }]}>
+          <Pressable
             style={styles.qtyBtn}
             onPress={() => onUpdateQuantity(item.id, item.quantity - 1)}
+            hitSlop={6}
           >
-            <Text style={[styles.qtyBtnText, { color: tc("primary") }]}>−</Text>
-          </TouchableOpacity>
-          <Text style={[styles.qtyValue, { color: tc("primary") }]}>{item.quantity}</Text>
-          <TouchableOpacity
+            <Ionicons
+              name={item.quantity <= 1 ? "remove-circle-outline" : "remove-circle"}
+              size={20}
+              color={item.quantity <= 1 ? tcMuted : brand}
+            />
+          </Pressable>
+          <Text style={[styles.qtyValue, { color: tc }]}>{item.quantity}</Text>
+          <Pressable
             style={styles.qtyBtn}
             onPress={() => onUpdateQuantity(item.id, item.quantity + 1)}
             disabled={item.quantity >= 10}
+            hitSlop={6}
           >
-            <Text style={[styles.qtyBtnText, { color: item.quantity >= 10 ? tc("muted") : tc("primary") }]}>
-              +
-            </Text>
-          </TouchableOpacity>
+            <Ionicons
+              name={item.quantity >= 10 ? "add-circle-outline" : "add-circle"}
+              size={20}
+              color={item.quantity >= 10 ? tcMuted : brand}
+            />
+          </Pressable>
         </View>
-        <Text style={[styles.cartItemSubtotal, { color: tc("primary") }]}>
+        <Text style={[styles.cartItemSubtotal, { color: tc }]}>
           {formatPrice(item.subtotal)}
         </Text>
       </View>
@@ -98,6 +108,7 @@ function CartItemRow({ item, onUpdateQuantity, onRemove, theme }: CartItemRowPro
 
 export default function CartScreen() {
   const { resolvedTheme } = useTheme();
+  const router = useRouter();
   const {
     cart,
     cartItemCount,
@@ -107,10 +118,13 @@ export default function CartScreen() {
     removeFromCart,
   } = useCart();
 
-  const theme = resolvedTheme as "light" | "dark";
-  const tc = (v: "primary" | "secondary" | "muted") => textColor(resolvedTheme, v);
-  const bg = (v: "primary" | "secondary" | "tertiary") => bgColor(resolvedTheme, v);
-  const bc = (v: "default" | "subtle") => borderColor(resolvedTheme, v);
+  const brand = brandGreen(resolvedTheme);
+  const tc = textColor(resolvedTheme, "primary");
+  const tcMuted = textColor(resolvedTheme, "muted");
+  const bg = bgColor(resolvedTheme, "primary");
+  const bgSec = bgColor(resolvedTheme, "secondary");
+  const bc = borderColor(resolvedTheme, "default");
+  const bcSub = borderColor(resolvedTheme, "subtle");
 
   const handleUpdateQuantity = useCallback(
     async (cartItemId: string, newQty: number) => {
@@ -124,16 +138,25 @@ export default function CartScreen() {
   );
 
   const items = cart?.items ?? [];
+  const hasUnavailable = items.some((i) => i.item_available === false);
 
   return (
-    <View style={[styles.screen, { backgroundColor: bg("secondary") }]}>
+    <View style={[styles.screen, { backgroundColor: bgSec }]}>
       {items.length === 0 ? (
         <View style={styles.emptyContainer}>
           <EmptyState
             icon="cart-outline"
             title="Your cart is empty"
-            description="Browse the menu and add items to your cart"
+            description="Browse the menu and add items to get started"
           />
+          <View style={{ paddingHorizontal: 32, marginTop: 12 }}>
+            <Pressable
+              style={[styles.browseBtn, { backgroundColor: brand }]}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.browseBtnText}>Browse menu</Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <>
@@ -141,55 +164,80 @@ export default function CartScreen() {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* ── Cafeteria Name ── */}
+            {/* ── Cafeteria header ── */}
             {selectedCafeteria && (
-              <View style={[styles.cafeteriaHeader, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>
-                <Text style={[styles.cafeteriaName, { color: tc("primary") }]}>
+              <View style={[styles.cafeteriaHeader, { backgroundColor: bg, borderColor: bc }]}>
+                <Ionicons name="storefront-outline" size={16} color={brand} />
+                <Text style={[styles.cafeteriaName, { color: tc }]}>
                   {selectedCafeteria.name}
                 </Text>
               </View>
             )}
 
-            {/* ── Cart Items ── */}
+            {/* ── Cart items ── */}
             <View style={styles.cartItemsList}>
               {items.map((item) => (
                 <CartItemRow
                   key={item.id}
                   item={item}
                   onUpdateQuantity={handleUpdateQuantity}
-                  onRemove={removeFromCart}
-                  theme={theme}
+                  theme={resolvedTheme as "light" | "dark"}
                 />
               ))}
             </View>
 
-            {/* ── Summary ── */}
-            <View style={[styles.summaryCard, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>
-              <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: tc("muted") }]}>Items</Text>
-                <Text style={[styles.summaryValue, { color: tc("primary") }]}>
-                  {cartItemCount}
+            {/* ── Unavailable warning ── */}
+            {hasUnavailable && (
+              <View style={[styles.warningBanner, { backgroundColor: functionalColor(resolvedTheme, "warning") + "10", borderColor: functionalColor(resolvedTheme, "warning") + "30" }]}>
+                <Ionicons name="warning-outline" size={16} color={functionalColor(resolvedTheme, "warning")} />
+                <Text style={[styles.warningText, { color: functionalColor(resolvedTheme, "warning") }]}>
+                  Some items are no longer available and will be removed at checkout
                 </Text>
               </View>
-              <View style={[styles.summaryDivider, { backgroundColor: bc("subtle") }]} />
+            )}
+
+            {/* ── Summary card ── */}
+            <View style={[styles.summaryCard, { backgroundColor: bg, borderColor: bc }]}>
               <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabelTotal, { color: tc("primary") }]}>Total</Text>
-                <Text style={[styles.summaryValueTotal, { color: brandGreen(resolvedTheme) }]}>
+                <Text style={[styles.summaryLabel, { color: tcMuted }]}>
+                  Items ({cartItemCount})
+                </Text>
+                <Text style={[styles.summaryValue, { color: tc }]}>
+                  {formatPrice(cartTotal)}
+                </Text>
+              </View>
+              <View style={[styles.summaryDivider, { backgroundColor: bcSub }]} />
+              <View style={styles.summaryRow}>
+                <Text style={[styles.summaryLabelTotal, { color: tc }]}>Total</Text>
+                <Text style={[styles.summaryValueTotal, { color: brand }]}>
                   {formatPrice(cartTotal)}
                 </Text>
               </View>
             </View>
 
-            {/* ── Checkout placeholder ── */}
-            <View style={[styles.checkoutPlaceholder, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>  
-              <Ionicons name="card-outline" size={24} color={tc("muted")} style={{ marginBottom: 8 }} />
-              <Text style={[styles.checkoutPlaceholderText, { color: tc("muted") }]}>
-                Checkout and payment will be available in the next update.
-              </Text>
-            </View>
-
             <View style={{ height: 32 }} />
           </ScrollView>
+
+          {/* ── Bottom checkout bar ── */}
+          <SafeAreaView edges={["bottom"]} style={{ backgroundColor: bg }}>
+            <View style={[styles.bottomBar, { backgroundColor: bg, borderTopColor: bc }]}>
+              <View style={styles.bottomBarInfo}>
+                <Text style={[styles.bottomBarCount, { color: tc }]}>
+                  {cartItemCount} {cartItemCount === 1 ? "item" : "items"}
+                </Text>
+                <Text style={[styles.bottomBarTotal, { color: brand }]}>
+                  {formatPrice(cartTotal)}
+                </Text>
+              </View>
+              <Pressable
+                style={[styles.checkoutBtn, { backgroundColor: brand }]}
+                onPress={() => router.push("/checkout")}
+              >
+                <Text style={styles.checkoutBtnText}>Checkout</Text>
+                <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+              </Pressable>
+            </View>
+          </SafeAreaView>
         </>
       )}
     </View>
@@ -205,6 +253,19 @@ const styles = StyleSheet.create({
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
+    alignItems: "center",
+  },
+  browseBtn: {
+    height: 44,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  browseBtnText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
   },
   scrollContent: {
     padding: 16,
@@ -212,13 +273,16 @@ const styles = StyleSheet.create({
 
   // Cafeteria header
   cafeteriaHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,
     marginBottom: 16,
   },
   cafeteriaName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
   },
 
@@ -234,6 +298,9 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
+  },
+  cartItemUnavailable: {
+    opacity: 0.5,
   },
   cartItemInfo: {
     flex: 1,
@@ -259,21 +326,18 @@ const styles = StyleSheet.create({
   qtyControl: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
+    height: 36,
   },
   qtyBtn: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
   },
-  qtyBtnText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
   qtyValue: {
-    width: 32,
+    width: 36,
     textAlign: "center",
     fontSize: 14,
     fontWeight: "600",
@@ -281,6 +345,23 @@ const styles = StyleSheet.create({
   cartItemSubtotal: {
     fontSize: 14,
     fontWeight: "700",
+  },
+
+  // Warning
+  warningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  warningText: {
+    fontSize: 12,
+    fontWeight: "500",
+    flex: 1,
+    lineHeight: 16,
   },
 
   // Summary
@@ -316,17 +397,37 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // Checkout placeholder
-  checkoutPlaceholder: {
-    padding: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderStyle: "dashed",
+  // Bottom bar
+  bottomBar: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  checkoutPlaceholderText: {
+  bottomBarInfo: {
+    gap: 2,
+  },
+  bottomBarCount: {
     fontSize: 13,
-    textAlign: "center",
-    lineHeight: 18,
+    fontWeight: "500",
+  },
+  bottomBarTotal: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  checkoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 24,
+    height: 44,
+    borderRadius: 10,
+  },
+  checkoutBtnText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

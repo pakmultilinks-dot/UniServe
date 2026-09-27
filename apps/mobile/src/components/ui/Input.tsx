@@ -11,6 +11,7 @@ import {
   StyleSheet,
   TextInputProps,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../theme/colors";
 
 interface LguInputProps extends TextInputProps {
@@ -59,7 +60,7 @@ export function PasswordInput({ showToggle = true, ...props }: PasswordInputProp
       rightIcon={
         showToggle ? (
           <TouchableOpacity onPress={() => setVisible(!visible)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.toggleText}>{visible ? "🙈" : "👁️"}</Text>
+            <Ionicons name={visible ? "eye-off-outline" : "eye-outline"} size={20} color={colors.neutral[500]} />
           </TouchableOpacity>
         ) : undefined
       }
@@ -83,7 +84,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.neutral[0],
     borderWidth: 1,
     borderColor: colors.neutral[300],
-    borderRadius: 8,
+    borderRadius: 10,
+    minHeight: 48,
   },
   inputError: {
     borderColor: colors.error,
@@ -98,9 +100,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     paddingRight: 14,
   },
-  toggleText: {
-    fontSize: 18,
-  },
+
   errorText: {
     fontSize: 12,
     color: colors.error,

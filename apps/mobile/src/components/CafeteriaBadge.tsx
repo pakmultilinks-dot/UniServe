@@ -1,8 +1,8 @@
 /**
  * CafeteriaBadge — Shows currently selected cafeteria.
  *
- * Compact badge with restaurant icon and cafeteria name.
- * Tapping triggers a callback (future: cafeteria selector).
+ * Compact badge with restaurant icon, cafeteria name, and chevron.
+ * Tapping triggers a callback to open cafeteria selector bottom sheet.
  */
 
 import React from "react";
@@ -18,21 +18,23 @@ interface CafeteriaBadgeProps {
 
 export default function CafeteriaBadge({ name, onPress }: CafeteriaBadgeProps) {
   const { resolvedTheme } = useTheme();
-  const tc = (v: "primary" | "secondary" | "muted") => textColor(resolvedTheme, v);
-  const bg = (v: "primary" | "secondary") => bgColor(resolvedTheme, v);
+  const tcMuted = textColor(resolvedTheme, "muted");
+  const bg = bgColor(resolvedTheme, "secondary");
   const brand = brandGreen(resolvedTheme);
 
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.badge, { backgroundColor: bg("secondary") }]}
+      style={[styles.badge, { backgroundColor: bg }]}
       hitSlop={8}
+      accessibilityLabel={`Current cafeteria: ${name}. Tap to change.`}
+      accessibilityRole="button"
     >
       <Ionicons name="restaurant-outline" size={14} color={brand} />
-      <Text style={[styles.name, { color: tc("secondary") }]} numberOfLines={1}>
+      <Text style={[styles.name, { color: tcMuted }]} numberOfLines={1}>
         {name}
       </Text>
-      <Ionicons name="chevron-forward" size={12} color={tc("muted")} />
+      <Ionicons name="chevron-down" size={14} color={tcMuted} />
     </Pressable>
   );
 }
@@ -41,15 +43,17 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     gap: 6,
+    marginHorizontal: 20,
+    marginTop: 4,
   },
   name: {
     fontSize: 13,
     fontWeight: "500",
     lineHeight: 16,
-    maxWidth: 160,
+    flex: 1,
   },
 });

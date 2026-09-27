@@ -18,10 +18,9 @@ import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
-import { textColor, bgColor, brandGreen } from "../theme";
-import { typography } from "../theme";
+import { textColor, bgColor, borderColor, brandGreen } from "../theme";
 import FoodImage from "./FoodImage";
-import { MenuCategory } from "../types";
+import type { MenuCategory } from "@uniserve/shared-types";
 
 interface FoodCardProps {
   name: string;
@@ -55,8 +54,7 @@ export default function FoodCard({
   const { resolvedTheme } = useTheme();
   const tc = (v: "primary" | "secondary" | "muted") => textColor(resolvedTheme, v);
   const bg = bgColor(resolvedTheme, "primary");
-  const border = textColor(resolvedTheme, "primary") === "#f0f1f4"
-    ? "#2a3042" : "#e2e4e8";
+  const bc = borderColor(resolvedTheme, "default");
   const brand = brandGreen(resolvedTheme);
 
   return (
@@ -64,7 +62,7 @@ export default function FoodCard({
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
-        { backgroundColor: bg, borderColor: border },
+        { backgroundColor: bg, borderColor: bc },
         pressed && styles.pressed,
       ]}
     >

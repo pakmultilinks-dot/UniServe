@@ -1,25 +1,79 @@
 /**
  * UniServe — Profile Screen
  *
- * User profile info, settings, and logout.
+ * User profile info organized into sections: Account, Security, Support.
+ * Uses Ionicons for all icons, no emojis.
  */
 import React from "react";
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useTheme } from "../../../src/contexts/ThemeContext";
-import { LguSeal } from "../../../src/components/LguSeal";
-import { Card } from "../../../src/components/ui";
-import { textColor, bgColor, borderColor, brandGreen } from "../../../src/theme";
-import { Ionicons } from "@expo/vector-icons";
+import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
+
+// ── Helpers ──
+
+function formatRole(role?: string): string {
+  if (!role) return "Student";
+  return role
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// ── Section Row ──
+
+interface SectionRowProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value?: string;
+  onPress?: () => void;
+  color?: string;
+  isLast?: boolean;
+  theme: "light" | "dark";
+}
+
+function SectionRow({ icon, label, value, onPress, color, isLast, theme }: SectionRowProps) {
+  const tc = textColor(theme, "primary");
+  const tcMuted = textColor(theme, "muted");
+  const bc = borderColor(theme, "subtle");
+
+  const row = (
+    <View style={[styles.row, !isLast && { borderBottomColor: bc, borderBottomWidth: StyleSheet.hairlineWidth }]}>
+      <Ionicons name={icon} size={20} color={color ?? tcMuted} />
+      <Text style={[styles.rowLabel, { color: color ?? tc }]}>{label}</Text>
+      <View style={styles.rowRight}>
+        {value && <Text style={[styles.rowValue, { color: tcMuted }]}>{value}</Text>}
+        <Ionicons name="chevron-forward" size={16} color={tcMuted} style={{ opacity: 0.5 }} />
+      </View>
+    </View>
+  );
+
+  if (onPress) {
+    return <Pressable onPress={onPress}>{row}</Pressable>;
+  }
+  return row;
+}
+
+// ── Screen ──
 
 export default function ProfileScreen() {
   const { user, logout, logoutAll } = useAuth();
   const { resolvedTheme } = useTheme();
+  const theme = resolvedTheme as "light" | "dark";
 
-  const tc = (variant: "primary" | "secondary" | "muted") => textColor(resolvedTheme, variant);
-  const bg = (variant: "primary" | "secondary" | "tertiary") => bgColor(resolvedTheme, variant);
-  const bc = (variant: "default" | "subtle") => borderColor(resolvedTheme, variant);
+  const brand = brandGreen(resolvedTheme);
+  const tc = textColor(resolvedTheme, "primary");
+  const tcMuted = textColor(resolvedTheme, "muted");
+  const bg = bgColor(resolvedTheme, "primary");
+  const bgSec = bgColor(resolvedTheme, "secondary");
+  const bc = borderColor(resolvedTheme, "default");
+
+  const initials = [user?.first_name?.[0], user?.last_name?.[0]]
+    .filter(Boolean)
+    .join("")
+    .toUpperCase() || "?";
 
   const handleLogout = () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -35,96 +89,86 @@ export default function ProfileScreen() {
     ]);
   };
 
-  // Get initials
-  const initials = [user?.first_name?.[0], user?.last_name?.[0]]
-    .filter(Boolean)
-    .join("")
-    .toUpperCase() || "?";
-
   return (
     <ScrollView
-      style={[styles.screen, { backgroundColor: bg("secondary") }]}
+      style={[styles.screen, { backgroundColor: bgSec }]}
       contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
     >
-      {/* Profile Header */}
+      {/* ── Profile Header ── */}
       <View style={styles.header}>
-        <View style={[styles.avatar, { backgroundColor: brandGreen(resolvedTheme) }]}>
+        <View style={[styles.avatar, { backgroundColor: brand }]}>
           <Text style={styles.avatarText}>{initials}</Text>
         </View>
-        <Text style={[styles.name, { color: tc("primary") }]}>
+        <Text style={[styles.name, { color: tc }]}>
           {user?.first_name} {user?.last_name}
         </Text>
-        <Text style={[styles.email, { color: tc("muted") }]}>{user?.university_email}</Text>
-        <View style={[styles.roleBadge, { backgroundColor: brandGreen(resolvedTheme) + "20" }]}>
-          <Text style={[styles.roleText, { color: brandGreen(resolvedTheme) }]}>
-            {user?.role?.replace("_", " ").toUpperCase() ?? "USER"}
+        <Text style={[styles.email, { color: tcMuted }]}>{user?.university_email}</Text>
+        <View style={[styles.roleBadge, { backgroundColor: brand + "15" }]}>
+          <Text style={[styles.roleText, { color: brand }]}>
+            {formatRole(user?.role)}
           </Text>
         </View>
       </View>
 
-      {/* Info Card */}
-      <Card style={{ backgroundColor: bg("primary"), borderColor: bc("default") }}>
-        <InfoRow label="University ID" value={user?.university_id ?? "—"} tc={tc} bc={bc} />
-        <InfoRow label="Email Verified" value={user?.email_verified ? "Yes ✓" : "No"} tc={tc} bc={bc} isLast />
-      </Card>
+      {/* ── Account Section ── */}
+      <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
+        <Text style={[styles.sectionTitle, { color: tcMuted }]}>ACCOUNT</Text>
+        <SectionRow icon="person-outline" label="University ID" value={user?.university_id ?? "—"} theme={theme} />
+        <SectionRow
+          icon={user?.email_verified ? "checkmark-circle-outline" : "alert-circle-outline"}
+          label="Email Verified"
+          value={user?.email_verified ? "Verified" : "Not verified"}
+          color={user?.email_verified ? functionalColor(resolvedTheme, "success") : functionalColor(resolvedTheme, "error")}
+          theme={theme}
+        />
+        <SectionRow icon="school-outline" label="Category" value={user?.category ?? "—"} isLast theme={theme} />
+      </View>
 
-      {/* Actions */}
-      <Card style={{ backgroundColor: bg("primary"), borderColor: bc("default") }}>
-        <TouchableOpacity style={[styles.actionBtn, { borderBottomColor: bc("subtle") }]} onPress={handleLogoutAll}>
-          <Text style={{ color: tc("primary"), fontSize: 15 }}>Sign Out All Devices</Text>
-        </TouchableOpacity>
-      </Card>
+      {/* ── Security Section ── */}
+      <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
+        <Text style={[styles.sectionTitle, { color: tcMuted }]}>SECURITY</Text>
+        <SectionRow icon="lock-closed-outline" label="Change Password" onPress={() => {}} theme={theme} />
+        <SectionRow
+          icon="phone-portrait-outline"
+          label="Sign Out All Devices"
+          onPress={handleLogoutAll}
+          isLast
+          theme={theme}
+        />
+      </View>
 
-      {/* Logout */}
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Sign Out</Text>
-      </TouchableOpacity>
+      {/* ── Support Section ── */}
+      <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
+        <Text style={[styles.sectionTitle, { color: tcMuted }]}>SUPPORT</Text>
+        <SectionRow icon="help-circle-outline" label="Help Center" onPress={() => {}} theme={theme} />
+        <SectionRow icon="document-text-outline" label="Terms of Service" onPress={() => {}} theme={theme} />
+        <SectionRow icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => {}} isLast theme={theme} />
+      </View>
 
-      {/* Footer */}
+      {/* ── Logout ── */}
+      <Pressable style={[styles.logoutBtn, { borderColor: functionalColor(resolvedTheme, "error") + "30" }]} onPress={handleLogout}>
+        <Ionicons name="log-out-outline" size={18} color={functionalColor(resolvedTheme, "error")} />
+        <Text style={[styles.logoutText, { color: functionalColor(resolvedTheme, "error") }]}>Sign Out</Text>
+      </Pressable>
+
+      {/* ── Footer ── */}
       <View style={styles.footer}>
-        <LguSeal size="sm" />
-        <Text style={[styles.footerText, { color: tc("muted") }]}>
-          UniServe v0.1.0
-        </Text>
+        <Text style={[styles.footerText, { color: tcMuted }]}>Lahore Garrison University</Text>
+        <Text style={[styles.footerVersion, { color: tcMuted }]}>UniServe v0.1.0</Text>
       </View>
     </ScrollView>
   );
 }
 
-function InfoRow({
-  label,
-  value,
-  tc,
-  bc,
-  isLast = false,
-}: {
-  label: string;
-  value: string;
-  tc: (v: "primary" | "secondary" | "muted") => string;
-  bc: (v: "default" | "subtle") => string;
-  isLast?: boolean;
-}) {
-  return (
-    <View style={[styles.infoRow, !isLast && { borderBottomColor: bc("subtle"), borderBottomWidth: StyleSheet.hairlineWidth }]}>
-      <Text style={{ color: tc("muted"), fontSize: 13, flex: 1 }}>{label}</Text>
-      <Text style={{ color: tc("primary"), fontSize: 14, fontWeight: "500" }}>{value}</Text>
-    </View>
-  );
-}
+// ── Styles ──
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 24,
-    paddingVertical: 20,
-  },
+  screen: { flex: 1 },
+  content: { padding: 16, paddingBottom: 40 },
+
+  // Header
+  header: { alignItems: "center", marginBottom: 24, paddingVertical: 16 },
   avatar: {
     width: 72,
     height: 72,
@@ -133,60 +177,63 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 12,
   },
-  avatarText: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  name: {
-    fontSize: 22,
-    fontWeight: "700",
-  },
-  email: {
-    fontSize: 14,
-    marginTop: 4,
-  },
+  avatarText: { fontSize: 26, fontWeight: "700", color: "#ffffff" },
+  name: { fontSize: 20, fontWeight: "700" },
+  email: { fontSize: 14, marginTop: 4 },
   roleBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     marginTop: 8,
   },
-  roleText: {
+  roleText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
+
+  // Sections
+  section: {
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  sectionTitle: {
     fontSize: 11,
     fontWeight: "700",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 6,
   },
-  infoRow: {
+  row: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
   },
-  actionBtn: {
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  rowLabel: { fontSize: 15, flex: 1 },
+  rowRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
+  rowValue: { fontSize: 13 },
+
+  // Logout
   logoutBtn: {
-    marginTop: 24,
-    padding: 14,
-    borderRadius: 8,
-    backgroundColor: "#fef2f2",
-    borderWidth: 1,
-    borderColor: "#fecaca",
+    flexDirection: "row",
     alignItems: "center",
-  },
-  logoutText: {
-    color: "#991b1b",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  footer: {
-    alignItems: "center",
-    marginTop: 32,
+    justifyContent: "center",
     gap: 8,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 8,
+    marginBottom: 16,
   },
-  footerText: {
-    fontSize: 12,
-  },
+  logoutText: { fontSize: 15, fontWeight: "600" },
+
+  // Footer
+  footer: { alignItems: "center", gap: 4 },
+  footerText: { fontSize: 12 },
+  footerVersion: { fontSize: 11 },
 });

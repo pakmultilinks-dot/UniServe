@@ -15,22 +15,20 @@ interface SearchBarProps {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
-  resultCount?: number;
 }
 
 export default function SearchBar({
   value,
   onChangeText,
-  placeholder = "Search menu...",
-  resultCount,
+  placeholder = "Search food, drinks, snacks...",
 }: SearchBarProps) {
   const { resolvedTheme } = useTheme();
   const tc = (v: "primary" | "secondary" | "muted") => textColor(resolvedTheme, v);
-  const bg = (v: "primary" | "secondary" | "tertiary") => bgColor(resolvedTheme, v);
+  const bg = bgColor(resolvedTheme, "secondary");
 
   return (
     <View style={styles.wrapper}>
-      <View style={[styles.container, { backgroundColor: bg("secondary") }]}>
+      <View style={[styles.container, { backgroundColor: bg }]}>
         <Ionicons name="search" size={18} color={tc("muted")} style={styles.icon} />
         <TextInput
           style={[styles.input, { color: tc("primary") }]}
@@ -52,12 +50,6 @@ export default function SearchBar({
           </Pressable>
         )}
       </View>
-      {resultCount !== undefined && value.length > 0 && (
-        <View style={styles.resultCount}>
-          <View style={[styles.resultDot, { backgroundColor: tc("muted") }]} />
-          <View style={[styles.resultLine, { backgroundColor: bg("tertiary") }]} />
-        </View>
-      )}
     </View>
   );
 }
@@ -85,22 +77,5 @@ const styles = StyleSheet.create({
   },
   clearBtn: {
     marginLeft: 8,
-  },
-  resultCount: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    paddingHorizontal: 2,
-  },
-  resultDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginRight: 6,
-  },
-  resultLine: {
-    height: 1,
-    flex: 1,
-    borderRadius: 1,
   },
 });

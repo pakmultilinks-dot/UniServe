@@ -2,14 +2,16 @@
  * UniServe — Item Detail Screen
  *
  * Design spec:
- * - Full-width image with aspectRatio 3/2
+ * - Full-width image with borderRadius 16-20
+ * - Back button (absolute top-left, 44x44 touch target)
+ * - Favorite icon (absolute top-right)
  * - Category badge (brandGreen+15% opacity bg, brandGreen text, 12px/600)
  * - Name 24px/700, Price 20px/700, availability dot + text
+ * - Prep time with clock-outline Ionicon
  * - Description with uppercase label
  * - Dietary/Allergens section
- * - Bottom bar: quantity control (borderRadius 10, borderWidth 1, height 48)
+ * - Bottom bar: QuantityStepper (borderRadius 10, borderWidth 1, height 48)
  *   + "Add to Cart" button (flex:1, height 48, borderRadius 10, brandGreen bg)
- * - Prep time with clock icon
  */
 import React, { useState, useEffect, useCallback } from "react";
 import {
@@ -22,10 +24,10 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
-import { Spinner } from "../../../src/components/ui";
 import FoodImage from "../../../src/components/FoodImage";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
 import { getMenuItem } from "../../../src/services/data";
@@ -57,15 +59,19 @@ export default function ItemDetailScreen() {
   const { selectedCafeteria, addToCart } = useCart();
 
   const brand = brandGreen(resolvedTheme);
-  const tc = (v: "primary" | "secondary" | "muted") => textColor(resolvedTheme, v);
-  const bg = (v: "primary" | "secondary" | "tertiary") => bgColor(resolvedTheme, v);
-  const bc = (v: "default" | "subtle") => borderColor(resolvedTheme, v);
+  const tc = textColor(resolvedTheme, "primary");
+  const tcSec = textColor(resolvedTheme, "secondary");
+  const tcMuted = textColor(resolvedTheme, "muted");
+  const bg = bgColor(resolvedTheme, "primary");
+  const bgSec = bgColor(resolvedTheme, "secondary");
+  const bc = borderColor(resolvedTheme, "default");
 
   const [item, setItem] = useState<MenuItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState("");
+  const [isFavorite, setIsFavorite] = useState(false);
 
   useEffect(() => {
     if (!id || !selectedCafeteria) return;
@@ -97,8 +103,10 @@ export default function ItemDetailScreen() {
   // Loading
   if (isLoading) {
     return (
-      <View style={[styles.screen, { backgroundColor: bg("primary") }]}>
-        <Spinner label="Loading item..." />
+      <View style={[styles.screen, { backgroundColor: bg }]}>
+        <View style={styles.loadingCenter}>
+          <ActivityIndicator size="large" color={brand} />
+        </View>
       </View>
     );
   }
@@ -106,14 +114,14 @@ export default function ItemDetailScreen() {
   // Error / not found
   if (error || !item) {
     return (
-      <View style={[styles.screen, { backgroundColor: bg("primary") }]}>
+      <View style={[styles.screen, { backgroundColor: bg }]}>
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={48} color={functionalColor(resolvedTheme, "error")} />
-          <Text style={[styles.errorTitle, { color: tc("primary") }]}>
+          <Ionicons name="alert-circle-outline" size={48} color={functionalColor(resolvedTheme, "error")} />
+          <Text style={[styles.errorTitle, { color: tc }]}>
             {error || "Item not found"}
           </Text>
           <Pressable onPress={() => router.back()} style={styles.backLink}>
-            <Text style={[styles.backLinkText, { color: brand }]}>← Go back</Text>
+            <Text style={[styles.backLinkText, { color: brand }]}>Go back</Text>
           </Pressable>
         </View>
       </View>
@@ -121,18 +129,44 @@ export default function ItemDetailScreen() {
   }
 
   return (
-    <View style={[styles.screen, { backgroundColor: bg("primary") }]}>
+    <View style={[styles.screen, { backgroundColor: bg }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Full-width Image ── */}
-        <FoodImage
-          uri={item.image_url}
-          category={item.category}
-          style={styles.heroImage}
-          borderRadius={0}
-        />
+        {/* ── Full-width Hero Image ── */}
+        <View>
+          <FoodImage
+            uri={item.image_url}
+            category={item.category}
+            style={styles.heroImage}
+            borderRadius={0}
+          />
+
+          {/* Back button overlay */}
+          <SafeAreaView style={styles.backOverlay} edges={["top"]}>
+            <Pressable
+              style={[styles.circleBtn, { backgroundColor: bg + "CC" }]}
+              onPress={() => router.back()}
+              hitSlop={12}
+            >
+              <Ionicons name="chevron-back" size={22} color={tc} />
+            </Pressable>
+          </SafeAreaView>
+
+          {/* Favorite button overlay */}
+          <Pressable
+            style={[styles.favBtn, { backgroundColor: bg + "CC" }]}
+            onPress={() => setIsFavorite(!isFavorite)}
+            hitSlop={12}
+          >
+            <Ionicons
+              name={isFavorite ? "heart" : "heart-outline"}
+              size={20}
+              color={isFavorite ? functionalColor(resolvedTheme, "error") : tc}
+            />
+          </Pressable>
+        </View>
 
         {/* ── Content ── */}
         <View style={styles.content}>
@@ -144,7 +178,7 @@ export default function ItemDetailScreen() {
           </View>
 
           {/* Name */}
-          <Text style={[styles.itemName, { color: tc("primary") }]}>{item.name}</Text>
+          <Text style={[styles.itemName, { color: tc }]}>{item.name}</Text>
 
           {/* Price */}
           <Text style={[styles.itemPrice, { color: brand }]}>
@@ -165,32 +199,45 @@ export default function ItemDetailScreen() {
                 { color: functionalColor(resolvedTheme, item.is_available ? "success" : "error") },
               ]}
             >
-              {item.is_available ? "Available" : "Out of stock"}
+              {item.is_available ? "Available now" : "Out of stock"}
             </Text>
           </View>
+
+          {/* Prep time */}
+          {item.preparation_time_minutes && (
+            <View style={styles.infoRow}>
+              <Ionicons name="time-outline" size={16} color={tcMuted} />
+              <Text style={[styles.infoTextMuted, { color: tcMuted }]}>
+                ~{item.preparation_time_minutes} min preparation
+              </Text>
+            </View>
+          )}
+
+          {/* Divider */}
+          <View style={[styles.divider, { backgroundColor: bc }]} />
 
           {/* Description */}
           {item.description ? (
             <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: tc("muted") }]}>DESCRIPTION</Text>
-              <Text style={[styles.descText, { color: tc("secondary") }]}>{item.description}</Text>
+              <Text style={[styles.sectionLabel, { color: tcMuted }]}>DESCRIPTION</Text>
+              <Text style={[styles.descText, { color: tcSec }]}>{item.description}</Text>
             </View>
           ) : null}
 
           {/* Dietary / Allergens */}
-          {item.dietary_info ? (
-            <View style={styles.infoRow}>
-              <Ionicons name="leaf-outline" size={18} color={functionalColor(resolvedTheme, "success")} />
-              <Text style={[styles.infoText, { color: tc("secondary") }]}>{item.dietary_info}</Text>
+          {item.dietary_info && (
+            <View style={[styles.infoTag, { backgroundColor: functionalColor(resolvedTheme, "success") + "10" }]}>
+              <Ionicons name="leaf-outline" size={16} color={functionalColor(resolvedTheme, "success")} />
+              <Text style={[styles.tagText, { color: functionalColor(resolvedTheme, "success") }]}>{item.dietary_info}</Text>
             </View>
-          ) : null}
+          )}
 
-          {item.allergens ? (
-            <View style={styles.infoRow}>
-              <Ionicons name="warning-outline" size={18} color={functionalColor(resolvedTheme, "warning")} />
-              <Text style={[styles.infoText, { color: tc("secondary") }]}>{item.allergens}</Text>
+          {item.allergens && (
+            <View style={[styles.infoTag, { backgroundColor: functionalColor(resolvedTheme, "warning") + "10" }]}>
+              <Ionicons name="warning-outline" size={16} color={functionalColor(resolvedTheme, "warning")} />
+              <Text style={[styles.tagText, { color: functionalColor(resolvedTheme, "warning") }]}>{item.allergens}</Text>
             </View>
-          ) : null}
+          )}
         </View>
 
         {/* Bottom padding for bar */}
@@ -199,51 +246,53 @@ export default function ItemDetailScreen() {
 
       {/* ── Bottom Bar ── */}
       {item.is_available && (
-        <View style={[styles.bottomBar, { backgroundColor: bg("primary"), borderTopColor: bc("default") }]}>
-          {/* Quantity Control */}
-          <View style={[styles.quantityControl, { borderColor: bc("default") }]}>
+        <SafeAreaView edges={["bottom"]} style={{ backgroundColor: bg }}>
+          <View style={[styles.bottomBar, { backgroundColor: bg, borderTopColor: bc }]}>
+            {/* Quantity Control */}
+            <View style={[styles.quantityControl, { borderColor: bc, backgroundColor: bgSec }]}>
+              <Pressable
+                style={styles.qtyButton}
+                onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+                disabled={quantity <= 1}
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={quantity <= 1 ? "remove-circle-outline" : "remove-circle"}
+                  size={22}
+                  color={quantity <= 1 ? tcMuted : brand}
+                />
+              </Pressable>
+              <Text style={[styles.qtyValue, { color: tc }]}>{quantity}</Text>
+              <Pressable
+                style={styles.qtyButton}
+                onPress={() => setQuantity((q) => Math.min(10, q + 1))}
+                disabled={quantity >= 10}
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={quantity >= 10 ? "add-circle-outline" : "add-circle"}
+                  size={22}
+                  color={quantity >= 10 ? tcMuted : brand}
+                />
+              </Pressable>
+            </View>
+
+            {/* Add Button */}
             <Pressable
-              style={styles.qtyButton}
-              onPress={() => setQuantity((q) => Math.max(1, q - 1))}
-              disabled={quantity <= 1}
+              style={[styles.addButton, { backgroundColor: isAdding ? tcMuted : brand }]}
+              onPress={handleAddToCart}
+              disabled={isAdding}
             >
-              <Ionicons
-                name="remove"
-                size={16}
-                color={quantity <= 1 ? tc("muted") : tc("secondary")}
-                style={{ opacity: quantity <= 1 ? 0.3 : 1 }}
-              />
-            </Pressable>
-            <Text style={[styles.qtyValue, { color: tc("primary") }]}>{quantity}</Text>
-            <Pressable
-              style={styles.qtyButton}
-              onPress={() => setQuantity((q) => Math.min(10, q + 1))}
-              disabled={quantity >= 10}
-            >
-              <Ionicons
-                name="add"
-                size={16}
-                color={quantity >= 10 ? tc("muted") : tc("secondary")}
-                style={{ opacity: quantity >= 10 ? 0.3 : 1 }}
-              />
+              {isAdding ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.addButtonText}>
+                  Add · {formatPrice(item.price * quantity)}
+                </Text>
+              )}
             </Pressable>
           </View>
-
-          {/* Add Button */}
-          <Pressable
-            style={[styles.addButton, { backgroundColor: isAdding ? tc("muted") : brand }]}
-            onPress={handleAddToCart}
-            disabled={isAdding}
-          >
-            {isAdding ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text style={styles.addButtonText}>
-                Add · {formatPrice(item.price * quantity)}
-              </Text>
-            )}
-          </Pressable>
-        </View>
+        </SafeAreaView>
       )}
     </View>
   );
@@ -255,6 +304,11 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
+  loadingCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   scrollContent: {
     paddingBottom: 32,
   },
@@ -262,6 +316,32 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 3 / 2,
   },
+
+  // Overlays
+  backOverlay: {
+    position: "absolute",
+    top: 8,
+    left: 12,
+  },
+  circleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  favBtn: {
+    position: "absolute",
+    top: 56,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Content
   content: {
     padding: 20,
   },
@@ -301,8 +381,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+  },
+  infoTextMuted: {
+    fontSize: 13,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 16,
+  },
   section: {
-    marginTop: 16,
+    marginBottom: 12,
   },
   sectionLabel: {
     fontSize: 12,
@@ -313,18 +406,23 @@ const styles = StyleSheet.create({
   },
   descText: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
   },
-  infoRow: {
+  infoTag: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    padding: 10,
+    borderRadius: 8,
     marginTop: 8,
   },
-  infoText: {
-    fontSize: 14,
-    fontWeight: "400",
+  tagText: {
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
   },
+
+  // Error
   errorContainer: {
     flex: 1,
     alignItems: "center",
@@ -344,12 +442,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
+
   // Bottom bar
   bottomBar: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    paddingBottom: 28,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 12,
   },
@@ -361,13 +460,13 @@ const styles = StyleSheet.create({
     height: 48,
   },
   qtyButton: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
   qtyValue: {
-    width: 48,
+    width: 40,
     textAlign: "center",
     fontSize: 16,
     fontWeight: "600",

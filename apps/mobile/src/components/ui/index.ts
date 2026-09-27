@@ -4,8 +4,14 @@ export { Card, CardHeader } from "./Card";
 export { Spinner, PageSpinner } from "./Spinner";
 export { EmptyState } from "./EmptyState";
 export { StatusChip } from "./StatusChip";
+export { BottomSheet, BottomSheetRow } from "./BottomSheet";
+export { QuantityStepper } from "./QuantityStepper";
+export { Divider } from "./Divider";
+export { IconButton } from "./IconButton";
+export { SectionHeader } from "./SectionHeader";
+export { ErrorState } from "./ErrorState";
 
-// New design components
+// Domain components
 export { default as FoodCard } from "../FoodCard";
 export { default as FoodImage } from "../FoodImage";
 export { default as SearchBar } from "../SearchBar";

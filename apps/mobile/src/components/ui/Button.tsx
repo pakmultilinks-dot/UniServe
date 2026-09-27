@@ -37,9 +37,9 @@ const VARIANT_STYLES: Record<ButtonVariant, { bg: string; text: string; border?:
 };
 
 const SIZE_STYLES: Record<ButtonSize, { paddingV: number; paddingH: number; fontSize: number; borderRadius: number }> = {
-  sm: { paddingV: 8, paddingH: 16, fontSize: 14, borderRadius: 6 },
-  md: { paddingV: 12, paddingH: 24, fontSize: 16, borderRadius: 8 },
-  lg: { paddingV: 16, paddingH: 32, fontSize: 18, borderRadius: 10 },
+  sm: { paddingV: 8, paddingH: 16, fontSize: 14, borderRadius: 10 },
+  md: { paddingV: 12, paddingH: 24, fontSize: 16, borderRadius: 10 },
+  lg: { paddingV: 16, paddingH: 32, fontSize: 18, borderRadius: 12 },
 };
 
 export function Button({

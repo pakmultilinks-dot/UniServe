@@ -2,25 +2,29 @@
  * CategoryChips — Horizontal scrollable category filter.
  *
  * Design spec: paddingHorizontal 20, gap 8, chip paddingHorizontal 14,
- * paddingVertical 8, borderRadius 20. Active: brandGreen bg, white text.
+ * paddingVertical 8, borderRadius 20 (pill). Active: brandGreen bg, white text.
  * Inactive: bgSecondary bg, textSecondary text.
+ * NO emojis — uses Ionicons for each category.
  */
 
 import React from "react";
-import { ScrollView, Pressable, Text, StyleSheet, ViewStyle } from "react-native";
+import { ScrollView, Pressable, Text, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
 import { textColor, bgColor, brandGreen } from "../theme";
 
-const CATEGORY_EMOJI: Record<string, string> = {
-  all: "🍽️",
-  breakfast: "🍳",
-  main_course: "🍛",
-  side_dish: "🥗",
-  dessert: "🍰",
-  beverage: "☕",
-  snack: "🍿",
-  salad: "🥬",
-  soup: "🍜",
+type IoniconName = keyof typeof Ionicons.glyphMap;
+
+const CATEGORY_ICONS: Record<string, IoniconName> = {
+  all: "grid-outline",
+  breakfast: "cafe-outline",
+  main_course: "restaurant-outline",
+  side_dish: "leaf-outline",
+  dessert: "ice-cream-outline",
+  beverage: "beer-outline",
+  snack: "pizza-outline",
+  salad: "nutrition-outline",
+  soup: "flask-outline",
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -35,7 +39,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   soup: "Soup",
 };
 
-export type CategoryKey = keyof typeof CATEGORY_EMOJI;
+export type CategoryKey = keyof typeof CATEGORY_ICONS;
 
 interface CategoryChipsProps {
   categories: CategoryKey[];
@@ -72,7 +76,12 @@ export default function CategoryChips({
               },
             ]}
           >
-            <Text style={styles.emoji}>{CATEGORY_EMOJI[cat] ?? "🍽️"}</Text>
+            <Ionicons
+              name={CATEGORY_ICONS[cat] ?? "grid-outline"}
+              size={14}
+              color={isActive ? "#ffffff" : tc("secondary")}
+              style={styles.icon}
+            />
             <Text
               style={[
                 styles.label,
@@ -103,8 +112,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
   },
-  emoji: {
-    fontSize: 14,
+  icon: {
     marginRight: 6,
   },
   label: {

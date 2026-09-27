@@ -2,23 +2,40 @@
  * UniServe — App Route Group Layout
  *
  * Stack navigator wrapping the tab navigator and detail screens.
- * The tabs provide the main navigation, while cart and item detail
- * are pushed on top (hiding the tab bar).
+ * The tabs provide the main navigation, while cart, checkout,
+ * item detail, and order detail are pushed on top (hiding the tab bar).
  */
 import React from "react";
 import { Stack } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { TouchableOpacity, Platform } from "react-native";
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { bgColor, textColor, brandGreen } from "../../src/theme";
+
+function BackButton({ onPress }: { onPress: () => void }) {
+  const { resolvedTheme } = useTheme();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      style={{ paddingLeft: 4, minWidth: 44, minHeight: 44, justifyContent: "center" }}
+    >
+      <Ionicons name="chevron-back" size={24} color={textColor(resolvedTheme, "primary")} />
+    </TouchableOpacity>
+  );
+}
 
 export default function AppLayout() {
   const { resolvedTheme } = useTheme();
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
+  const brand = brandGreen(resolvedTheme);
 
   return (
     <Stack
       screenOptions={{
         headerShown: false,
+        animation: "slide_from_right",
       }}
     >
       <Stack.Screen name="(tabs)" />
@@ -26,22 +43,55 @@ export default function AppLayout() {
         name="cart"
         options={{
           headerShown: true,
-          title: "Cart",
+          title: "My Cart",
           headerStyle: { backgroundColor: bg },
-          headerTintColor: tc,
-          headerTitleStyle: { fontWeight: "600", fontSize: 16 },
-          presentation: "card",
+          headerTintColor: brand,
+          headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
+          headerShadowVisible: false,
+          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
         }}
       />
       <Stack.Screen
         name="item/[id]"
         options={{
-          headerShown: true,
-          title: "",
-          headerStyle: { backgroundColor: bg },
-          headerTintColor: tc,
-          headerTitleStyle: { fontWeight: "600", fontSize: 16 },
+          headerShown: false,
           presentation: "card",
+        }}
+      />
+      <Stack.Screen
+        name="checkout"
+        options={{
+          headerShown: true,
+          title: "Checkout",
+          headerStyle: { backgroundColor: bg },
+          headerTintColor: brand,
+          headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
+          headerShadowVisible: false,
+          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+        }}
+      />
+      <Stack.Screen
+        name="order/[id]"
+        options={{
+          headerShown: true,
+          title: "Order Details",
+          headerStyle: { backgroundColor: bg },
+          headerTintColor: brand,
+          headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
+          headerShadowVisible: false,
+          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+        }}
+      />
+      <Stack.Screen
+        name="order/[id]/qr"
+        options={{
+          headerShown: true,
+          title: "Pickup QR",
+          headerStyle: { backgroundColor: bg },
+          headerTintColor: brand,
+          headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
+          headerShadowVisible: false,
+          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
         }}
       />
     </Stack>

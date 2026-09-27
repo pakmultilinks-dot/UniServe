@@ -1,8 +1,13 @@
 /**
  * UniServe — Login Screen
  *
- * LGU-branded login with proper theming, password visibility toggle,
- * and error/success states.
+ * Institutional but modern login with:
+ * - LGU seal, brand wordmark, proper subtitle
+ * - Email + password form with 48px height inputs
+ * - Forgot password link → actual route
+ * - Register link
+ * - Proper footer: "Lahore Garrison University"
+ * - Theme-aware, dark mode ready
  */
 import React, { useState } from "react";
 import {
@@ -15,13 +20,14 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { LguSeal } from "../../src/components/LguSeal";
 import { Button } from "../../src/components/ui";
 import { PasswordInput, LguInput } from "../../src/components/ui/Input";
-import { colors, textColor, bgColor, borderColor } from "../../src/theme";
+import { colors, textColor, bgColor, borderColor, functionalColor } from "../../src/theme";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -32,9 +38,13 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const tc = (variant: "primary" | "secondary" | "muted") => textColor(resolvedTheme, variant);
-  const bg = (variant: "primary" | "secondary" | "tertiary") => bgColor(resolvedTheme, variant);
-  const bc = (variant: "default" | "subtle") => borderColor(resolvedTheme, variant);
+  const bg = bgColor(resolvedTheme, "secondary");
+  const bgPrimary = bgColor(resolvedTheme, "primary");
+  const tc = textColor(resolvedTheme, "primary");
+  const tcSec = textColor(resolvedTheme, "secondary");
+  const tcMuted = textColor(resolvedTheme, "muted");
+  const bc = borderColor(resolvedTheme, "default");
+  const brand = colors.brand[700];
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -55,79 +65,86 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.screen, { backgroundColor: bg("secondary") }]}
+      style={[styles.screen, { backgroundColor: bg }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.container}>
-          {/* LGU Seal */}
+        {/* Seal */}
+        <View style={styles.sealRow}>
           <LguSeal size="lg" />
-
-          {/* Brand */}
-          <Text style={[styles.title, { color: tc("primary") }]}>UniServe</Text>
-          <Text style={[styles.subtitle, { color: tc("muted") }]}>
-            University Cafeteria Platform
-          </Text>
-
-          {/* Form Card */}
-          <View style={[styles.card, { backgroundColor: bg("primary"), borderColor: bc("default") }]}>
-            {error ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>⚠ {error}</Text>
-              </View>
-            ) : null}
-
-            <LguInput
-              label="University Email"
-              placeholder="you@lgu.edu.pk"
-              value={email}
-              onChangeText={(text: string) => { setEmail(text); setError(""); }}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="email"
-            />
-
-            <PasswordInput
-              label="Password"
-              placeholder="Enter your password"
-              value={password}
-              onChangeText={(text: string) => { setPassword(text); setError(""); }}
-              autoComplete="password"
-            />
-
-            <Button
-              title={isLoading ? "Signing in..." : "Sign In"}
-              onPress={handleLogin}
-              loading={isLoading}
-              disabled={isLoading}
-              fullWidth
-            />
-
-            {/* Links */}
-            <View style={styles.links}>
-              <TouchableOpacity onPress={() => router.push("/login")}>
-                <Text style={[styles.link, { color: colors.brand[700] }]}>Forgot password?</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Register link */}
-          <View style={styles.registerRow}>
-            <Text style={{ color: tc("secondary"), fontSize: 14 }}>Don&apos;t have an account? </Text>
-            <TouchableOpacity onPress={() => router.push("/register")}>
-              <Text style={[styles.registerLink, { color: colors.brand[700] }]}>Register</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Footer */}
-          <Text style={[styles.footer, { color: tc("muted") }]}>
-            Larino Technological University
-          </Text>
         </View>
+
+        {/* Brand */}
+        <Text style={[styles.wordmark, { color: tc }]}>UniServe</Text>
+        <Text style={[styles.subtitle, { color: tcMuted }]}>
+          Use your LGU university credentials
+        </Text>
+
+        {/* Form */}
+        <View style={styles.form}>
+          {error ? (
+            <View style={[styles.errorBox, { backgroundColor: functionalColor(resolvedTheme, "error") + "10", borderColor: functionalColor(resolvedTheme, "error") + "40" }]}>
+              <Ionicons name="alert-circle" size={16} color={functionalColor(resolvedTheme, "error")} />
+              <Text style={[styles.errorText, { color: functionalColor(resolvedTheme, "error") }]}>
+                {error}
+              </Text>
+            </View>
+          ) : null}
+
+          <LguInput
+            label="University Email"
+            placeholder="you@lgu.edu.pk"
+            value={email}
+            onChangeText={(text: string) => { setEmail(text); setError(""); }}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+          />
+
+          <PasswordInput
+            label="Password"
+            placeholder="Enter your password"
+            value={password}
+            onChangeText={(text: string) => { setPassword(text); setError(""); }}
+            autoComplete="password"
+          />
+
+          {/* Forgot password */}
+          <TouchableOpacity
+            onPress={() => router.push("/forgot-password")}
+            style={styles.forgotRow}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[styles.forgotLink, { color: brand }]}>Forgot password?</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 12 }} />
+
+          <Button
+            title={isLoading ? "Signing in..." : "Sign In"}
+            onPress={handleLogin}
+            loading={isLoading}
+            disabled={isLoading}
+            fullWidth
+          />
+        </View>
+
+        {/* Register */}
+        <View style={styles.registerRow}>
+          <Text style={{ color: tcSec, fontSize: 14 }}>Don&apos;t have an account? </Text>
+          <TouchableOpacity onPress={() => router.push("/register")}>
+            <Text style={[styles.registerLink, { color: brand }]}>Register</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Footer */}
+        <Text style={[styles.footer, { color: tcMuted }]}>
+          Lahore Garrison University
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -139,46 +156,47 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 32,
   },
-  container: {
+  sealRow: {
     alignItems: "center",
+    marginBottom: 4,
   },
-  title: {
+  wordmark: {
     fontSize: 28,
     fontWeight: "700",
-    marginTop: 16,
+    textAlign: "center",
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 14,
+    textAlign: "center",
     marginTop: 4,
     marginBottom: 32,
   },
-  card: {
-    width: "100%",
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 24,
+  form: {
+    marginBottom: 8,
   },
   errorBox: {
-    backgroundColor: "#fef2f2",
-    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 10,
     padding: 12,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#fecaca",
   },
   errorText: {
-    color: "#991b1b",
     fontSize: 14,
+    flex: 1,
   },
-  links: {
-    marginTop: 16,
-    alignItems: "center",
+  forgotRow: {
+    alignItems: "flex-end",
+    marginTop: 4,
   },
-  link: {
+  forgotLink: {
     fontSize: 14,
     fontWeight: "500",
   },
@@ -186,6 +204,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginTop: 24,
     alignItems: "center",
+    justifyContent: "center",
   },
   registerLink: {
     fontSize: 14,
@@ -193,7 +212,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     fontSize: 12,
-    marginTop: 32,
+    marginTop: 40,
     textAlign: "center",
   },
 });

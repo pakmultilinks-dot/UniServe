@@ -18,24 +18,17 @@ type IoniconName = keyof typeof Ionicons.glyphMap;
 
 interface EmptyStateProps {
   icon?: IoniconName;
-  emoji?: string;
   title: string;
   description?: string;
 }
 
-export function EmptyState({ icon = "document-text-outline", emoji, title, description }: EmptyStateProps) {
+export function EmptyState({ icon = "document-text-outline", title, description }: EmptyStateProps) {
   const { resolvedTheme } = useTheme();
   const tc = (variant: "primary" | "secondary" | "muted") => textColor(resolvedTheme, variant);
 
-  // If emoji is passed, render it as text for backward compatibility
-  // Otherwise use Ionicons
   return (
     <View style={styles.container}>
-      {emoji ? (
-        <Text style={styles.emoji}>{emoji}</Text>
-      ) : (
-        <Ionicons name={icon} size={48} color={tc("muted")} style={styles.icon} />
-      )}
+      <Ionicons name={icon} size={48} color={tc("muted")} style={styles.icon} />
       <Text style={[styles.title, { color: tc("primary") }]}>{title}</Text>
       {description && <Text style={[styles.description, { color: tc("muted") }]}>{description}</Text>}
     </View>
@@ -50,10 +43,6 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   icon: {
-    marginBottom: 12,
-  },
-  emoji: {
-    fontSize: 48,
     marginBottom: 12,
   },
   title: {
