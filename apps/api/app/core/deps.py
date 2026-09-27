@@ -49,15 +49,15 @@ class AuthContext:
     user_agent: str | None = None
 
 
-async def _extract_token(authorization: str = Header(...)) -> str:
+async def _extract_token(authorization: str | None = Header(None)) -> str:
     """Extract Bearer token from Authorization header."""
-    if not authorization.startswith("Bearer "):
+    if not authorization or not authorization.startswith("Bearer "):
         raise AuthenticationError("Invalid authorization header format")
     return authorization[7:]
 
 
 async def get_current_user(
-    authorization: str = Header(...),
+    authorization: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
     request: Request = None,  # type: ignore[assignment]
 ) -> AuthContext:

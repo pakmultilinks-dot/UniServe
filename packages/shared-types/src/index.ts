@@ -1019,8 +1019,10 @@ export class ApiClient {
         signal: controller.signal,
       });
 
-      // Attempt token refresh on 401 (only if we had a token)
-      if (response.status === 401 && token) {
+      // Attempt token refresh on 401 when a refresh token is available.
+      // This covers both expired-access-token (token was sent) and
+      // absent-access-token (e.g. page reload) scenarios.
+      if (response.status === 401 && this.tokenProvider.getRefreshToken()) {
         const newToken = await this.handleTokenRefresh();
         if (newToken) {
           headers["Authorization"] = `Bearer ${newToken}`;
