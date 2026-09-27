@@ -30,6 +30,12 @@ let inMemoryAccessToken: string | null = null;
 
 const REFRESH_TOKEN_KEY = "uniserve_refresh_token";
 
+// Lightweight session flag cookie — NOT proof of authentication.
+// Used only by middleware as a routing hint to avoid redirecting pages
+// when the browser definitely has no tokens. Real validation happens
+// client-side in AuthContext via silent token refresh.
+const SESSION_COOKIE = "uniserve_session";
+
 function readRefreshToken(): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -52,16 +58,33 @@ function writeRefreshToken(token: string | null): void {
   }
 }
 
+/**
+ * Set or clear the lightweight session flag cookie.
+ * This is NOT authentication proof — it's a routing hint for middleware.
+ * SameSite=Lax + path=/ so it's sent on normal navigations but not CSRF.
+ * 7-day maxAge aligns with typical refresh token lifetimes.
+ */
+function setSessionCookie(active: boolean): void {
+  if (typeof document === "undefined") return;
+  if (active) {
+    document.cookie = `${SESSION_COOKIE}=1; path=/; samesite=lax; max-age=${7 * 24 * 60 * 60}`;
+  } else {
+    document.cookie = `${SESSION_COOKIE}=; path=/; samesite=lax; max-age=0`;
+  }
+}
+
 const webTokenProvider: TokenProvider = {
   getAccessToken: () => inMemoryAccessToken,
   getRefreshToken: () => readRefreshToken(),
   setTokens: (accessToken: string, refreshToken: string) => {
     inMemoryAccessToken = accessToken;
     writeRefreshToken(refreshToken);
+    setSessionCookie(true);
   },
   clearTokens: () => {
     inMemoryAccessToken = null;
     writeRefreshToken(null);
+    setSessionCookie(false);
   },
 };
 

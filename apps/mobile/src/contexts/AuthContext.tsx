@@ -11,7 +11,7 @@ import * as SecureStore from "expo-secure-store";
 
 import type { User, TokenPair } from "@uniserve/shared-types";
 import * as authApi from "../services/auth";
-import { loadPersistedTokens, setOnAuthFailure } from "../services/api";
+import { loadPersistedTokens, secureStoreTokenProvider, setOnAuthFailure } from "../services/api";
 
 const USER_KEY = "uniserve_user";
 
@@ -75,12 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ---- Token helpers ----
 
-  const storeTokens = useCallback(async (tokens: TokenPair) => {
-    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(tokens));
-    setAccessToken(tokens.access_token);
-  }, []);
-
   const clearTokens = useCallback(async () => {
+    secureStoreTokenProvider.clearTokens();
     await SecureStore.deleteItemAsync(USER_KEY);
     setAccessToken(null);
     setUser(null);
@@ -90,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setTokens = useCallback(
     async (tokens: TokenPair) => {
+      secureStoreTokenProvider.setTokens(tokens.access_token, tokens.refresh_token);
       setAccessToken(tokens.access_token);
     },
     [],
@@ -101,6 +98,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         university_email: email,
         password,
       });
+      // Persist tokens to SecureStore + in-memory cache so ApiClient can
+      // inject Authorization headers on subsequent requests
+      secureStoreTokenProvider.setTokens(
+        response.tokens.access_token,
+        response.tokens.refresh_token,
+      );
       setAccessToken(response.tokens.access_token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(response.user));
       setUser(response.user);

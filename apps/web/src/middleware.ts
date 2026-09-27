@@ -1,12 +1,15 @@
 /**
  * UniServe — Next.js Middleware
  *
- * Protects /dashboard routes: if no refresh token is stored in
- * sessionStorage, redirect to /login. The actual session validation
- * happens client-side in AuthContext via silent refresh.
+ * Protects /dashboard routes: if the lightweight session flag cookie
+ * is absent, redirect to /login. This cookie is set by the web token
+ * provider when tokens are stored and cleared when they are removed.
  *
- * NOTE: This is a lightweight guard. Full token verification happens
- * server-side via the API's auth middleware.
+ * IMPORTANT: This cookie is NOT proof of authentication. It is a
+ * routing hint — "this browser might have tokens." Real authentication
+ * validation happens client-side in AuthContext via silent token refresh.
+ * If the cookie is stale or forged, the client-side guard catches it
+ * and redirects to /login.
  */
 
 import { NextResponse } from "next/server";
@@ -26,13 +29,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // For dashboard routes, check for a session indicator cookie
-  // The actual token lives in sessionStorage (in-memory for access,
-  // sessionStorage for refresh). We use a lightweight flag cookie
-  // to avoid redirecting every page load to the server.
-  //
-  // If no session exists, redirect to login — AuthContext will handle
-  // the full validation client-side.
+  // For dashboard routes, check for the session flag cookie.
+  // Absence = definitely no tokens stored → redirect to login.
+  // Presence = tokens may exist → let page load, client-side validates.
   const sessionFlag = request.cookies.get("uniserve_session");
 
   if (pathname.startsWith("/dashboard") && !sessionFlag) {

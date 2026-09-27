@@ -56,6 +56,9 @@ export async function loadPersistedTokens(): Promise<void> {
   if (refreshToken) inMemoryRefreshToken = refreshToken;
 }
 
+// Export for direct use by AuthContext (token persistence)
+export { secureStoreTokenProvider };
+
 // ---- Client Initialization ----
 
 let onAuthFailureCallback: (() => void) | null = null;

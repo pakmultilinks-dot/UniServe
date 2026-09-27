@@ -5,7 +5,7 @@
  * Uses the shared ApiClient for consistent error handling and auth injection.
  */
 
-import { apiClient } from "./api";
+import { apiClient, secureStoreTokenProvider } from "./api";
 import type {
   LoginRequest,
   LoginResponse,
@@ -52,7 +52,11 @@ export async function pinLogin(data: PINLoginRequest): Promise<LoginResponse> {
 // ---- Token Management ----
 
 export async function refreshTokens(): Promise<TokenPair> {
-  return apiClient.post<TokenPair>("/auth/refresh");
+  const refreshToken = secureStoreTokenProvider.getRefreshToken();
+  if (!refreshToken) throw new Error("No refresh token available");
+  return apiClient.post<TokenPair>("/auth/refresh", {
+    refresh_token: refreshToken,
+  });
 }
 
 // ---- Current User ----

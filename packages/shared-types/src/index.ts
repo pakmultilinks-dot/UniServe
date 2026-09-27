@@ -31,46 +31,92 @@ export type OTPPurpose = "email_verification" | "password_reset";
 
 export type CafeteriaType = "student" | "faculty";
 
+export type OperationalStatus = "open" | "closed" | "closing_soon" | "maintenance";
+
+export type MenuCategory =
+  | "breakfast"
+  | "main_course"
+  | "side_dish"
+  | "dessert"
+  | "beverage"
+  | "snack"
+  | "salad"
+  | "soup";
+
+export type DailyMenuStatus = "draft" | "published" | "archived";
+
+export type InventoryUnit = "kg" | "g" | "L" | "mL" | "pcs" | "portions";
+
+export type CartStatus = "active" | "expired";
+
 export type OrderStatus =
   | "pending"
-  | "confirmed"
   | "preparing"
-  | "ready_for_pickup"
+  | "ready"
   | "completed"
-  | "cancelled"
-  | "no_show";
+  | "cancelled";
 
 export type OrderType = "immediate" | "scheduled";
 
 export type PaymentStatus =
   | "pending"
-  | "completed"
+  | "processing"
+  | "succeeded"
   | "failed"
-  | "refunded"
-  | "partially_refunded";
+  | "cancelled"
+  | "refund_pending"
+  | "partially_refunded"
+  | "refunded";
 
 export type PaymentMethod = "cash" | "online";
 
-export type RefundStatus = "pending" | "approved" | "rejected" | "completed";
+export type RefundStatus = "pending" | "processing" | "succeeded" | "failed";
 
-export type CartItemStatus = "active" | "checked_out" | "expired";
+export type RefundReason =
+  | "order_cancelled"
+  | "item_unavailable"
+  | "payment_error"
+  | "duplicate_payment"
+  | "cafeteria_closed"
+  | "other";
+
+export type DeliveryStatus = "pending" | "delivered" | "failed";
 
 export type NotificationType =
-  | "order_update"
-  | "payment_update"
-  | "promotion"
-  | "system"
-  | "admin_alert";
+  | "order_created"
+  | "order_confirmed"
+  | "order_rejected"
+  | "preparation_started"
+  | "order_ready"
+  | "order_cancelled"
+  | "order_delayed"
+  | "order_uncollected"
+  | "cafeteria_closed"
+  | "payment_confirmed"
+  | "refund_requested"
+  | "refund_processed"
+  | "refund_failed";
 
-export type ReportType =
-  | "daily_sales"
-  | "revenue"
-  | "popular_items"
-  | "cafeteria_performance"
-  | "user_activity"
-  | "payment_summary";
-
-export type ExportFormat = "csv" | "pdf";
+export type OrderEventType =
+  | "created"
+  | "payment_pending"
+  | "payment_confirmed"
+  | "confirmed_by_staff"
+  | "manager_rejected"
+  | "preparation_started"
+  | "ready_for_collection"
+  | "collected"
+  | "cancelled"
+  | "cancelled_by_manager"
+  | "inventory_reserved"
+  | "inventory_released"
+  | "uncollected"
+  | "delayed"
+  | "eta_updated"
+  | "cafeteria_closed"
+  | "item_unavailable"
+  | "partial_cancelled"
+  | "no_show_recorded";
 
 export type SortOrder = "asc" | "desc";
 
@@ -88,9 +134,7 @@ export interface User {
   role: UserRole;
   status: AccountStatus;
   email_verified: boolean;
-  pin_set: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 export interface TokenPair {
@@ -164,7 +208,7 @@ export interface PasswordResetRequest {
 }
 
 export interface PasswordResetConfirm {
-  user_id: string;
+  university_email: string;
   otp: string;
   new_password: string;
 }
@@ -176,12 +220,10 @@ export interface PasswordChangeRequest {
 
 export interface Session {
   id: string;
-  user_id: string;
   device_info?: string;
   ip_address?: string;
   created_at: string;
   last_activity_at: string;
-  expires_at: string;
   is_current: boolean;
 }
 
@@ -203,31 +245,39 @@ export interface AuthState {
 export interface Cafeteria {
   id: string;
   name: string;
-  cafeteria_type: CafeteriaType;
+  type: CafeteriaType;
   description?: string;
+  phone?: string;
+  email?: string;
   location?: string;
-  is_active: boolean;
   operating_hours?: string;
+  timezone: string;
+  operational_status: OperationalStatus;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface CafeteriaCreate {
   name: string;
-  cafeteria_type: CafeteriaType;
+  type: CafeteriaType;
   description?: string;
+  phone?: string;
+  email?: string;
   location?: string;
-  is_active?: boolean;
   operating_hours?: string;
+  timezone?: string;
 }
 
 export interface CafeteriaUpdate {
   name?: string;
-  cafeteria_type?: CafeteriaType;
   description?: string;
+  phone?: string;
+  email?: string;
   location?: string;
-  is_active?: boolean;
   operating_hours?: string;
+  timezone?: string;
+  is_active?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -239,11 +289,14 @@ export interface MenuItem {
   cafeteria_id: string;
   name: string;
   description?: string;
+  category: MenuCategory;
   price: number;
   currency: string;
-  category?: string;
-  is_available: boolean;
   image_url?: string;
+  dietary_info?: string;
+  allergens?: string;
+  is_available: boolean;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -251,44 +304,51 @@ export interface MenuItem {
 export interface MenuItemCreate {
   name: string;
   description?: string;
+  category: MenuCategory;
   price: number;
   currency?: string;
-  category?: string;
-  is_available?: boolean;
   image_url?: string;
+  dietary_info?: string;
+  allergens?: string;
 }
 
 export interface MenuItemUpdate {
   name?: string;
   description?: string;
+  category?: MenuCategory;
   price?: number;
   currency?: string;
-  category?: string;
-  is_available?: boolean;
   image_url?: string;
+  dietary_info?: string;
+  allergens?: string;
+  is_available?: boolean;
+  is_active?: boolean;
 }
 
 export interface DailyMenu {
   id: string;
   cafeteria_id: string;
-  date: string;
-  is_active: boolean;
+  menu_date: string;
+  status: DailyMenuStatus;
+  published_at?: string;
+  created_by?: string;
   created_at: string;
   updated_at: string;
+  items: DailyMenuItem[];
 }
 
 export interface DailyMenuCreate {
-  date: string;
-  is_active?: boolean;
-  menu_item_ids?: string[];
+  menu_date: string;
 }
 
 export interface DailyMenuItem {
   id: string;
-  daily_menu_id: string;
   menu_item_id: string;
+  special_price?: number;
+  is_available_today: boolean;
   display_order: number;
-  is_available: boolean;
+  notes?: string;
+  menu_item?: MenuItem;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -297,7 +357,6 @@ export interface DailyMenuItem {
 
 export interface Favorite {
   id: string;
-  user_id: string;
   menu_item_id: string;
   created_at: string;
 }
@@ -305,11 +364,7 @@ export interface Favorite {
 export interface FavoriteResponse {
   id: string;
   menu_item_id: string;
-  menu_item_name: string;
-  cafeteria_id: string;
-  cafeteria_name: string;
-  price: number;
-  currency: string;
+  menu_item?: MenuItem;
   created_at: string;
 }
 
@@ -321,9 +376,10 @@ export interface InventoryItem {
   id: string;
   cafeteria_id: string;
   menu_item_id: string;
-  current_quantity: number;
-  low_stock_threshold: number;
-  unit: string;
+  quantity: number;
+  unit: InventoryUnit;
+  low_threshold: number;
+  is_low: boolean;
   last_restocked_at?: string;
   created_at: string;
   updated_at: string;
@@ -331,15 +387,15 @@ export interface InventoryItem {
 
 export interface InventoryCreate {
   menu_item_id: string;
-  current_quantity: number;
-  low_stock_threshold?: number;
-  unit?: string;
+  quantity?: number;
+  unit: InventoryUnit;
+  low_threshold?: number;
 }
 
 export interface InventoryUpdate {
-  current_quantity?: number;
-  low_stock_threshold?: number;
-  unit?: string;
+  quantity?: number;
+  unit?: InventoryUnit;
+  low_threshold?: number;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -363,7 +419,7 @@ export interface CartResponse {
   id: string;
   user_id: string;
   cafeteria_id: string;
-  status: string;
+  status: CartStatus;
   items: CartItemResponse[];
   total_amount: number;
   item_count: number;
@@ -393,30 +449,39 @@ export interface CartCheckoutRequest {
 
 export interface OrderItem {
   id: string;
-  order_id: string;
-  menu_item_id: string;
-  menu_item_name: string;
-  quantity: number;
+  item_name: string;
   unit_price: number;
+  quantity: number;
   subtotal: number;
   currency: string;
 }
 
 export interface Order {
   id: string;
+  order_number: number;
   user_id: string;
   cafeteria_id: string;
-  cafeteria_name: string;
   status: OrderStatus;
   order_type: OrderType;
+  payment_method: PaymentMethod;
   total_amount: number;
   currency: string;
-  payment_method: PaymentMethod;
-  payment_status: PaymentStatus;
-  note?: string;
+  order_date: string;
   scheduled_collection_time?: string;
-  pickup_code?: string;
   items: OrderItem[];
+  note?: string;
+  inventory_reserved: boolean;
+  confirmed_at?: string;
+  preparation_started_at?: string;
+  ready_at?: string;
+  pickup_deadline?: string;
+  eta_minutes?: number;
+  collection_method?: string;
+  rejection_reason?: string;
+  rejection_note?: string;
+  collected_at?: string;
+  cancelled_at?: string;
+  cancellation_reason?: string;
   created_at: string;
   updated_at: string;
 }
@@ -442,19 +507,17 @@ export interface OrderUpdateStatus {
 export interface Payment {
   id: string;
   order_id: string;
-  user_id: string;
   amount: number;
   currency: string;
-  method: PaymentMethod;
   status: PaymentStatus;
-  transaction_id?: string;
+  provider_name?: string;
   created_at: string;
   updated_at: string;
 }
 
 export interface PaymentCreate {
   order_id: string;
-  method: PaymentMethod;
+  idempotency_key: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -463,21 +526,26 @@ export interface PaymentCreate {
 
 export interface Refund {
   id: string;
-  payment_id: string;
   order_id: string;
-  user_id: string;
+  payment_id: string;
   amount: number;
   currency: string;
-  reason: string;
   status: RefundStatus;
+  reason: RefundReason;
+  reason_note?: string;
+  requested_by: string;
   processed_by?: string;
-  processed_at?: string;
+  provider_reference?: string;
   created_at: string;
+  processed_at?: string;
   updated_at: string;
 }
 
 export interface RefundRequest {
-  reason: string;
+  amount: number;
+  reason: RefundReason;
+  reason_note?: string;
+  idempotency_key: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -486,99 +554,307 @@ export interface RefundRequest {
 
 export interface Notification {
   id: string;
-  user_id: string;
-  title: string;
-  message: string;
   notification_type: NotificationType;
+  title: string;
+  body: string;
+  order_id?: string;
+  cafeteria_id?: string;
+  reference_type?: string;
+  reference_id?: string;
   is_read: boolean;
-  data?: Record<string, unknown>;
+  delivery_status: DeliveryStatus;
   created_at: string;
+  read_at?: string;
+}
+
+export interface NotificationListResponse {
+  items: Notification[];
+  total: number;
+  unread_count: number;
+}
+
+export interface UnreadCountResponse {
+  unread_count: number;
+}
+
+export interface MarkReadResponse {
+  id: string;
+  is_read: boolean;
+  read_at: string;
+}
+
+export interface MarkAllReadResponse {
+  marked_count: number;
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // REPORTS
 // ═══════════════════════════════════════════════════════════════════
 
-export interface ReportRequest {
-  report_type: ReportType;
-  cafeteria_id?: string;
-  start_date: string;
-  end_date: string;
-  format?: ExportFormat;
+export type ReportType =
+  | "daily_sales"
+  | "revenue"
+  | "popular_items"
+  | "cafeteria_performance"
+  | "user_activity"
+  | "payment_summary";
+
+export type ExportFormat = "csv" | "pdf";
+
+// ---- Sales Reports ----
+
+export interface SalesSummary {
+  total_revenue: number;
+  total_orders: number;
+  total_refunded: number;
+  net_revenue: number;
+  currency: string;
 }
 
-export interface DailySalesReport {
+export interface SalesReportResponse {
+  summary: SalesSummary;
+  currency: string;
+}
+
+export interface DailySalesRow {
   date: string;
+  revenue: number;
+  order_count: number;
+}
+
+export interface SalesDailyResponse {
+  rows: DailySalesRow[];
+  currency: string;
+}
+
+export interface CafeteriaSalesRow {
+  cafeteria_id: string;
+  cafeteria_name: string;
+  revenue: number;
+  order_count: number;
+  refunded_amount: number;
+}
+
+export interface SalesByCafeteriaResponse {
+  rows: CafeteriaSalesRow[];
+  currency: string;
+}
+
+// ---- Order Analytics ----
+
+export interface OrderStatusBreakdown {
+  pending: number;
+  preparing: number;
+  ready: number;
+  completed: number;
+  cancelled: number;
+}
+
+export interface OrderTypeBreakdown {
+  immediate: number;
+  scheduled: number;
+}
+
+export interface OrderPaymentBreakdown {
+  cash: number;
+  online: number;
+}
+
+export interface OrderSummaryResponse {
+  total_orders: number;
+  status_breakdown: OrderStatusBreakdown;
+  type_breakdown: OrderTypeBreakdown;
+  payment_breakdown: OrderPaymentBreakdown;
+  cancellation_rate: number;
+  completion_rate: number;
+}
+
+export interface DailyVolumeRow {
+  date: string;
+  order_count: number;
+  completed_count: number;
+  cancelled_count: number;
+}
+
+export interface HourlyVolumeRow {
+  hour: number;
+  order_count: number;
+}
+
+export interface OrderVolumeResponse {
+  daily: DailyVolumeRow[];
+  hourly: HourlyVolumeRow[];
+}
+
+export interface CancellationRateResponse {
+  total_orders: number;
+  cancelled_orders: number;
+  cancellation_rate: number;
+  cancellation_reasons: Record<string, number>;
+}
+
+// ---- Cafeteria Performance ----
+
+export interface CafeteriaPerformanceResponse {
   cafeteria_id: string;
   cafeteria_name: string;
   total_orders: number;
+  completed_orders: number;
+  cancelled_orders: number;
+  uncollected_orders: number;
+  completion_rate: number;
+  cancellation_rate: number;
+  avg_preparation_time_minutes: number | null;
+  avg_time_to_ready_minutes: number | null;
+  avg_eta_minutes: number | null;
+}
+
+export interface PopularItemRow {
+  menu_item_id: string | null;
+  item_name: string;
+  total_quantity: number;
   total_revenue: number;
-  currency: string;
-  average_order_value: number;
-  items_sold: { menu_item_id: string; name: string; quantity: number; revenue: number }[];
+  order_count: number;
 }
 
-export interface RevenueReport {
-  period_start: string;
-  period_end: string;
-  cafeteria_id?: string;
-  total_revenue: number;
-  currency: string;
-  total_orders: number;
-  revenue_by_cafeteria: { cafeteria_id: string; cafeteria_name: string; revenue: number }[];
-  revenue_by_day: { date: string; revenue: number }[];
+export interface CafeteriaPopularItemsResponse {
+  cafeteria_id: string;
+  items: PopularItemRow[];
 }
 
-export interface PopularItemsReport {
-  period_start: string;
-  period_end: string;
-  cafeteria_id?: string;
-  items: {
-    menu_item_id: string;
-    name: string;
-    cafeteria_name: string;
-    total_quantity: number;
-    total_revenue: number;
-  }[];
+export interface PeakHourRow {
+  hour: number;
+  order_count: number;
+  completed_count: number;
 }
 
-export interface CafeteriaPerformanceReport {
-  period_start: string;
-  period_end: string;
-  cafeterias: {
-    cafeteria_id: string;
-    name: string;
-    total_orders: number;
-    total_revenue: number;
-    average_order_value: number;
-    completion_rate: number;
-    cancellation_rate: number;
-  }[];
+export interface CafeteriaPeakHoursResponse {
+  cafeteria_id: string;
+  timezone: string;
+  hours: PeakHourRow[];
 }
 
-export interface UserActivityReport {
-  period_start: string;
-  period_end: string;
-  total_users: number;
-  active_users: number;
-  new_registrations: number;
-  users_by_role: { role: UserRole; count: number }[];
-  users_by_category: { category: UserCategory; count: number }[];
+// ---- Inventory Reports ----
+
+export interface InventoryStockLevelRow {
+  inventory_item_id: string;
+  menu_item_id: string;
+  menu_item_name: string;
+  quantity: number;
+  unit: string;
+  low_threshold: number;
+  is_out_of_stock: boolean;
+  is_low_stock: boolean;
 }
 
-export interface PaymentSummaryReport {
-  period_start: string;
-  period_end: string;
-  total_transactions: number;
-  total_amount: number;
-  currency: string;
-  by_method: { method: PaymentMethod; count: number; amount: number }[];
-  by_status: { status: PaymentStatus; count: number; amount: number }[];
+export interface InventoryStockLevelsResponse {
+  cafeteria_id: string;
+  total_items: number;
+  out_of_stock_count: number;
+  low_stock_count: number;
+  items: InventoryStockLevelRow[];
+}
+
+export interface InventoryLowStockRow {
+  inventory_item_id: string;
+  menu_item_id: string;
+  menu_item_name: string;
+  quantity: number;
+  unit: string;
+  low_threshold: number;
+  stock_status: string;
+}
+
+export interface InventoryLowStockResponse {
+  cafeteria_id: string;
+  total_low_stock: number;
+  items: InventoryLowStockRow[];
+}
+
+export interface InventoryAdjustmentRow {
+  id: string;
+  inventory_item_id: string;
+  menu_item_name: string;
+  adjustment_quantity: number;
+  reason: string | null;
+  adjusted_at: string;
+}
+
+export interface InventoryTurnoverResponse {
+  cafeteria_id: string;
+  total_adjustments: number;
+  total_restock: number;
+  total_usage: number;
+  adjustments: InventoryAdjustmentRow[];
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // ADMINISTRATION (university_admin operations)
 // ═══════════════════════════════════════════════════════════════════
+
+export interface AdministrationUserSummary {
+  total: number;
+  students: number;
+  faculty: number;
+  university_admins: number;
+  cafeteria_managers: number;
+  cafeteria_staff: number;
+  active: number;
+  suspended: number;
+  ordering_suspended: number;
+}
+
+export interface CafeteriaOverviewItem {
+  cafeteria_id: string;
+  name: string;
+  type: string;
+  operational_status: string;
+  is_active: boolean;
+  assigned_managers: number;
+  assigned_staff: number;
+  preparation_capacity: number;
+}
+
+export interface AdministrationCafeteriaSummary {
+  total: number;
+  active: number;
+  cafeterias: CafeteriaOverviewItem[];
+}
+
+export interface AdministrationOrderSummary {
+  total_orders: number;
+  pending: number;
+  preparing: number;
+  ready: number;
+  completed: number;
+  cancelled: number;
+  uncollected: number;
+  cancellation_rate: number;
+}
+
+export interface AdministrationFinancialSummary {
+  total_revenue: number;
+  total_refunded: number;
+  net_revenue: number;
+  online_payment_volume: number;
+  cash_payment_volume: number;
+  currency: string;
+}
+
+export interface AdministrationExceptionsSummary {
+  overdue_refunds: number;
+  ordering_suspended_users: number;
+  uncollected_orders: number;
+  cafeteria_closure_cancellations: number;
+}
+
+export interface AdministrationOverviewResponse {
+  users: AdministrationUserSummary;
+  cafeterias: AdministrationCafeteriaSummary;
+  orders: AdministrationOrderSummary;
+  financial: AdministrationFinancialSummary;
+  exceptions: AdministrationExceptionsSummary;
+}
 
 export interface AdminUserUpdate {
   role?: UserRole;
@@ -599,6 +875,38 @@ export interface CafeteriaAssignment {
   user_id: string;
   cafeteria_id: string;
   assigned_at: string;
+}
+
+// ---- Additional Phase 6 types ----
+
+export interface EtaResponse {
+  order_id: string;
+  eta_minutes: number;
+  pickup_deadline: string | null;
+}
+
+export interface NoShowResponse {
+  id: string;
+  user_id: string;
+  order_id: string;
+  cafeteria_id: string;
+  created_at: string;
+}
+
+export interface PaymentInitiationResponse {
+  payment_id: string;
+  status: string;
+  provider_name?: string;
+  redirect_url?: string;
+  message: string;
+}
+
+export interface RefundableAmountResponse {
+  order_id: string;
+  paid_amount: number;
+  total_refunded: number;
+  refundable_amount: number;
+  currency: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════
