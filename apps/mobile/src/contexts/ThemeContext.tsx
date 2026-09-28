@@ -7,7 +7,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useColorScheme } from "react-native";
-import * as SecureStore from "expo-secure-store";
+import { SecureStorage } from "../services/secure-storage";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -41,7 +41,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const stored = await SecureStore.getItemAsync(THEME_KEY);
+        const stored = await SecureStorage.getItemAsync(THEME_KEY);
         if (stored === "light" || stored === "dark" || stored === "system") {
           setPreference(stored);
         }
@@ -56,7 +56,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setThemePreference = useCallback(async (theme: Theme) => {
     setPreference(theme);
     try {
-      await SecureStore.setItemAsync(THEME_KEY, theme);
+      await SecureStorage.setItemAsync(THEME_KEY, theme);
     } catch {
       // Non-critical
     }

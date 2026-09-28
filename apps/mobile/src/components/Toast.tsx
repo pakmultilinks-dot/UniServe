@@ -26,7 +26,7 @@ export default function Toast({ message, type = "success", visible, onDismiss }:
 
   const translateY = useRef(new Animated.Value(-80)).current;
 
-  const iconColor = type === "success" ? "#16a34a" : type === "error" ? "#dc2626" : "#2563eb";
+  const iconColor = type === "success" ? successColor : type === "error" ? errorColor : functionalColor(resolvedTheme, "info");
   const iconName = type === "success" ? "checkmark-circle" : type === "error" ? "alert-circle" : "information-circle";
 
   useEffect(() => {

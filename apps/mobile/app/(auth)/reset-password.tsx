@@ -24,7 +24,7 @@ import * as authApi from "../../src/services/auth";
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ token?: string; email?: string }>();
+  const params = useLocalSearchParams<{ university_email?: string; otp?: string }>();
   const { resolvedTheme } = useTheme();
 
   const bg = bgColor(resolvedTheme, "primary");
@@ -38,14 +38,15 @@ export default function ResetPasswordScreen() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
-  const token = params.token ?? "";
-  const email = params.email ?? "";
+  const universityEmail = params.university_email ?? "";
+  const otp = params.otp ?? "";
 
   const passwordsMatch = password === confirmPassword;
   const isFormValid =
     password.length >= 8 &&
     passwordsMatch &&
-    token;
+    universityEmail &&
+    otp;
 
   const handleSubmit = async () => {
     if (!isFormValid) return;
@@ -53,9 +54,9 @@ export default function ResetPasswordScreen() {
     setError("");
     try {
       await authApi.resetPassword({
-        token,
+        university_email: universityEmail,
+        otp,
         new_password: password,
-        confirm_password: confirmPassword,
       });
       setSuccess(true);
     } catch (e: any) {

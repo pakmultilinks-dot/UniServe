@@ -9,12 +9,12 @@ import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
-import { textColor, bgColor } from "../../../src/theme";
+import { textColor, bgColor, brandGreen } from "../../../src/theme";
 
 export default function FavoritesScreen() {
   const { resolvedTheme } = useTheme();
 
-  const brand = "#005400";
+  const brand = brandGreen(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
   const tcMuted = textColor(resolvedTheme, "muted");
   const bg = bgColor(resolvedTheme, "primary");

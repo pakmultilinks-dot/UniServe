@@ -6,7 +6,7 @@
  * (encrypted keychain on iOS, encrypted SharedPreferences on Android).
  */
 
-import * as SecureStore from "expo-secure-store";
+import { SecureStorage } from "./secure-storage";
 
 import { API_BASE_URL } from "../config";
 import {
@@ -30,14 +30,14 @@ const secureStoreTokenProvider: TokenProvider = {
     inMemoryAccessToken = accessToken;
     inMemoryRefreshToken = refreshToken;
     // Persist asynchronously — will be available on next read
-    SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
-    SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
+    SecureStorage.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
+    SecureStorage.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
   },
   clearTokens: () => {
     inMemoryAccessToken = null;
     inMemoryRefreshToken = null;
-    SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
-    SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    SecureStorage.deleteItemAsync(ACCESS_TOKEN_KEY);
+    SecureStorage.deleteItemAsync(REFRESH_TOKEN_KEY);
   },
 };
 
@@ -50,8 +50,8 @@ let inMemoryRefreshToken: string | null = null;
  * Call this once at app launch (in AuthContext or _layout).
  */
 export async function loadPersistedTokens(): Promise<void> {
-  const accessToken = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
-  const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+  const accessToken = await SecureStorage.getItemAsync(ACCESS_TOKEN_KEY);
+  const refreshToken = await SecureStorage.getItemAsync(REFRESH_TOKEN_KEY);
   if (accessToken) inMemoryAccessToken = accessToken;
   if (refreshToken) inMemoryRefreshToken = refreshToken;
 }

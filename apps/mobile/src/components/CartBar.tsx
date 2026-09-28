@@ -29,7 +29,6 @@ function formatPrice(paisa: number): string {
 export default function CartBar({ itemCount, total, onPress }: CartBarProps) {
   const { resolvedTheme } = useTheme();
   const brand = brandGreen(resolvedTheme);
-  const barBg = resolvedTheme === "dark" ? "#16a34a" : brand;
 
   const bounceAnim = useRef(new Animated.Value(1)).current;
 
@@ -50,7 +49,7 @@ export default function CartBar({ itemCount, total, onPress }: CartBarProps) {
   }, [itemCount]);
 
   return (
-    <Pressable onPress={onPress} style={[styles.bar, { backgroundColor: barBg }]}>
+    <Pressable onPress={onPress} style={[styles.bar, { backgroundColor: brand }]}>
       <View style={styles.left}>
         <View style={styles.cartIconWrap}>
           <Ionicons name="cart" size={20} color="#ffffff" />

@@ -60,7 +60,7 @@ export default function RegisterScreen() {
     setError("");
     setIsLoading(true);
     try {
-      await register({
+      const result = await register({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         universityId: universityId.trim() || email.split("@")[0],
@@ -68,7 +68,7 @@ export default function RegisterScreen() {
         password,
       });
       // Navigate to verify-email after registration
-      router.replace(`/verify-email?email=${encodeURIComponent(email.trim())}`);
+      router.replace(`/verify-email?user_id=${encodeURIComponent(result.userId)}&email=${encodeURIComponent(email.trim())}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Registration failed";
       setError(message);

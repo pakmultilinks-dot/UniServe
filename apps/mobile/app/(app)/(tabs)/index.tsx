@@ -292,7 +292,7 @@ export default function HomeScreen() {
       ) : null}
 
       {/* ── Closed Cafeteria Warning ── */}
-      {!isCafeteriaOpen && selectedCafeteria && !isLoading && (
+      {!isCafeteriaOpen && selectedCafeteria && !isLoading ? (
         <View style={[styles.warningBanner, { backgroundColor: functionalColor(resolvedTheme, "warning") + "10", borderColor: functionalColor(resolvedTheme, "warning") + "30" }]}>
           <Ionicons name="lock-closed" size={16} color={functionalColor(resolvedTheme, "warning")} />
           <Text style={[styles.warningText, { color: functionalColor(resolvedTheme, "warning"), flex: 1, marginLeft: 8 }]}>

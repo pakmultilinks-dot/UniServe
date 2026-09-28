@@ -44,7 +44,7 @@ export default function ForgotPasswordScreen() {
     setLoading(true);
     setError("");
     try {
-      await authApi.requestPasswordReset({ email: email.trim() });
+      await authApi.requestPasswordReset({ university_email: email.trim() });
       setSent(true);
     } catch (e: any) {
       // Show success even if email doesn't exist (security best practice)

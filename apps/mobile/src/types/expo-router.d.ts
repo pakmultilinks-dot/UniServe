@@ -31,12 +31,14 @@ declare module "expo-router" {
     headerStyle?: Record<string, unknown>;
     headerTintColor?: string;
     headerTitleStyle?: Record<string, unknown>;
+    headerShadowVisible?: boolean;
+    headerLeft?: (props: { onPress?: () => void }) => ReactNode;
   }
 
   interface TabScreenOptions {
     title?: string;
     tabBarLabel?: string;
-    tabBarIcon?: (props: { color: string; size: number }) => ReactNode;
+    tabBarIcon?: (props: { color: string; size: number; focused: boolean }) => ReactNode;
     headerShown?: boolean;
   }
 

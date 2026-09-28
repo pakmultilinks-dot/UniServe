@@ -7,7 +7,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import * as SecureStore from "expo-secure-store";
+import { SecureStorage } from "../services/secure-storage";
 
 import type { User, TokenPair } from "@uniserve/shared-types";
 import * as authApi from "../services/auth";
@@ -56,14 +56,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function loadStoredAuth() {
       try {
         await loadPersistedTokens();
-        const userJson = await SecureStore.getItemAsync(USER_KEY);
+
+        // Sync the in-memory token cache into React state so isAuthenticated evaluates correctly
+        const storedToken = secureStoreTokenProvider.getAccessToken();
+        if (storedToken) setAccessToken(storedToken);
+
+        const userJson = await SecureStorage.getItemAsync(USER_KEY);
 
         if (userJson) {
           setUser(JSON.parse(userJson));
         }
       } catch {
         // Corrupted storage — clear everything
-        await SecureStore.deleteItemAsync(USER_KEY);
+        await SecureStorage.deleteItemAsync(USER_KEY);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -77,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clearTokens = useCallback(async () => {
     secureStoreTokenProvider.clearTokens();
-    await SecureStore.deleteItemAsync(USER_KEY);
+    await SecureStorage.deleteItemAsync(USER_KEY);
     setAccessToken(null);
     setUser(null);
   }, []);
@@ -105,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         response.tokens.refresh_token,
       );
       setAccessToken(response.tokens.access_token);
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(response.user));
+      await SecureStorage.setItemAsync(USER_KEY, JSON.stringify(response.user));
       setUser(response.user);
     },
     [],
@@ -155,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = useCallback(async () => {
     try {
       const updatedUser = await authApi.getCurrentUser();
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
+      await SecureStorage.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
       setUser(updatedUser);
     } catch {
       await clearTokens();

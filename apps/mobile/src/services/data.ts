@@ -137,7 +137,7 @@ export async function checkoutCart(
   };
   if (params.scheduled_collection_time) body.scheduled_collection_time = params.scheduled_collection_time;
   if (params.note) body.note = params.note;
-  return apiClient.post<Order>(`/cafeterias/${cafeteriaId}/checkout`, body);
+  return apiClient.post<Order>(`/cafeterias/${cafeteriaId}/cart/checkout`, body);
 }
 
 // ---- Orders ----

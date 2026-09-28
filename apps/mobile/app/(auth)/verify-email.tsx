@@ -28,7 +28,7 @@ const RESEND_COOLDOWN = 60;
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{ user_id?: string; email?: string }>();
   const { resolvedTheme } = useTheme();
 
   const bg = bgColor(resolvedTheme, "primary");
@@ -38,6 +38,7 @@ export default function VerifyEmailScreen() {
   const tcMuted = textColor(resolvedTheme, "muted");
   const brand = brandGreen(resolvedTheme);
 
+  const userId = params.user_id ?? "";
   const email = params.email ?? "";
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [error, setError] = useState("");
@@ -84,7 +85,7 @@ export default function VerifyEmailScreen() {
   const handleVerify = async (code: string) => {
     setLoading(true);
     try {
-      await authApi.verifyOtp({ email, otp: code });
+      await authApi.verifyOtp({ user_id: userId, otp: code, purpose: "email_verification" });
       setSuccess(true);
     } catch (e: any) {
       setError(e?.message || "Invalid verification code");
@@ -97,7 +98,7 @@ export default function VerifyEmailScreen() {
 
   const handleResend = async () => {
     try {
-      await authApi.resendOtp({ email });
+      await authApi.resendOtp({ user_id: userId, purpose: "email_verification" });
       setCountdown(RESEND_COOLDOWN);
       setCanResend(false);
     } catch (e: any) {
