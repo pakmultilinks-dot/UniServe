@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from app.core.database import async_session_factory
 from app.modules.cafeterias.models import Cafeteria, CafeteriaType, OperationalStatus
+from app.modules.inventory.models import InventoryItem, InventoryUnit
 from app.modules.menus.models import (
     DailyMenu,
     DailyMenuItem,
@@ -21,6 +22,7 @@ from app.modules.menus.models import (
     MenuCategory,
     MenuItem,
 )
+from app.modules.users.models import User  # noqa: F401
 
 STUDENT_CAFETERIA = {
     "name": "Student Cafeteria",
@@ -173,6 +175,30 @@ async def seed() -> None:
                 item.is_active = True
             item.is_available = item.name != "Packet Cake"
             items_by_name[item.name] = item
+        await session.flush()
+
+        for item in items_by_name.values():
+            inventory_result = await session.execute(
+                select(InventoryItem).where(
+                    InventoryItem.cafeteria_id == cafeteria.id,
+                    InventoryItem.menu_item_id == item.id,
+                )
+            )
+            inventory = inventory_result.scalar_one_or_none()
+            if inventory is None:
+                session.add(
+                    InventoryItem(
+                        cafeteria_id=cafeteria.id,
+                        menu_item_id=item.id,
+                        quantity=100,
+                        unit=InventoryUnit.PORTIONS,
+                        low_threshold=10,
+                    )
+                )
+            else:
+                inventory.quantity = 100
+                inventory.unit = InventoryUnit.PORTIONS
+                inventory.low_threshold = 10
         await session.flush()
 
         menu_result = await session.execute(

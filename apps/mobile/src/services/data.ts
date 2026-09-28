@@ -18,6 +18,7 @@ import type {
   CartCheckoutRequest,
   MenuCategory,
   Order,
+  Payment,
 } from "@uniserve/shared-types";
 
 // ---- Cafeterias ----
@@ -129,6 +130,7 @@ export async function checkoutCart(
     order_type?: "immediate" | "scheduled";
     scheduled_collection_time?: string;
     note?: string;
+    idempotency_key?: string;
   },
 ): Promise<Order> {
   const body: CartCheckoutRequest = {
@@ -137,7 +139,19 @@ export async function checkoutCart(
   };
   if (params.scheduled_collection_time) body.scheduled_collection_time = params.scheduled_collection_time;
   if (params.note) body.note = params.note;
+  if (params.idempotency_key) body.idempotency_key = params.idempotency_key;
   return apiClient.post<Order>(`/cafeterias/${cafeteriaId}/cart/checkout`, body);
+}
+
+export async function initiatePayment(
+  orderId: string,
+  idempotencyKey: string,
+): Promise<{ payment_id: string; status: string; provider_name?: string; redirect_url?: string; message: string }> {
+  return apiClient.post(`/payments/initiate/${orderId}`, { idempotency_key: idempotencyKey });
+}
+
+export async function getOrderPayment(orderId: string): Promise<Payment> {
+  return apiClient.get<Payment>(`/payments/order/${orderId}`);
 }
 
 // ---- Orders ----

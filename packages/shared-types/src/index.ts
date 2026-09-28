@@ -442,6 +442,7 @@ export interface CartCheckoutRequest {
   order_type?: OrderType;
   scheduled_collection_time?: string;
   note?: string;
+  idempotency_key?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -460,6 +461,7 @@ export interface OrderItem {
 export interface Order {
   id: string;
   order_number: number;
+  collection_token: string;
   user_id: string;
   cafeteria_id: string;
   status: OrderStatus;

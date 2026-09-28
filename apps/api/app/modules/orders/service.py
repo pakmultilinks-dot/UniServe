@@ -80,12 +80,26 @@ class OrderService:
         order_type: str = "immediate",
         scheduled_collection_time: str | None = None,
         note: str | None = None,
+        idempotency_key: str | None = None,
     ) -> Order:
         """Convert a cart into an order.
 
         Server is authoritative: validates everything, calculates total
         server-side, creates order items from cart snapshots.
         """
+        # Return the original order when a retried checkout uses the same key.
+        if idempotency_key:
+            existing_result = await self.db.execute(
+                select(Order).where(
+                    Order.user_id == user_id,
+                    Order.cafeteria_id == cafeteria_id,
+                    Order.checkout_idempotency_key == idempotency_key,
+                )
+            )
+            existing_order = existing_result.scalar_one_or_none()
+            if existing_order is not None:
+                return await self.get_order(existing_order.id)
+
         # 1. Get active cart with items
         cart = await self._get_active_cart_with_items(user_id, cafeteria_id)
 
@@ -148,6 +162,7 @@ class OrderService:
         # 7. Create order
         order = Order(
             order_number=order_number,
+            checkout_idempotency_key=idempotency_key,
             user_id=user_id,
             cafeteria_id=cafeteria_id,
             order_type=parsed_order_type,

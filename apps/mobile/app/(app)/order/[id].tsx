@@ -17,9 +17,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
-import { getOrder } from "../../../src/services/data";
+import { useCart } from "../../../src/contexts/CartContext";
+import { getOrder, getOrderPayment } from "../../../src/services/data";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
-import type { Order, OrderStatus } from "@uniserve/shared-types";
+import type { Order, OrderStatus, Payment } from "@uniserve/shared-types";
 
 // ── Helpers ──
 
@@ -142,6 +143,7 @@ export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { resolvedTheme } = useTheme();
   const router = useRouter();
+  const { selectedCafeteria } = useCart();
 
   const brand = brandGreen(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
@@ -155,6 +157,7 @@ export default function OrderDetailScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [payment, setPayment] = useState<Payment | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -162,6 +165,13 @@ export default function OrderDetailScreen() {
       try {
         const data = await getOrder(id);
         setOrder(data);
+        if (data.payment_method === "online") {
+          try {
+            setPayment(await getOrderPayment(data.id));
+          } catch {
+            // The order remains the source of truth if payment details are not yet available.
+          }
+        }
       } catch {
         setError("Failed to load order");
       } finally {
@@ -208,6 +218,9 @@ export default function OrderDetailScreen() {
           <Text style={[styles.orderDate, { color: tcMuted }]}>
             {formatDate(order.created_at)}
           </Text>
+          {selectedCafeteria?.id === order.cafeteria_id && (
+            <Text style={[styles.orderDate, { color: tcMuted }]}>{selectedCafeteria.name}</Text>
+          )}
         </View>
 
         {/* ── Status Timeline ── */}
@@ -269,7 +282,19 @@ export default function OrderDetailScreen() {
           />
           <Text style={[styles.infoLabel, { color: tcMuted }]}>Payment</Text>
           <Text style={[styles.infoValue, { color: tc }]}>
-            {order.payment_method === "cash" ? "Pay at Counter" : "Online"}
+            {order.payment_method === "cash"
+              ? "Pay at Counter"
+              : `Online${payment ? ` · ${payment.status}` : " · pending"}`}
+          </Text>
+        </View>
+
+        <View style={[styles.infoRow, { backgroundColor: bg, borderColor: bc }]}>
+          <Ionicons name={order.order_type === "scheduled" ? "calendar-outline" : "flash-outline"} size={18} color={tcMuted} />
+          <Text style={[styles.infoLabel, { color: tcMuted }]}>Collection</Text>
+          <Text style={[styles.infoValue, { color: tc }]}>
+            {order.order_type === "scheduled"
+              ? `Scheduled${order.scheduled_collection_time ? ` · ${order.scheduled_collection_time}` : ""}`
+              : "Immediate"}
           </Text>
         </View>
 

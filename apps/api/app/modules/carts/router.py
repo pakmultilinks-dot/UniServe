@@ -146,5 +146,6 @@ async def checkout(
         order_type=body.order_type,
         scheduled_collection_time=body.scheduled_collection_time,
         note=body.note,
+        idempotency_key=body.idempotency_key,
     )
     return OrderCheckoutResponse.model_validate(order)

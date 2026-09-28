@@ -63,3 +63,4 @@ class CartCheckoutRequest(BaseModel):
     order_type: str = Field("immediate", pattern="^(immediate|scheduled)$")
     scheduled_collection_time: str | None = Field(None, pattern="^([01]\\d|2[0-3]):[0-5]\\d$")
     note: str | None = Field(None, max_length=500)
+    idempotency_key: str | None = Field(None, min_length=1, max_length=255)

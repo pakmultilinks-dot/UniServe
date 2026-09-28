@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import QRCode from "react-native-qrcode-svg";
 
 import { useTheme } from "../../../../src/contexts/ThemeContext";
 import { getOrder } from "../../../../src/services/data";
@@ -71,7 +72,7 @@ export default function OrderQRScreen() {
       <View style={[styles.qrCard, { backgroundColor: "#FFFFFF" }]}>
         {/* Header */}
         <View style={styles.qrHeader}>
-          <Ionicons name="restaurant" size={24} color="#005400" />
+          <Ionicons name="restaurant" size={24} color="#4b3421" />
           <Text style={styles.qrBrand}>UniServe</Text>
         </View>
 
@@ -80,42 +81,31 @@ export default function OrderQRScreen() {
           <Text style={styles.orderNumberLarge}>#{order.order_number}</Text>
         </View>
 
-        {/* QR placeholder — dots pattern */}
-        <View style={styles.qrPlaceholder}>
-          <View style={styles.qrGrid}>
-            {Array.from({ length: 49 }).map((_, i) => {
-              // Simple deterministic pattern based on order number
-              const row = Math.floor(i / 7);
-              const col = i % 7;
-              const isCorner =
-                (row < 3 && col < 3) ||
-                (row < 3 && col > 3) ||
-                (row > 3 && col < 3);
-              const hash = ((order.order_number * 31 + i * 17) % 100);
-              const filled = isCorner || hash > 40;
-
-              return (
-                <View
-                  key={i}
-                  style={[
-                    styles.qrDot,
-                    { backgroundColor: filled ? "#005400" : "#E5E7EB" },
-                  ]}
-                />
-              );
-            })}
+        {order.status === "completed" || order.status === "cancelled" ? (
+          <View style={styles.invalidQr}>
+            <Ionicons name="close-circle-outline" size={48} color="#95816b" />
+            <Text style={styles.invalidQrText}>This collection code is no longer valid.</Text>
           </View>
-        </View>
+        ) : (
+          <View style={styles.qrPlaceholder}>
+            <QRCode
+              value={order.collection_token}
+              size={180}
+              color="#4b3421"
+              backgroundColor="#FFFFFF"
+            />
+          </View>
+        )}
 
         {/* Status */}
         <View style={styles.qrStatus}>
           <Ionicons
-            name={order.status === "ready" ? "checkmark-circle" : "time-outline"}
+            name={order.status === "ready" ? "checkmark-circle" : order.status === "completed" || order.status === "cancelled" ? "close-circle" : "time-outline"}
             size={16}
-            color={order.status === "ready" ? "#005400" : "#9CA3AF"}
+            color={order.status === "ready" ? "#8c6935" : order.status === "completed" || order.status === "cancelled" ? "#95816b" : "#95816b"}
           />
           <Text style={styles.qrStatusText}>
-            {order.status === "ready" ? "Ready for Pickup" : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+            {order.status === "ready" ? "Ready for Pickup" : order.status === "completed" ? "Collected" : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
           </Text>
         </View>
       </View>
@@ -162,7 +152,7 @@ const styles = StyleSheet.create({
   qrBrand: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#005400",
+    color: "#4b3421",
   },
 
   orderNumberContainer: {
@@ -171,7 +161,7 @@ const styles = StyleSheet.create({
   orderNumberLarge: {
     fontSize: 32,
     fontWeight: "800",
-    color: "#005400",
+    color: "#4b3421",
     letterSpacing: 1,
   },
 
@@ -179,15 +169,17 @@ const styles = StyleSheet.create({
   qrPlaceholder: {
     marginBottom: 16,
   },
-  qrGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    width: 140,
-    height: 140,
+  invalidQr: {
+    width: 180,
+    height: 180,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
   },
-  qrDot: {
-    width: 20,
-    height: 20,
+  invalidQrText: {
+    color: "#95816b",
+    fontSize: 13,
+    textAlign: "center",
   },
 
   // Status

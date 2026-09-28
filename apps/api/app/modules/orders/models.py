@@ -98,6 +98,7 @@ class Order(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     order_number: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    checkout_idempotency_key: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )

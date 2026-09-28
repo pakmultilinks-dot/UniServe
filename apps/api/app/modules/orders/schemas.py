@@ -25,6 +25,7 @@ class OrderResponse(BaseModel):
 
     id: str
     order_number: int
+    collection_token: str
     user_id: str
     cafeteria_id: str
     order_type: str

@@ -164,6 +164,32 @@ class TestCheckout:
         resp = await _checkout(student_client, cafeteria.id)
         assert resp.status_code == 400
 
+    async def test_checkout_idempotency_returns_existing_order(
+        self, student_client: AsyncClient, student_user, db: AsyncSession
+    ):
+        """Retrying checkout with the same key does not create another order."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+
+        body = {
+            "payment_method": "cash",
+            "order_type": "immediate",
+            "idempotency_key": "checkout-retry-test",
+        }
+        first = await student_client.post(
+            f"/api/v1/cafeterias/{cafeteria.id}/cart/checkout",
+            json=body,
+        )
+        second = await student_client.post(
+            f"/api/v1/cafeterias/{cafeteria.id}/cart/checkout",
+            json=body,
+        )
+
+        assert first.status_code == 201, first.text
+        assert second.status_code == 201, second.text
+        assert second.json()["id"] == first.json()["id"]
+        assert second.json()["order_number"] == first.json()["order_number"]
+
     async def test_checkout_preserves_order_number(
         self, student_client: AsyncClient, student_user, db: AsyncSession
     ):

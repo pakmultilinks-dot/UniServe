@@ -20,14 +20,32 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { useCart } from "../../src/contexts/CartContext";
-import { checkoutCart } from "../../src/services/data";
+import { checkoutCart, initiatePayment } from "../../src/services/data";
 import { textColor, bgColor, borderColor, brandGreen } from "../../src/theme";
-import type { PaymentMethod } from "@uniserve/shared-types";
+import type { OrderType, PaymentMethod } from "@uniserve/shared-types";
 
 // ── Helpers ──
 
 function formatPrice(paisa: number): string {
   return `PKR ${Math.round(paisa / 100)}`;
+}
+
+function getCollectionSlots(operatingHours?: string): string[] {
+  const match = operatingHours?.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+  if (!match) return [];
+
+  const [, startHour, startMinute, endHour, endMinute] = match;
+  const start = Number(startHour) * 60 + Number(startMinute);
+  const end = Number(endHour) * 60 + Number(endMinute);
+  const now = new Date();
+  const roundedNow = now.getHours() * 60 + now.getMinutes() + 30;
+  const firstSlot = Math.max(start, Math.ceil(roundedNow / 30) * 30);
+  const slots: string[] = [];
+
+  for (let minutes = firstSlot; minutes <= end; minutes += 30) {
+    slots.push(`${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`);
+  }
+  return slots;
 }
 
 // ── Screen ──
@@ -47,22 +65,40 @@ export default function CheckoutScreen() {
   const bcSub = borderColor(resolvedTheme, "subtle");
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [orderType, setOrderType] = useState<OrderType>("immediate");
+  const [scheduledTime, setScheduledTime] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [isPlacing, setIsPlacing] = useState(false);
   const [error, setError] = useState("");
+  const [checkoutKey] = useState(
+    () => `mobile-checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
 
   const items = cart?.items ?? [];
+  const collectionSlots = getCollectionSlots(selectedCafeteria?.operating_hours);
 
   const handlePlaceOrder = useCallback(async () => {
     if (!selectedCafeteria) return;
+    if (orderType === "scheduled" && !scheduledTime) {
+      setError("Choose a collection time for your scheduled order.");
+      return;
+    }
     setIsPlacing(true);
     setError("");
     try {
       const order = await checkoutCart(selectedCafeteria.id, {
         payment_method: paymentMethod,
-        order_type: "immediate",
+        order_type: orderType,
+        scheduled_collection_time: scheduledTime ?? undefined,
         note: note.trim() || undefined,
+        idempotency_key: checkoutKey,
       });
+      if (paymentMethod === "online") {
+        const payment = await initiatePayment(order.id, checkoutKey);
+        if (payment.status === "failed") {
+          throw new Error(payment.message || "Online payment could not be initiated.");
+        }
+      }
       await refreshCart();
       router.replace(`/order/${order.id}`);
     } catch (err: any) {
@@ -71,7 +107,7 @@ export default function CheckoutScreen() {
     } finally {
       setIsPlacing(false);
     }
-  }, [selectedCafeteria, paymentMethod, note, refreshCart, router]);
+  }, [selectedCafeteria, paymentMethod, orderType, scheduledTime, note, checkoutKey, refreshCart, router]);
 
   if (!cart || items.length === 0) {
     return (
@@ -93,6 +129,63 @@ export default function CheckoutScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── Collection Type ── */}
+        <Text style={[styles.sectionTitle, { color: tc }]}>Collection</Text>
+        <View style={styles.paymentOptions}>
+          {(["immediate", "scheduled"] as OrderType[]).map((type) => (
+            <Pressable
+              key={type}
+              style={[
+                styles.paymentOption,
+                {
+                  backgroundColor: bg,
+                  borderColor: orderType === type ? brand : bc,
+                },
+              ]}
+              onPress={() => {
+                setOrderType(type);
+                if (type === "immediate") setScheduledTime(null);
+              }}
+            >
+              <Ionicons
+                name={type === "immediate" ? "flash-outline" : "time-outline"}
+                size={22}
+                color={orderType === type ? brand : tcMuted}
+              />
+              <View style={styles.paymentOptionInfo}>
+                <Text style={[styles.paymentOptionLabel, { color: tc }]}>
+                  {type === "immediate" ? "Collect as soon as ready" : "Schedule collection"}
+                </Text>
+                <Text style={[styles.paymentOptionSub, { color: tcMuted }]}>
+                  {type === "immediate" ? "The cafeteria will prepare it now" : "Choose a time during cafeteria hours"}
+                </Text>
+              </View>
+              {orderType === type && <Ionicons name="checkmark-circle" size={20} color={brand} />}
+            </Pressable>
+          ))}
+        </View>
+
+        {orderType === "scheduled" && (
+          <View style={styles.slotSection}>
+            <Text style={[styles.slotLabel, { color: tcMuted }]}>Collection time</Text>
+            {collectionSlots.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.slotList}>
+                {collectionSlots.map((slot) => (
+                  <Pressable
+                    key={slot}
+                    onPress={() => setScheduledTime(slot)}
+                    style={[styles.slot, { backgroundColor: scheduledTime === slot ? brand : bg, borderColor: scheduledTime === slot ? brand : bc }]}
+                  >
+                    <Text style={[styles.slotText, { color: scheduledTime === slot ? "#302116" : tc }]}>{slot}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={[styles.noSlotsText, { color: tcMuted }]}>No future collection times are available today.</Text>
+            )}
+          </View>
+        )}
+
         {/* ── Payment Method ── */}
         <Text style={[styles.sectionTitle, { color: tc }]}>Payment Method</Text>
         <View style={styles.paymentOptions}>
@@ -128,11 +221,9 @@ export default function CheckoutScreen() {
               {
                 backgroundColor: bg,
                 borderColor: paymentMethod === "online" ? brand : bc,
-                opacity: 0.5,
               },
             ]}
             onPress={() => setPaymentMethod("online")}
-            disabled
           >
             <Ionicons
               name="card-outline"
@@ -142,7 +233,7 @@ export default function CheckoutScreen() {
             <View style={styles.paymentOptionInfo}>
               <Text style={[styles.paymentOptionLabel, { color: tc }]}>Online Payment</Text>
               <Text style={[styles.paymentOptionSub, { color: tcMuted }]}>
-                Coming soon
+                Secure payment through the configured provider
               </Text>
             </View>
             {paymentMethod === "online" && (
@@ -309,6 +400,34 @@ const styles = StyleSheet.create({
   paymentOptionSub: {
     fontSize: 12,
     marginTop: 2,
+  },
+  slotSection: {
+    marginTop: -10,
+    marginBottom: 24,
+  },
+  slotLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  slotList: {
+    gap: 8,
+  },
+  slot: {
+    minWidth: 76,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  slotText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  noSlotsText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 
   // Note
