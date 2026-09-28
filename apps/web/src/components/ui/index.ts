@@ -5,3 +5,6 @@ export { Spinner, PageSpinner } from "./Spinner";
 export { EmptyState } from "./EmptyState";
 export { Avatar } from "./Avatar";
 export { LguBrand, LguSeal } from "../LguBrand";
+export { DataTable } from "./DataTable";
+export { StatusBadge } from "./StatusBadge";
+export { PageHeader } from "./PageHeader";

@@ -233,3 +233,287 @@ export async function getUnreadNotificationCount(): Promise<
     "/notifications/unread-count",
   );
 }
+
+// ── Operations Console API ──────────────────────────────────────
+
+// Orders — Staff/Manager queue
+export async function getCafeteriaOrders(
+  cafeteriaId: string,
+  params?: { status?: string; order_date?: string },
+) {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.order_date) query.set("order_date", params.order_date);
+  const qs = query.toString();
+  return apiClient.get<{ orders: any[]; total: number }>(
+    `/orders/cafeteria/${cafeteriaId}${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function getOrderDetail(orderId: string) {
+  return apiClient.get<any>(`/orders/${orderId}`);
+}
+
+export async function confirmOrder(orderId: string, notes?: string) {
+  return apiClient.post<any>(`/orders/${orderId}/confirm`, { notes });
+}
+
+export async function prepareOrder(orderId: string, notes?: string) {
+  return apiClient.post<any>(`/orders/${orderId}/prepare`, { notes });
+}
+
+export async function readyOrder(orderId: string, notes?: string) {
+  return apiClient.put<any>(`/orders/${orderId}/ready`, { notes });
+}
+
+export async function delayOrder(
+  orderId: string,
+  additionalMinutes: number,
+  notes?: string,
+) {
+  return apiClient.put<any>(`/orders/${orderId}/delay`, {
+    additional_minutes: additionalMinutes,
+    notes,
+  });
+}
+
+export async function managerCancelOrder(orderId: string, reason: string) {
+  return apiClient.post<any>(`/orders/${orderId}/manager-cancel`, { reason });
+}
+
+export async function rejectOrder(
+  orderId: string,
+  reason: string,
+  notes?: string,
+) {
+  return apiClient.post<any>(`/orders/${orderId}/reject`, { reason, notes });
+}
+
+export async function collectOrder(params: {
+  order_number?: number;
+  collection_token?: string;
+}) {
+  return apiClient.post<any>("/orders/collect", params);
+}
+
+// Menu management
+export async function getMenuItems(
+  cafeteriaId: string,
+  params?: { category?: string; is_available?: boolean; search?: string },
+) {
+  const query = new URLSearchParams();
+  if (params?.category) query.set("category", params.category);
+  if (params?.is_available !== undefined)
+    query.set("is_available", String(params.is_available));
+  if (params?.search) query.set("search", params.search);
+  const qs = query.toString();
+  return apiClient.get<{ items: any[]; total: number }>(
+    `/cafeterias/${cafeteriaId}/menu-items${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function createMenuItem(cafeteriaId: string, data: any) {
+  return apiClient.post<any>(
+    `/cafeterias/${cafeteriaId}/menu-items/`,
+    data,
+  );
+}
+
+export async function updateMenuItem(
+  cafeteriaId: string,
+  itemId: string,
+  data: any,
+) {
+  return apiClient.put<any>(
+    `/cafeterias/${cafeteriaId}/menu-items/${itemId}`,
+    data,
+  );
+}
+
+// Daily menus
+export async function getDailyMenus(cafeteriaId: string, status?: string) {
+  const qs = status ? `?status=${status}` : "";
+  return apiClient.get<any>(
+    `/cafeterias/${cafeteriaId}/daily-menus${qs}`,
+  );
+}
+
+export async function getTodayMenu(cafeteriaId: string) {
+  return apiClient.get<any>(
+    `/cafeterias/${cafeteriaId}/daily-menus/today`,
+  );
+}
+
+export async function createDailyMenu(cafeteriaId: string, menuDate: string) {
+  return apiClient.post<any>(
+    `/cafeterias/${cafeteriaId}/daily-menus/`,
+    { menu_date: menuDate },
+  );
+}
+
+export async function addDailyMenuItem(
+  cafeteriaId: string,
+  dailyMenuId: string,
+  data: any,
+) {
+  return apiClient.post<any>(
+    `/cafeterias/${cafeteriaId}/daily-menus/${dailyMenuId}/items`,
+    data,
+  );
+}
+
+export async function publishDailyMenu(cafeteriaId: string, dailyMenuId: string) {
+  return apiClient.patch<any>(
+    `/cafeterias/${cafeteriaId}/daily-menus/${dailyMenuId}/publish`,
+  );
+}
+
+// Inventory
+export async function getInventory(cafeteriaId: string, lowOnly?: boolean) {
+  const qs = lowOnly ? "?low_only=true" : "";
+  return apiClient.get<{ items: any[]; total: number }>(
+    `/cafeterias/${cafeteriaId}/inventory${qs}`,
+  );
+}
+
+export async function adjustInventory(
+  cafeteriaId: string,
+  data: { inventory_item_id: string; adjustment_quantity: number; reason?: string },
+) {
+  return apiClient.post<any>(
+    `/cafeterias/${cafeteriaId}/inventory/adjust`,
+    data,
+  );
+}
+
+// Users (Admin)
+export async function getUsers(params?: { role?: string; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.role) query.set("role", params.role);
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return apiClient.get<any[]>(`/users${qs ? `?${qs}` : ""}`);
+}
+
+export async function getUserDetail(userId: string) {
+  return apiClient.get<any>(`/users/${userId}`);
+}
+
+export async function suspendUser(userId: string, reason: string) {
+  return apiClient.post<any>(`/users/${userId}/suspend`, { reason });
+}
+
+export async function activateUser(userId: string) {
+  return apiClient.post<any>(`/users/${userId}/activate`);
+}
+
+export async function changeUserRole(
+  userId: string,
+  role: string,
+  cafeteriaId?: string,
+) {
+  return apiClient.put<any>(`/users/${userId}/role`, {
+    role,
+    cafeteria_id: cafeteriaId,
+  });
+}
+
+// Administration overview
+export async function getAdministrationOverview(params?: {
+  start_date?: string;
+  end_date?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.start_date) query.set("start_date", params.start_date);
+  if (params?.end_date) query.set("end_date", params.end_date);
+  const qs = query.toString();
+  return apiClient.get<any>(`/administration/overview${qs ? `?${qs}` : ""}`);
+}
+
+// Reports
+export async function getSalesReport(params?: {
+  start_date?: string;
+  end_date?: string;
+  cafeteria_id?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.start_date) query.set("start_date", params.start_date);
+  if (params?.end_date) query.set("end_date", params.end_date);
+  if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
+  const qs = query.toString();
+  return apiClient.get<any>(`/reports/sales${qs ? `?${qs}` : ""}`);
+}
+
+export async function getDailySalesReport(params?: {
+  start_date?: string;
+  end_date?: string;
+  cafeteria_id?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.start_date) query.set("start_date", params.start_date);
+  if (params?.end_date) query.set("end_date", params.end_date);
+  if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
+  const qs = query.toString();
+  return apiClient.get<any>(`/reports/sales/daily${qs ? `?${qs}` : ""}`);
+}
+
+export async function getOrderSummaryReport(params?: {
+  start_date?: string;
+  end_date?: string;
+  cafeteria_id?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.start_date) query.set("start_date", params.start_date);
+  if (params?.end_date) query.set("end_date", params.end_date);
+  if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
+  const qs = query.toString();
+  return apiClient.get<any>(`/reports/orders/summary${qs ? `?${qs}` : ""}`);
+}
+
+// Refunds (Admin)
+export async function getAllRefunds(params?: {
+  cafeteria_id?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
+  if (params?.status) query.set("status", params.status);
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.offset) query.set("offset", String(params.offset));
+  const qs = query.toString();
+  return apiClient.get<{ refunds: any[]; total: number }>(
+    `/refunds/admin/all${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function processRefund(refundId: string, body?: { action?: string; reason?: string }) {
+  return apiClient.post<any>(`/refunds/${refundId}/process`, body);
+}
+
+// Notifications
+export async function markNotificationRead(notificationId: string) {
+  return apiClient.patch<any>(`/notifications/${notificationId}/read`);
+}
+
+export async function markAllNotificationsRead() {
+  return apiClient.patch<any>("/notifications/read-all");
+}
+
+// Cafeteria status
+export async function updateCafeteriaStatus(
+  cafeteriaId: string,
+  status: string,
+) {
+  return apiClient.patch<any>(`/cafeterias/${cafeteriaId}/status`, {
+    status,
+  });
+}
+
+export async function updateCafeteria(
+  cafeteriaId: string,
+  data: any,
+) {
+  return apiClient.put<any>(`/cafeterias/${cafeteriaId}`, data);
+}
