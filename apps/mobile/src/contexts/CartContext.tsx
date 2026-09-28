@@ -27,6 +27,8 @@ interface CartContextValue {
   cart: CartResponse | null;
   /** Whether cart is currently loading */
   isCartLoading: boolean;
+  /** Last cart API error, if loading failed */
+  cartError: string | null;
   /** Number of distinct items in the cart */
   cartItemCount: number;
   /** Total amount in paisa */
@@ -54,6 +56,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [isCafeteriaLoading, setIsCafeteriaLoading] = useState(true);
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [isCartLoading, setIsCartLoading] = useState(false);
+  const [cartError, setCartError] = useState<string | null>(null);
 
   // Prevent concurrent cart operations
   const cartLockRef = useRef(false);
@@ -80,8 +83,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     try {
       const cartData = await getCart(cafeteriaId);
       setCart(cartData);
-    } catch {
+      setCartError(null);
+    } catch (error) {
       setCart(null);
+      setCartError(error instanceof Error ? error.message : "Failed to load cart");
     } finally {
       setIsCartLoading(false);
     }
@@ -155,6 +160,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     selectCafeteria,
     cart,
     isCartLoading,
+    cartError,
     cartItemCount: cart?.item_count ?? 0,
     cartTotal: cart?.total_amount ?? 0,
     addToCart,

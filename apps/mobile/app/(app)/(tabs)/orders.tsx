@@ -71,6 +71,7 @@ export default function OrdersScreen() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
   const brand = brandGreen(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
@@ -82,10 +83,11 @@ export default function OrdersScreen() {
 
   const loadOrders = useCallback(async () => {
     try {
+      setError("");
       const data = await getOrders({ limit: 20 });
       setOrders(data);
     } catch {
-      // Silent fail
+      setError("Failed to load order history.");
     }
   }, []);
 
@@ -113,12 +115,25 @@ export default function OrdersScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.screenHeader}>
+          <Text style={[styles.screenTitle, { color: tc }]}>Order history</Text>
+          <Text style={[styles.screenSubtitle, { color: tcMuted }]}>Uni Cafe · your recent orders</Text>
+        </View>
         {isLoading ? (
           <>
             <OrderSkeleton bg={bg} bc={bc} />
             <OrderSkeleton bg={bg} bc={bc} />
             <OrderSkeleton bg={bg} bc={bc} />
           </>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Ionicons name="cloud-offline-outline" size={48} color={tcMuted} />
+            <Text style={[styles.emptyTitle, { color: tc }]}>Order history unavailable</Text>
+            <Text style={[styles.emptyDesc, { color: tcMuted }]}>{error}</Text>
+            <Pressable onPress={loadOrders}>
+              <Text style={[styles.retryText, { color: brand }]}>Try again</Text>
+            </Pressable>
+          </View>
         ) : orders.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="receipt-outline" size={48} color={tcMuted} />
@@ -178,16 +193,25 @@ export default function OrdersScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  list: { padding: 16, paddingBottom: 32 },
+  list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32 },
+  screenHeader: { marginBottom: 22 },
+  screenTitle: { fontSize: 28, fontWeight: "700", lineHeight: 34 },
+  screenSubtitle: { fontSize: 13, marginTop: 4 },
 
   // Empty
   emptyContainer: {
     alignItems: "center",
-    paddingTop: 120,
+    paddingTop: 88,
     gap: 8,
   },
   emptyTitle: { fontSize: 18, fontWeight: "600" },
   emptyDesc: { fontSize: 14 },
+  errorContainer: {
+    alignItems: "center",
+    paddingTop: 88,
+    gap: 8,
+  },
+  retryText: { fontSize: 14, fontWeight: "600", marginTop: 4 },
 
   // Skeleton
   skeletonCard: {

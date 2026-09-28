@@ -74,14 +74,9 @@ export async function getMenuItem(
 
 /** Fetch today's published daily menu for a cafeteria. Returns null if no menu is published. */
 export async function getTodaysMenu(cafeteriaId: string): Promise<DailyMenu | null> {
-  try {
-    const data = await apiClient.get<DailyMenu | null>(
-      `/cafeterias/${cafeteriaId}/daily-menus/today`,
-    );
-    return data;
-  } catch {
-    return null;
-  }
+  return apiClient.get<DailyMenu | null>(
+    `/cafeterias/${cafeteriaId}/daily-menus/today`,
+  );
 }
 
 // ---- Cart ----

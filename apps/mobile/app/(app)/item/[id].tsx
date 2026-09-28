@@ -30,7 +30,7 @@ import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
 import FoodImage from "../../../src/components/FoodImage";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
-import { getMenuItem } from "../../../src/services/data";
+import { getMenuItem, getTodaysMenu } from "../../../src/services/data";
 import type { MenuItem, MenuCategory } from "@uniserve/shared-types";
 
 // ── Helpers ──
@@ -73,19 +73,33 @@ export default function ItemDetailScreen() {
   const [error, setError] = useState("");
   const [isFavorite, setIsFavorite] = useState(false);
 
-  useEffect(() => {
+  const loadItem = useCallback(async () => {
     if (!id || !selectedCafeteria) return;
-    (async () => {
-      try {
-        const data = await getMenuItem(selectedCafeteria.id, id);
-        setItem(data);
-      } catch {
-        setError("Failed to load item details");
-      } finally {
-        setIsLoading(false);
-      }
-    })();
+    setIsLoading(true);
+    setError("");
+    try {
+      const data = await getMenuItem(selectedCafeteria.id, id);
+      const dailyMenu = await getTodaysMenu(selectedCafeteria.id);
+      const dailyItem = dailyMenu?.items.find((entry) => entry.menu_item_id === data.id);
+      setItem(
+        dailyItem
+          ? {
+              ...data,
+              price: dailyItem.special_price ?? data.price,
+              is_available: data.is_available && dailyItem.is_available_today,
+            }
+          : data,
+      );
+    } catch {
+      setError("Failed to load item details");
+    } finally {
+      setIsLoading(false);
+    }
   }, [id, selectedCafeteria]);
+
+  useEffect(() => {
+    loadItem();
+  }, [loadItem]);
 
   const handleAddToCart = useCallback(async () => {
     if (!item || !selectedCafeteria) return;
@@ -123,6 +137,11 @@ export default function ItemDetailScreen() {
           <Pressable onPress={() => router.back()} style={styles.backLink}>
             <Text style={[styles.backLinkText, { color: brand }]}>Go back</Text>
           </Pressable>
+          {error && (
+            <Pressable onPress={loadItem} style={styles.backLink}>
+              <Text style={[styles.backLinkText, { color: brand }]}>Try again</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     );

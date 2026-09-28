@@ -129,7 +129,9 @@ export default function HomeScreen() {
 
   // Load cafeterias for bottom sheet
   useEffect(() => {
-    getCafeterias().then(setCafeterias).catch(() => {});
+    getCafeterias()
+      .then(setCafeterias)
+      .catch(() => setError("Failed to load cafeterias. Pull to retry."));
   }, []);
 
   // Load menu items

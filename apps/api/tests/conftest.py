@@ -9,6 +9,8 @@ Provides:
 
 import asyncio
 from collections.abc import AsyncGenerator
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
@@ -47,6 +49,15 @@ from app.modules.users.models import (
 # ---------------------------------------------------------------------------
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+def future_collection_time(minutes_ahead: int = 30) -> str:
+    """Return a future same-day collection time for scheduled-order tests."""
+    now = datetime.now(ZoneInfo("Asia/Karachi"))
+    candidate = now + timedelta(minutes=minutes_ahead)
+    if candidate.date() != now.date() or candidate.hour == 23:
+        return "23:58"
+    return candidate.strftime("%H:%M")
 
 
 @pytest.fixture(scope="session")

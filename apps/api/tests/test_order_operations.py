@@ -35,6 +35,7 @@ from tests.conftest import (
     create_test_cafeteria,
     create_test_daily_menu,
     create_test_menu_item,
+    future_collection_time,
 )
 
 # ---------------------------------------------------------------------------
@@ -1168,12 +1169,14 @@ class TestScheduledOrderPrep:
 
         # Now test scheduled order
         await _add_cart_item(student_client, cafeteria.id, item.id, quantity=1)
+        cafeteria.closing_time = "23:59"
+        await db.flush()
         resp = await student_client.post(
             f"/api/v1/cafeterias/{cafeteria.id}/cart/checkout",
             json={
                 "payment_method": "cash",
                 "order_type": "scheduled",
-                "scheduled_collection_time": "14:30",
+                "scheduled_collection_time": future_collection_time(),
             },
         )
         assert resp.status_code == 201, resp.text

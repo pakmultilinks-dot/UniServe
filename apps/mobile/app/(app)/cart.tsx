@@ -11,6 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -114,6 +115,9 @@ export default function CartScreen() {
     cartItemCount,
     cartTotal,
     selectedCafeteria,
+    isCartLoading,
+    cartError,
+    refreshCart,
     updateQuantity,
     removeFromCart,
   } = useCart();
@@ -139,6 +143,28 @@ export default function CartScreen() {
 
   const items = cart?.items ?? [];
   const hasUnavailable = items.some((i) => i.item_available === false);
+
+  if (isCartLoading && !cart) {
+    return (
+      <View style={[styles.emptyContainer, { backgroundColor: bgSec }]}>
+        <ActivityIndicator size="large" color={brand} />
+        <Text style={[styles.emptyTitle, { color: tc }]}>Loading your cart</Text>
+      </View>
+    );
+  }
+
+  if (cartError && !cart) {
+    return (
+      <View style={[styles.emptyContainer, { backgroundColor: bgSec, paddingHorizontal: 24 }]}>
+        <Ionicons name="cloud-offline-outline" size={48} color={tcMuted} />
+        <Text style={[styles.emptyTitle, { color: tc }]}>Could not load your cart</Text>
+        <Text style={[styles.emptyDescription, { color: tcMuted }]}>{cartError}</Text>
+        <Pressable style={[styles.browseBtn, { backgroundColor: brand }]} onPress={refreshCart}>
+          <Text style={styles.browseBtnText}>Try again</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.screen, { backgroundColor: bgSec }]}>
@@ -255,8 +281,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  emptyDescription: {
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 12,
+  },
   browseBtn: {
-    height: 44,
+    height: 48,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -298,6 +335,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
+    marginBottom: 10,
   },
   cartItemUnavailable: {
     opacity: 0.5,
@@ -421,9 +459,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 24,
-    height: 44,
-    borderRadius: 10,
+    paddingHorizontal: 28,
+    height: 52,
+    borderRadius: 12,
   },
   checkoutBtnText: {
     color: "#ffffff",

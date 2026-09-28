@@ -30,6 +30,7 @@ from tests.conftest import (
     create_test_menu_item,
     create_test_user,
     create_user_session,
+    future_collection_time,
 )
 
 # ---------------------------------------------------------------------------
@@ -318,6 +319,8 @@ class TestCheckout:
     ):
         """Scheduled order does NOT reserve inventory at checkout."""
         cafeteria, item, _ = await _setup_order_test_data(db, inventory_qty=10)
+        cafeteria.closing_time = "23:59"
+        await db.flush()
 
         await _add_cart_item(student_client, cafeteria.id, item.id, quantity=5)
         resp = await student_client.post(
@@ -325,7 +328,7 @@ class TestCheckout:
             json={
                 "payment_method": "cash",
                 "order_type": "scheduled",
-                "scheduled_collection_time": "14:00",
+                "scheduled_collection_time": future_collection_time(),
             },
         )
         assert resp.status_code == 201
@@ -839,6 +842,8 @@ class TestOrderCancellation:
             db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
         )
         await db.flush()
+        cafeteria.closing_time = "23:59"
+        await db.flush()
 
         await _add_cart_item(student_client, cafeteria.id, item.id)
         checkout_resp = await _checkout(student_client, cafeteria.id)
@@ -1157,7 +1162,7 @@ class TestInventoryReservation:
             json={
                 "payment_method": "cash",
                 "order_type": "scheduled",
-                "scheduled_collection_time": "14:00",
+                "scheduled_collection_time": future_collection_time(),
             },
         )
         assert resp.status_code == 201

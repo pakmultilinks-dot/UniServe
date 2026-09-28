@@ -230,7 +230,7 @@ export default function OrderDetailScreen() {
         />
 
         {/* ── Pickup QR (only when ready) ── */}
-        {order.status === "ready" && (
+        {order.status !== "completed" && order.status !== "cancelled" && (
           <Pressable
             style={[styles.qrBanner, { backgroundColor: brand + "10", borderColor: brand + "30" }]}
             onPress={() => router.push(`/order/${order.id}/qr`)}
@@ -238,7 +238,7 @@ export default function OrderDetailScreen() {
             <Ionicons name="qr-code-outline" size={24} color={brand} />
             <View style={styles.qrBannerText}>
               <Text style={[styles.qrBannerTitle, { color: brand }]}>Show Pickup QR Code</Text>
-              <Text style={[styles.qrBannerSub, { color: tcMuted }]}>Tap to view</Text>
+              <Text style={[styles.qrBannerSub, { color: tcMuted }]}>Available when collecting</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={brand} />
           </Pressable>
