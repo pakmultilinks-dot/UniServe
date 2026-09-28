@@ -1337,7 +1337,7 @@ class OrderService:
         except (ValueError, KeyError):
             tz = UTC
         collection_time = dt_time(hour, minute)
-        local_today = date.today()
+        local_today = datetime.now(tz).date()
         collection_dt = datetime.combine(local_today, collection_time, tzinfo=tz)
         utc_collection = collection_dt.astimezone(UTC)
 

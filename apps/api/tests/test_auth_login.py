@@ -191,7 +191,7 @@ class TestGetCurrentUser:
 
     async def test_me_unauthenticated(self, client: AsyncClient):
         resp = await client.get("/api/v1/auth/me")
-        assert resp.status_code == 422  # Missing Authorization header
+        assert resp.status_code == 401  # Missing Authorization header
 
     async def test_me_invalid_token(self, client: AsyncClient):
         resp = await client.get(

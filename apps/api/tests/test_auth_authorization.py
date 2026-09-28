@@ -46,7 +46,7 @@ class TestRoleBasedAccess:
 
     async def test_unauthenticated_rejected(self, client: AsyncClient):
         resp = await client.get("/api/v1/users/")
-        assert resp.status_code == 422  # Missing header
+        assert resp.status_code == 401  # Missing auth header
 
 
 # ---------------------------------------------------------------------------

@@ -91,6 +91,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 8,
+    // Web: elevation is Android-only; explicit zIndex lifts bar above scroll containers
+    zIndex: 10,
   },
   left: {
     flexDirection: "row",

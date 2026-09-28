@@ -31,7 +31,7 @@ class TestSessions:
 
     async def test_list_sessions_unauthenticated(self, client: AsyncClient):
         resp = await client.get("/api/v1/auth/sessions")
-        assert resp.status_code == 422
+        assert resp.status_code == 401  # Auth middleware returns 401 before validation
 
 
 # ---------------------------------------------------------------------------
