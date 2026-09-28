@@ -64,6 +64,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   /** Auto-select the first student cafeteria on mount */
   React.useEffect(() => {
     (async () => {
+      // Wait a tick for AuthContext to load persisted tokens
+      await new Promise((r) => setTimeout(r, 150));
       try {
         const cafeterias = await getCafeterias();
         if (cafeterias.length > 0) {

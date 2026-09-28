@@ -16,7 +16,6 @@ import {
   View,
   Text,
   ScrollView,
-  Image,
   StyleSheet,
   RefreshControl,
   Pressable,
@@ -245,10 +244,28 @@ export default function HomeScreen() {
       {/* ── Zone 2: Header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.cafeName, { color: tc }]}>Uni Cafe</Text>
-          <Text style={[styles.greeting, { color: tcSec }]}>
+          <Text style={[styles.greeting, { color: tc }]}>
             {greeting}, {user?.first_name ?? "Student"}
           </Text>
+          {selectedCafeteria && (
+            <Pressable
+              onPress={() => setCafeteriaSheetVisible(true)}
+              style={styles.cafeteriaInline}
+              accessibilityLabel={`Current cafeteria: ${selectedCafeteria.name}. Tap to change.`}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.cafeteriaInlineName, { color: tcSec }]}>
+                {selectedCafeteria.name}
+              </Text>
+              {selectedCafeteria.location ? (
+                <Text style={[styles.cafeteriaInlineLoc, { color: tcMuted }]}>
+                  {" · "}{selectedCafeteria.location}
+                </Text>
+              ) : null}
+              <View style={[styles.statusDot, { backgroundColor: functionalColor(resolvedTheme, isCafeteriaOpen ? "success" : "error") }]} />
+              <Ionicons name="chevron-down" size={14} color={tcMuted} />
+            </Pressable>
+          )}
         </View>
         <Pressable
           style={[styles.notifBtn, { backgroundColor: bgSec, borderColor: bc }]}
@@ -257,45 +274,6 @@ export default function HomeScreen() {
           <Ionicons name="notifications-outline" size={21} color={tc} />
         </Pressable>
       </View>
-
-      <View style={styles.featureCard}>
-        <View style={styles.featureCopy}>
-          <Text style={styles.featureEyebrow}>MADE FOR YOUR CAMPUS</Text>
-          <Text style={styles.featureTitle}>Good food,{`\n`}right on campus.</Text>
-          <Pressable
-            onPress={() => {
-              setSearchQuery("");
-              setSelectedCategory("beverage");
-            }}
-            style={styles.featureAction}
-          >
-            <Text style={styles.featureActionText}>Explore the menu</Text>
-            <Ionicons name="arrow-forward" size={14} color={colors.neutral[900]} />
-          </Pressable>
-        </View>
-        <Image
-          source={{ uri: "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=700&q=85" }}
-          style={styles.featureImage}
-          resizeMode="cover"
-        />
-      </View>
-
-      {/* Cafeteria badge */}
-      {selectedCafeteria && (
-        <Pressable
-          onPress={() => setCafeteriaSheetVisible(true)}
-          accessibilityLabel={`Current cafeteria: ${selectedCafeteria.name}. Tap to change.`}
-          accessibilityRole="button"
-        >
-          <View style={[styles.cafeteriaRow, { backgroundColor: bgSec }]}>
-            <Ionicons name="restaurant-outline" size={14} color={brand} />
-            <Text style={[styles.cafeteriaName, { color: tcMuted }]} numberOfLines={1}>
-              {selectedCafeteria.name}
-            </Text>
-            <Ionicons name="chevron-down" size={14} color={tcMuted} />
-          </View>
-        </Pressable>
-      )}
 
       {/* ── Zone 3: Search ── */}
       <View style={{ marginTop: 12 }}>
@@ -485,7 +463,7 @@ const styles = StyleSheet.create({
   // Header
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 4,
@@ -494,8 +472,27 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
-  cafeName: { fontSize: 24, fontWeight: "700", lineHeight: 29 },
-  greeting: { fontSize: 14, fontWeight: "500", lineHeight: 20, marginTop: 2 },
+  greeting: { fontSize: 24, fontWeight: "700", lineHeight: 29, letterSpacing: -0.5 },
+  cafeteriaInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  cafeteriaInlineName: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  cafeteriaInlineLoc: {
+    fontSize: 14,
+    fontWeight: "400",
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 6,
+    marginRight: 2,
+  },
   notifBtn: {
     width: 44,
     height: 44,
@@ -503,73 +500,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-  },
-  featureCard: {
-    height: 172,
-    marginHorizontal: 20,
-    marginTop: 14,
-    marginBottom: 4,
-    borderRadius: 18,
-    overflow: "hidden",
-    backgroundColor: colors.brand[900],
-    flexDirection: "row",
-  },
-  featureCopy: {
-    width: "58%",
-    justifyContent: "center",
-    paddingLeft: 17,
-    paddingRight: 4,
-    zIndex: 1,
-  },
-  featureEyebrow: {
-    color: colors.gold[300],
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 1,
-    marginBottom: 7,
-  },
-  featureTitle: {
-    color: colors.neutral[0],
-    fontSize: 21,
-    fontWeight: "700",
-    lineHeight: 25,
-  },
-  featureAction: {
-    height: 32,
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 11,
-    marginTop: 11,
-    borderRadius: 16,
-    backgroundColor: colors.gold[400],
-  },
-  featureActionText: { color: colors.neutral[900], fontSize: 11, fontWeight: "700" },
-  featureImage: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    width: "48%",
-    height: "100%",
-  },
-
-  // Cafeteria
-  cafeteriaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-    marginHorizontal: 20,
-    marginTop: 4,
-  },
-  cafeteriaName: {
-    fontSize: 13,
-    fontWeight: "500",
-    lineHeight: 16,
-    flex: 1,
   },
 
   // Loading
@@ -624,7 +554,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   gridItem: {
-    width: "31%",
+    width: "48%",
     flexGrow: 0,
     flexShrink: 0,
   },

@@ -159,7 +159,7 @@ export default function FoodCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: "hidden",
     backgroundColor: "#fffdf8",
     borderWidth: 1,
@@ -196,15 +196,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   content: {
-    padding: 8,
+    padding: 10,
   },
   name: {
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   desc: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "400",
     lineHeight: 16,
     marginTop: 2,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   price: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "700",
     lineHeight: 20,
   },

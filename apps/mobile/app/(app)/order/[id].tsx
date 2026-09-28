@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    backgroundColor: "#FEE2E220",
+    backgroundColor: "#fef2f2",
   },
   cancelledText: { fontSize: 13, fontWeight: "600" },
 

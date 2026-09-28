@@ -84,15 +84,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.neutral[0],
     borderWidth: 1,
     borderColor: colors.neutral[300],
-    borderRadius: 10,
-    minHeight: 48,
+    borderRadius: 24,
+    minHeight: 44,
   },
   inputError: {
     borderColor: colors.error,
   },
   input: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 14,
     fontSize: 16,
     color: colors.neutral[900],

@@ -21,7 +21,7 @@ export default function FavoritesScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: bg }]}>
-      <View style={styles.iconContainer}>
+      <View style={[styles.iconContainer, { backgroundColor: brand + "15" }]}>
         <Ionicons name="heart-outline" size={56} color={brand + "30"} />
       </View>
       <Text style={[styles.title, { color: tc }]}>No favorites yet</Text>
@@ -43,7 +43,6 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: "#005400" + "08",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,

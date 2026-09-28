@@ -24,7 +24,6 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useTheme } from "../../src/contexts/ThemeContext";
-import { LguSeal } from "../../src/components/LguSeal";
 import { Button } from "../../src/components/ui";
 import { PasswordInput, LguInput } from "../../src/components/ui/Input";
 import { colors, textColor, bgColor, borderColor, functionalColor } from "../../src/theme";
@@ -72,15 +71,9 @@ export default function LoginScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Seal */}
-        <View style={styles.sealRow}>
-          <LguSeal size="lg" />
-        </View>
-
-        {/* Brand */}
-        <Text style={[styles.wordmark, { color: tc }]}>UniServe</Text>
+        <Text style={[styles.wordmark, { color: tc }]}>Welcome Back!</Text>
         <Text style={[styles.subtitle, { color: tcMuted }]}>
-          Use your LGU university credentials
+          Sign in to order meals, snacks, and drinks on campus.
         </Text>
 
         {/* Form */}
@@ -95,8 +88,8 @@ export default function LoginScreen() {
           ) : null}
 
           <LguInput
-            label="University Email"
-            placeholder="you@lgu.edu.pk"
+            label="LGU Student Email"
+            placeholder="student@lgu.edu.pk"
             value={email}
             onChangeText={(text: string) => { setEmail(text); setError(""); }}
             keyboardType="email-address"
@@ -125,7 +118,7 @@ export default function LoginScreen() {
           <View style={{ height: 12 }} />
 
           <Button
-            title={isLoading ? "Signing in..." : "Sign In"}
+            title={isLoading ? "Signing in..." : "Log In"}
             onPress={handleLogin}
             loading={isLoading}
             disabled={isLoading}
@@ -157,24 +150,21 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: 140,
     paddingBottom: 32,
-  },
-  sealRow: {
-    alignItems: "center",
-    marginBottom: 4,
   },
   wordmark: {
     fontSize: 28,
     fontWeight: "700",
     textAlign: "center",
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: 14,
     textAlign: "center",
     marginTop: 4,
-    marginBottom: 32,
+    marginBottom: 42,
+    fontStyle: "italic",
   },
   form: {
     marginBottom: 8,
@@ -212,7 +202,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     fontSize: 12,
-    marginTop: 40,
+    marginTop: "auto",
     textAlign: "center",
   },
 });

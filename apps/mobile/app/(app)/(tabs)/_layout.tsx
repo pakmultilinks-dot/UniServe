@@ -48,14 +48,14 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: bg,
           borderTopColor: bc,
-          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopWidth: 1,
           height: Platform.OS === "ios" ? 84 : 56,
           paddingBottom: Platform.OS === "ios" ? 24 : 4,
           paddingTop: 4,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: "500",
+          fontSize: 11,
+          fontWeight: "600",
           lineHeight: 14,
         },
       }}

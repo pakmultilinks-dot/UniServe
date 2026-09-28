@@ -4,7 +4,7 @@
  * Design spec:
  * - position absolute, bottom 70, left/right 16
  * - height 52, borderRadius 14
- * - brandGreen bg (dark: #16a34a)
+ * - Espresso background with high-contrast white text
  * - shadow: 0 4 8 rgba(0,0,0,0.2)
  * - Cart icon 20px white, count badge white bg/green text,
  *   count text 15px/600 white, total 16px/700 white, arrow 16px white
@@ -14,7 +14,7 @@ import React, { useEffect, useRef } from "react";
 import { View, Text, Pressable, StyleSheet, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
-import { brandGreen } from "../theme";
+import { colors } from "../theme";
 
 interface CartBarProps {
   itemCount: number;
@@ -28,8 +28,6 @@ function formatPrice(paisa: number): string {
 
 export default function CartBar({ itemCount, total, onPress }: CartBarProps) {
   const { resolvedTheme } = useTheme();
-  const brand = brandGreen(resolvedTheme);
-
   const bounceAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -49,7 +47,7 @@ export default function CartBar({ itemCount, total, onPress }: CartBarProps) {
   }, [itemCount]);
 
   return (
-    <Pressable onPress={onPress} style={[styles.bar, { backgroundColor: brand }]}>
+    <Pressable onPress={onPress} style={[styles.bar, { backgroundColor: colors.brand[900] }]}>
       <View style={styles.left}>
         <View style={styles.cartIconWrap}>
           <Ionicons name="cart" size={20} color="#ffffff" />
@@ -118,7 +116,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   countText: {
-    color: "#005400",
+    color: "#302116",
     fontSize: 11,
     fontWeight: "700",
   },

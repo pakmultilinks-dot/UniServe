@@ -21,7 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { useCart } from "../../src/contexts/CartContext";
 import { checkoutCart, initiatePayment } from "../../src/services/data";
-import { textColor, bgColor, borderColor, brandGreen } from "../../src/theme";
+import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../src/theme";
 import type { OrderType, PaymentMethod } from "@uniserve/shared-types";
 
 // ── Helpers ──
@@ -63,6 +63,9 @@ export default function CheckoutScreen() {
   const bgSec = bgColor(resolvedTheme, "secondary");
   const bc = borderColor(resolvedTheme, "default");
   const bcSub = borderColor(resolvedTheme, "subtle");
+  const errorColor = functionalColor(resolvedTheme, "error");
+  const errorBg = resolvedTheme === "dark" ? "#3b1515" : "#fef2f2";
+  const errorBorder = resolvedTheme === "dark" ? "#5c2020" : "#fecaca";
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [orderType, setOrderType] = useState<OrderType>("immediate");
@@ -176,7 +179,7 @@ export default function CheckoutScreen() {
                     onPress={() => setScheduledTime(slot)}
                     style={[styles.slot, { backgroundColor: scheduledTime === slot ? brand : bg, borderColor: scheduledTime === slot ? brand : bc }]}
                   >
-                    <Text style={[styles.slotText, { color: scheduledTime === slot ? "#302116" : tc }]}>{slot}</Text>
+                    <Text style={[styles.slotText, { color: scheduledTime === slot ? textColor(resolvedTheme, "primary") : tc }]}>{slot}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -309,9 +312,9 @@ export default function CheckoutScreen() {
 
         {/* ── Error ── */}
         {error ? (
-          <View style={[styles.errorBanner, { backgroundColor: "#FEE2E2", borderColor: "#FECACA" }]}>
-            <Ionicons name="alert-circle" size={16} color="#DC2626" />
-            <Text style={[styles.errorText, { color: "#DC2626" }]}>{error}</Text>
+          <View style={[styles.errorBanner, { backgroundColor: errorBg, borderColor: errorBorder }]}>
+            <Ionicons name="alert-circle" size={16} color={errorColor} />
+            <Text style={[styles.errorText, { color: errorColor }]}>{error}</Text>
           </View>
         ) : null}
 

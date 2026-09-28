@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     overflow: "hidden",
-    borderWidth: 1,
+    backgroundColor: "#ffffff",
   },
   image: {
     width: "100%",

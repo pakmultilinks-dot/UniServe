@@ -10,24 +10,24 @@ import { colors } from "./colors";
 export const typography = {
   // Display
   display: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "700" as TextStyle["fontWeight"],
-    lineHeight: 34,
-    letterSpacing: -0.5,
+    lineHeight: 38,
+    letterSpacing: 0,
   },
 
   // Heading styles
   title: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: "700" as TextStyle["fontWeight"],
-    lineHeight: 28,
-    letterSpacing: -0.3,
+    lineHeight: 32,
+    letterSpacing: 0,
   },
   heading: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700" as TextStyle["fontWeight"],
-    lineHeight: 24,
-    letterSpacing: -0.2,
+    lineHeight: 26,
+    letterSpacing: 0,
   },
   subheading: {
     fontSize: 16,
@@ -146,11 +146,11 @@ export function borderColor(
 }
 
 /**
- * Get the brand green color for the current theme.
- * Light: #005400, Dark: #22c55e
+ * Get the primary brand color for the current theme.
+ * Light: caramel gold, Dark: brighter caramel for contrast
  */
 export function brandGreen(theme: "light" | "dark"): string {
-  return theme === "dark" ? colors.brand[500] : colors.brand[700];
+  return theme === "dark" ? colors.gold[300] : colors.gold[500];
 }
 
 /**

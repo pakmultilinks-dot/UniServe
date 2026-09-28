@@ -34,7 +34,7 @@ function resolveTheme(preference: Theme, systemScheme: "light" | "dark" | null |
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemColorScheme = useColorScheme();
-  const [preference, setPreference] = useState<Theme>("system");
+  const [preference, setPreference] = useState<Theme>("light");
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Load stored preference

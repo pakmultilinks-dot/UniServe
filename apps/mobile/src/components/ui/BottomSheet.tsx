@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../contexts/ThemeContext";
-import { bgColor, textColor, borderColor } from "../../theme";
+import { bgColor, textColor, borderColor, brandGreen } from "../../theme";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -44,6 +44,7 @@ export function BottomSheet({
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
   const tcMuted = textColor(resolvedTheme, "muted");
+  const brand = brandGreen(resolvedTheme);
   const bc = borderColor(resolvedTheme, "default");
 
   const translateY = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -155,6 +156,7 @@ export function BottomSheetRow({
   const { resolvedTheme } = useTheme();
   const tc = textColor(resolvedTheme, "primary");
   const tcMuted = textColor(resolvedTheme, "muted");
+  const brand = brandGreen(resolvedTheme);
 
   return (
     <TouchableWithoutFeedback onPress={onPress}>
@@ -163,7 +165,7 @@ export function BottomSheetRow({
           <Ionicons
             name={icon as any}
             size={20}
-            color={selected ? "#005400" : tcMuted}
+            color={selected ? brand : tcMuted}
             style={styles.rowIcon}
           />
         )}
@@ -174,7 +176,7 @@ export function BottomSheetRow({
           )}
         </View>
         {selected && (
-          <Ionicons name="checkmark-circle" size={22} color="#005400" />
+          <Ionicons name="checkmark-circle" size={22} color={brand} />
         )}
       </View>
     </TouchableWithoutFeedback>

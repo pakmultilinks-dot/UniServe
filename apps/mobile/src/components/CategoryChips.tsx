@@ -1,9 +1,7 @@
 /**
  * CategoryChips — Horizontal scrollable category filter.
  *
- * Design spec: paddingHorizontal 20, gap 8, chip paddingHorizontal 14,
- * paddingVertical 8, borderRadius 20 (pill). Active: brandGreen bg, white text.
- * Inactive: bgSecondary bg, textSecondary text.
+ * Warm café filter chips with caramel selection and restrained cream surfaces.
  * NO emojis — uses Ionicons for each category.
  */
 
@@ -11,13 +9,13 @@ import React from "react";
 import { ScrollView, Pressable, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
-import { textColor, bgColor, brandGreen } from "../theme";
+import { textColor, bgColor, brandGreen, colors } from "../theme";
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
 const CATEGORY_ICONS: Record<string, IoniconName> = {
   all: "grid-outline",
-  breakfast: "cafe-outline",
+  breakfast: "sunny-outline",
   main_course: "restaurant-outline",
   side_dish: "leaf-outline",
   dessert: "ice-cream-outline",
@@ -72,21 +70,22 @@ export default function CategoryChips({
             style={[
               styles.chip,
               {
-                backgroundColor: isActive ? brand : bg("secondary"),
+                backgroundColor: isActive ? brand : bg("primary"),
+                borderColor: isActive ? brand : "#e8dac0",
               },
             ]}
           >
             <Ionicons
               name={CATEGORY_ICONS[cat] ?? "grid-outline"}
               size={14}
-              color={isActive ? "#ffffff" : tc("secondary")}
+              color={isActive ? colors.neutral[900] : tc("secondary")}
               style={styles.icon}
             />
             <Text
               style={[
                 styles.label,
                 {
-                  color: isActive ? "#ffffff" : tc("secondary"),
+                  color: isActive ? colors.neutral[900] : tc("secondary"),
                 },
               ]}
             >
@@ -110,7 +109,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   icon: {
     marginRight: 6,
