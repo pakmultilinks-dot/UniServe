@@ -20,6 +20,7 @@ class MenuItemCreateRequest(BaseModel):
     image_url: str | None = Field(None, max_length=512)
     dietary_info: str | None = None  # JSON string
     allergens: str | None = None  # JSON string
+    preparation_time_minutes: int = Field(15, ge=0)
 
 
 class MenuItemUpdateRequest(BaseModel):
@@ -33,6 +34,7 @@ class MenuItemUpdateRequest(BaseModel):
     image_url: str | None = Field(None, max_length=512)
     dietary_info: str | None = None
     allergens: str | None = None
+    preparation_time_minutes: int | None = Field(None, ge=0)
     is_available: bool | None = None
     is_active: bool | None = None
 
@@ -50,6 +52,7 @@ class MenuItemResponse(BaseModel):
     image_url: str | None = None
     dietary_info: str | None = None
     allergens: str | None = None
+    preparation_time_minutes: int
     is_available: bool
     is_active: bool
     created_at: datetime

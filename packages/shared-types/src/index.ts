@@ -295,7 +295,7 @@ export interface MenuItem {
   image_url?: string;
   dietary_info?: string;
   allergens?: string;
-  preparation_time_minutes?: number;
+  preparation_time_minutes: number;
   is_available: boolean;
   is_active: boolean;
   created_at: string;

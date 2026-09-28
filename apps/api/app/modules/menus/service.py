@@ -44,6 +44,7 @@ class MenuService:
         image_url: str | None = None,
         dietary_info: str | None = None,
         allergens: str | None = None,
+        preparation_time_minutes: int = 15,
     ) -> MenuItem:
         """Create a menu item within a cafeteria."""
         item = MenuItem(
@@ -56,6 +57,7 @@ class MenuService:
             image_url=image_url,
             dietary_info=dietary_info,
             allergens=allergens,
+            preparation_time_minutes=preparation_time_minutes,
             is_available=True,
             is_active=True,
         )
@@ -107,6 +109,7 @@ class MenuService:
         image_url: str | None = None,
         dietary_info: str | None = None,
         allergens: str | None = None,
+        preparation_time_minutes: int | None = None,
         is_available: bool | None = None,
         is_active: bool | None = None,
     ) -> MenuItem:
@@ -129,6 +132,8 @@ class MenuService:
             item.dietary_info = dietary_info
         if allergens is not None:
             item.allergens = allergens
+        if preparation_time_minutes is not None:
+            item.preparation_time_minutes = preparation_time_minutes
         if is_available is not None:
             item.is_available = is_available
         if is_active is not None:

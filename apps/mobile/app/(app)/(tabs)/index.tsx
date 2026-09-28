@@ -16,6 +16,7 @@ import {
   View,
   Text,
   ScrollView,
+  Image,
   StyleSheet,
   RefreshControl,
   Pressable,
@@ -37,7 +38,7 @@ import { EmptyState } from "../../../src/components/ui";
 import { BottomSheet, BottomSheetRow } from "../../../src/components/ui/BottomSheet";
 import { SkeletonCard } from "../../../src/components/ui";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor, colors } from "../../../src/theme";
-import { getMenuItems, getTodaysMenu, getCafeterias, type MenuItemsParams } from "../../../src/services/data";
+import { getTodaysMenu, getCafeterias } from "../../../src/services/data";
 import type { MenuItem, MenuCategory, Cafeteria } from "@uniserve/shared-types";
 
 // ── Helpers ──
@@ -87,10 +88,12 @@ export default function HomeScreen() {
   const {
     selectedCafeteria,
     selectCafeteria,
+    cart,
     isCafeteriaLoading,
     cartItemCount,
     cartTotal,
     addToCart: cartAddToCart,
+    updateQuantity: cartUpdateQuantity,
   } = useCart();
 
   const brand = brandGreen(resolvedTheme);
@@ -99,10 +102,10 @@ export default function HomeScreen() {
   const tcMuted = textColor(resolvedTheme, "muted");
   const bg = bgColor(resolvedTheme, "primary");
   const bgSec = bgColor(resolvedTheme, "secondary");
+  const bc = borderColor(resolvedTheme, "default");
 
   // State
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -113,8 +116,14 @@ export default function HomeScreen() {
   const [cafeteriaSheetVisible, setCafeteriaSheetVisible] = useState(false);
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
 
-  // Track items in cart for quantity display
-  const [cartItemMap, setCartItemMap] = useState<Record<string, number>>({});
+  const [busyItemId, setBusyItemId] = useState<string | null>(null);
+  const cartItemMap = (cart?.items ?? []).reduce<Record<string, { cartItemId: string; quantity: number }>>(
+    (map, item) => {
+      map[item.menu_item_id] = { cartItemId: item.id, quantity: item.quantity };
+      return map;
+    },
+    {},
+  );
 
   const isCafeteriaOpen = selectedCafeteria?.operational_status === "open";
 
@@ -131,13 +140,26 @@ export default function HomeScreen() {
       const dailyMenu = await getTodaysMenu(selectedCafeteria.id);
       setHasPublishedMenu(dailyMenu !== null);
 
-      const params: MenuItemsParams = {};
-      if (selectedCategory !== "all") params.category = selectedCategory as MenuCategory;
-      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (!dailyMenu) {
+        setMenuItems([]);
+        return;
+      }
 
-      const { items } = await getMenuItems(selectedCafeteria.id, params);
-      setAllMenuItems(items);
-      setMenuItems(items);
+      const dailyItems = dailyMenu.items
+        .filter((dailyItem) => dailyItem.menu_item)
+        .map((dailyItem) => ({
+          ...dailyItem.menu_item!,
+          price: dailyItem.special_price ?? dailyItem.menu_item!.price,
+          is_available: dailyItem.menu_item!.is_available && dailyItem.is_available_today,
+        }));
+      const normalizedSearch = searchQuery.trim().toLowerCase();
+      setMenuItems(
+        dailyItems.filter((item) => {
+          const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
+          const matchesSearch = !normalizedSearch || item.name.toLowerCase().includes(normalizedSearch);
+          return matchesCategory && matchesSearch;
+        }),
+      );
     } catch {
       setError("Failed to load menu");
     }
@@ -166,12 +188,14 @@ export default function HomeScreen() {
   const handleAddToCart = useCallback(
     async (menuItemId: string) => {
       if (!isCafeteriaOpen) return;
+      setBusyItemId(menuItemId);
       try {
         await cartAddToCart(menuItemId, 1);
-        setCartItemMap((prev) => ({ ...prev, [menuItemId]: (prev[menuItemId] || 0) + 1 }));
         setToast({ visible: true, message: "Added to cart", type: "success" });
       } catch {
         setToast({ visible: true, message: "Failed to add item", type: "error" });
+      } finally {
+        setBusyItemId(null);
       }
     },
     [cartAddToCart, isCafeteriaOpen],
@@ -219,19 +243,39 @@ export default function HomeScreen() {
       {/* ── Zone 2: Header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.greeting, { color: tc }]}>
-            {greeting}
-          </Text>
-          <Text style={[styles.name, { color: tc }]}>
-            {user?.first_name ?? "Student"}
+          <Text style={[styles.cafeName, { color: tc }]}>Uni Cafe</Text>
+          <Text style={[styles.greeting, { color: tcSec }]}>
+            {greeting}, {user?.first_name ?? "Student"}
           </Text>
         </View>
         <Pressable
-          style={[styles.notifBtn, { backgroundColor: bgSec }]}
+          style={[styles.notifBtn, { backgroundColor: bgSec, borderColor: bc }]}
           hitSlop={8}
         >
-          <Ionicons name="notifications-outline" size={22} color={tcSec} />
+          <Ionicons name="notifications-outline" size={21} color={tc} />
         </Pressable>
+      </View>
+
+      <View style={styles.featureCard}>
+        <View style={styles.featureCopy}>
+          <Text style={styles.featureEyebrow}>MADE FOR YOUR CAMPUS</Text>
+          <Text style={styles.featureTitle}>Good food,{`\n`}right on campus.</Text>
+          <Pressable
+            onPress={() => {
+              setSearchQuery("");
+              setSelectedCategory("beverage");
+            }}
+            style={styles.featureAction}
+          >
+            <Text style={styles.featureActionText}>Explore the menu</Text>
+            <Ionicons name="arrow-forward" size={14} color={colors.neutral[900]} />
+          </Pressable>
+        </View>
+        <Image
+          source={{ uri: "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=700&q=85" }}
+          style={styles.featureImage}
+          resizeMode="cover"
+        />
       </View>
 
       {/* Cafeteria badge */}
@@ -282,11 +326,16 @@ export default function HomeScreen() {
 
       {/* ── Error Banner ── */}
       {error ? (
-        <View style={[styles.errorBanner, { backgroundColor: functionalColor(resolvedTheme, "error") + "10", borderColor: functionalColor(resolvedTheme, "error") + "30" }]}>
-          <Ionicons name="alert-circle" size={18} color={functionalColor(resolvedTheme, "error")} />
-          <Text style={[styles.errorText, { color: functionalColor(resolvedTheme, "error"), flex: 1, marginLeft: 8 }]}>{error}</Text>
-          <Pressable onPress={onRefresh}>
-            <Text style={[styles.retryText, { color: brand }]}>Retry</Text>
+        <View style={[styles.errorBanner, { backgroundColor: bg, borderColor: bc }]}>
+          <View style={[styles.errorIcon, { backgroundColor: colors.gold[100] }]}>
+            <Ionicons name="cafe-outline" size={21} color={colors.brand[800]} />
+          </View>
+          <View style={styles.errorCopy}>
+            <Text style={[styles.errorTitle, { color: tc }]}>The menu is taking a break</Text>
+            <Text style={[styles.errorText, { color: tcMuted }]}>{error}. Try again in a moment.</Text>
+          </View>
+          <Pressable onPress={onRefresh} style={styles.retryButton}>
+            <Ionicons name="refresh" size={17} color={brand} />
           </Pressable>
         </View>
       ) : null}
@@ -298,6 +347,8 @@ export default function HomeScreen() {
           <Text style={[styles.warningText, { color: functionalColor(resolvedTheme, "warning"), flex: 1, marginLeft: 8 }]}>
             {selectedCafeteria.operational_status === "closing_soon"
               ? "Closing soon — ordering may be limited"
+              : selectedCafeteria.operational_status === "maintenance"
+                ? "Cafeteria is temporarily paused"
               : "Cafeteria is currently closed"}
           </Text>
         </View>
@@ -315,11 +366,19 @@ export default function HomeScreen() {
       {!isLoading && menuItems.length === 0 && hasPublishedMenu !== false && !error && (
         <EmptyState
           icon={searchQuery ? "search-outline" : "restaurant-outline"}
-          title={searchQuery ? "No items found" : "No menu items available"}
+          title={
+            searchQuery
+              ? "No items found"
+              : selectedCafeteria
+                ? "Today's menu is being prepared"
+                : "Find your campus cafe"
+          }
           description={
             searchQuery
               ? `No items match "${searchQuery}"`
-              : "No items have been added to today's menu yet."
+              : selectedCafeteria
+                ? "Fresh campus favorites will appear here once today's menu is published."
+                : "Choose a campus cafe to explore meals, snacks, and drinks."
           }
         />
       )}
@@ -351,15 +410,18 @@ export default function HomeScreen() {
                   price={item.price}
                   imageUri={item.image_url}
                   category={item.category}
-                  quantity={cartItemMap[item.id] || 0}
+                  preparationTimeMinutes={item.preparation_time_minutes}
+                  isAvailable={item.is_available}
+                  isBusy={busyItemId === item.id}
+                  quantity={cartItemMap[item.id]?.quantity ?? 0}
                   onPress={() => handleItemPress(item)}
                   onAdd={() => handleAddToCart(item.id)}
                   onIncrement={() => handleAddToCart(item.id)}
                   onDecrement={() => {
-                    setCartItemMap((prev) => ({
-                      ...prev,
-                      [item.id]: Math.max(0, (prev[item.id] || 0) - 1),
-                    }));
+                    const cartItem = cartItemMap[item.id];
+                    if (cartItem) {
+                      cartUpdateQuantity(cartItem.cartItemId, cartItem.quantity - 1);
+                    }
                   }}
                 />
               </View>
@@ -430,24 +492,64 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
-  greeting: {
-    fontSize: 14,
-    fontWeight: "400",
-    color: "#6b7280",
-    lineHeight: 18,
-  },
-  name: {
-    fontSize: 22,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-    lineHeight: 28,
-  },
+  cafeName: { fontSize: 24, fontWeight: "700", lineHeight: 29 },
+  greeting: { fontSize: 14, fontWeight: "500", lineHeight: 20, marginTop: 2 },
   notifBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+  },
+  featureCard: {
+    height: 172,
+    marginHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 4,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: colors.brand[900],
+    flexDirection: "row",
+  },
+  featureCopy: {
+    width: "58%",
+    justifyContent: "center",
+    paddingLeft: 17,
+    paddingRight: 4,
+    zIndex: 1,
+  },
+  featureEyebrow: {
+    color: colors.gold[300],
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1,
+    marginBottom: 7,
+  },
+  featureTitle: {
+    color: colors.neutral[0],
+    fontSize: 21,
+    fontWeight: "700",
+    lineHeight: 25,
+  },
+  featureAction: {
+    height: 32,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 11,
+    marginTop: 11,
+    borderRadius: 16,
+    backgroundColor: colors.gold[400],
+  },
+  featureActionText: { color: colors.neutral[900], fontSize: 11, fontWeight: "700" },
+  featureImage: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: "48%",
+    height: "100%",
   },
 
   // Cafeteria
@@ -482,20 +584,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 14,
     borderWidth: 1,
     marginHorizontal: 20,
     marginTop: 12,
   },
+  errorIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  errorCopy: { flex: 1, marginLeft: 10, gap: 3 },
+  errorTitle: { fontSize: 13, fontWeight: "700" },
   errorText: {
-    fontSize: 13,
-    fontWeight: "500",
+    fontSize: 11,
+    lineHeight: 15,
   },
-  retryText: {
-    fontSize: 13,
-    fontWeight: "600",
-    marginLeft: 12,
-  },
+  retryButton: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.gold[50] },
 
   // Warning
   warningBanner: {
@@ -521,9 +622,9 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   gridItem: {
-    flex: 1,
-    minWidth: "45%",
-    maxWidth: "48%",
+    width: "31%",
+    flexGrow: 0,
+    flexShrink: 0,
   },
 
   // Bottom sheet

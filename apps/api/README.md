@@ -8,6 +8,10 @@ FastAPI backend for the UniServe university cafeteria management system.
 # Install dependencies
 pip install -e ".[dev]"
 
+# Run migrations, then seed today's Student Cafeteria menu
+alembic upgrade head
+python scripts/seed_student_cafeteria.py
+
 # Run the server
 uvicorn app.main:app --reload
 

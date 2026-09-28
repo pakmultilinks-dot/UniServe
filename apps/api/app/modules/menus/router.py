@@ -74,6 +74,7 @@ async def create_menu_item(
         image_url=body.image_url,
         dietary_info=body.dietary_info,
         allergens=body.allergens,
+        preparation_time_minutes=body.preparation_time_minutes,
     )
     return MenuItemResponse.model_validate(item)
 
@@ -144,6 +145,7 @@ async def update_menu_item(
         image_url=body.image_url,
         dietary_info=body.dietary_info,
         allergens=body.allergens,
+        preparation_time_minutes=body.preparation_time_minutes,
         is_available=body.is_available,
         is_active=body.is_active,
     )

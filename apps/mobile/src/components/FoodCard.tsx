@@ -2,7 +2,7 @@
  * FoodCard — Grid-view food item card.
  *
  * Design spec:
- * - Container: borderRadius 12, bgPrimary, overflow hidden
+ * - Container: softly rounded café-white surface, overflow hidden
  * - Image: aspectRatio 1 (square), full width, resizeMode cover
  * - Quantity badge: absolute top-right of image
  * - Content padding: 10
@@ -15,7 +15,7 @@
  */
 
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
 import { textColor, bgColor, borderColor, brandGreen } from "../theme";
@@ -28,6 +28,9 @@ interface FoodCardProps {
   price: number; // paisa
   imageUri?: string | null;
   category?: MenuCategory | string;
+  preparationTimeMinutes?: number;
+  isAvailable?: boolean;
+  isBusy?: boolean;
   quantity?: number;
   onPress?: () => void;
   onAdd?: () => void;
@@ -45,6 +48,9 @@ export default function FoodCard({
   price,
   imageUri,
   category,
+  preparationTimeMinutes,
+  isAvailable = true,
+  isBusy = false,
   quantity = 0,
   onPress,
   onAdd,
@@ -54,7 +60,7 @@ export default function FoodCard({
   const { resolvedTheme } = useTheme();
   const tc = (v: "primary" | "secondary" | "muted") => textColor(resolvedTheme, v);
   const bg = bgColor(resolvedTheme, "primary");
-  const bc = borderColor(resolvedTheme, "default");
+  const bc = borderColor(resolvedTheme, "subtle");
   const brand = brandGreen(resolvedTheme);
 
   return (
@@ -89,13 +95,17 @@ export default function FoodCard({
         >
           {name}
         </Text>
-        {description ? (
+        {description || preparationTimeMinutes || !isAvailable ? (
           <Text
             style={[styles.desc, { color: tc("muted") }]}
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {description}
+            {isAvailable
+              ? [description, preparationTimeMinutes ? `~${preparationTimeMinutes} min` : ""]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "Out of stock"}
           </Text>
         ) : null}
 
@@ -126,10 +136,19 @@ export default function FoodCard({
             /* Add button */
             <Pressable
               onPress={onAdd}
-              style={[styles.addBtn, { backgroundColor: brand }]}
+              disabled={!isAvailable || isBusy}
+              style={[styles.addBtn, { backgroundColor: isAvailable ? brand : bgColor(resolvedTheme, "tertiary") }]}
               hitSlop={8}
             >
-              <Ionicons name="add" size={16} color="#ffffff" />
+              {isBusy ? (
+                <ActivityIndicator size="small" color="#302116" />
+              ) : (
+                <Ionicons
+                  name={isAvailable ? "add" : "close"}
+                  size={16}
+                  color={isAvailable ? "#302116" : tc("muted")}
+                />
+              )}
             </Pressable>
           )}
         </View>
@@ -140,12 +159,15 @@ export default function FoodCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: "hidden",
+    backgroundColor: "#fffdf8",
     borderWidth: 1,
+    borderColor: "#f0e7d7",
+    elevation: 2,
   },
   pressed: {
-    opacity: 0.85,
+    opacity: 0.98,
     transform: [{ scale: 0.98 }],
   },
   imageContainer: {
@@ -165,7 +187,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    minWidth: 20,
+    minWidth: 22,
     alignItems: "center",
   },
   qtyText: {
@@ -174,15 +196,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   content: {
-    padding: 10,
+    padding: 8,
   },
   name: {
-    fontSize: 14,
-    fontWeight: "600",
-    lineHeight: 18,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
   },
   desc: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "400",
     lineHeight: 16,
     marginTop: 2,
@@ -194,7 +216,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   price: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "700",
     lineHeight: 20,
   },
