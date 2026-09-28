@@ -66,8 +66,20 @@ async def list_cafeterias(
     is_active: bool | None = None,
     cafeteria_type: CafeteriaType | None = None,
 ) -> CafeteriaListResponse:
-    """List all cafeterias (authenticated users)."""
+    """List cafeterias filtered by user role.
+
+    - Students only see STUDENT cafeterias.
+    - Faculty see both STUDENT and FACULTY cafeterias.
+    - Admin / staff / manager see all.
+    """
     service = CafeteriaService(db)
+
+    # Role-based filtering --------------------------------------------------
+    if cafeteria_type is None:  # only auto-filter when caller didn't specify
+        if auth.user.role == Role.STUDENT:
+            cafeteria_type = CafeteriaType.STUDENT
+        # Faculty and admins see all cafeterias (no filter)
+
     cafeterias = await service.list_cafeterias(
         is_active=is_active,
         cafeteria_type=cafeteria_type,
