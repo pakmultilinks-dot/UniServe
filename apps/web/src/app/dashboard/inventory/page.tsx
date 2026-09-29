@@ -34,6 +34,9 @@ export default function InventoryPage() {
   const [adjustingItem, setAdjustingItem] = useState<string | null>(null);
   const { toast } = useToast();
 
+  /* Inline modal state — replaces window.prompt */
+  const [adjustModal, setAdjustModal] = useState<{ itemId: string; quantity: string; reason: string } | null>(null);
+
   const loadCafeterias = useCallback(async () => {
     try {
       const data = await getCafeterias();
@@ -58,15 +61,12 @@ export default function InventoryPage() {
   useEffect(() => { loadCafeterias(); }, [loadCafeterias]);
   useEffect(() => { loadInventory(); }, [loadInventory]);
 
-  const handleAdjust = async (itemId: string) => {
-    const qty = window.prompt("Adjustment quantity (positive = add, negative = subtract):");
-    if (!qty) return;
-    const reason = window.prompt("Reason (optional):") ?? undefined;
+  const handleAdjust = async (itemId: string, quantity: number, reason?: string) => {
     setAdjustingItem(itemId);
     try {
       await adjustInventory(selectedCafeteria, {
         inventory_item_id: itemId,
-        adjustment_quantity: Number(qty),
+        adjustment_quantity: quantity,
         reason,
       });
       await loadInventory();
@@ -166,7 +166,7 @@ export default function InventoryPage() {
                           size="sm"
                           variant="ghost"
                           loading={adjustingItem === item.id}
-                          onClick={() => handleAdjust(item.id)}
+                          onClick={() => setAdjustModal({ itemId: item.id, quantity: "", reason: "" })}
                         >
                           Adjust
                         </Button>
@@ -176,6 +176,51 @@ export default function InventoryPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Adjust inventory modal ─── */}
+      {adjustModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setAdjustModal(null)}>
+          <div
+            className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl shadow-xl w-full max-w-sm mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Adjust Inventory</h3>
+            <label className="block text-sm text-[var(--text-secondary)] mb-1">Quantity (positive = add, negative = subtract)</label>
+            <input
+              type="number"
+              value={adjustModal.quantity}
+              onChange={(e) => setAdjustModal({ ...adjustModal, quantity: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
+              placeholder="e.g. 10 or -5"
+              autoFocus
+            />
+            <label className="block text-sm text-[var(--text-secondary)] mt-3 mb-1">Reason (optional)</label>
+            <input
+              type="text"
+              value={adjustModal.reason}
+              onChange={(e) => setAdjustModal({ ...adjustModal, reason: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
+              placeholder="e.g. Restocked from supplier"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button size="sm" variant="ghost" onClick={() => setAdjustModal(null)}>Cancel</Button>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={adjustingItem === adjustModal.itemId}
+                onClick={() => {
+                  const qty = parseInt(adjustModal.quantity);
+                  if (isNaN(qty)) return;
+                  handleAdjust(adjustModal.itemId, qty, adjustModal.reason || undefined);
+                  setAdjustModal(null);
+                }}
+              >
+                Confirm
+              </Button>
+            </div>
           </div>
         </div>
       )}

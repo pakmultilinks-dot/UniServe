@@ -38,10 +38,10 @@ export default function ProfilePage() {
     }
     setSaving(true);
     try {
-      // Profile name update — via auth/me endpoint if available, or local-only
-      await refreshUser();
+      // Profile name update — backend does not yet expose a profile update endpoint.
+      // Show a notice to the user.
+      toast("Profile editing will be available in a future update", "info");
       setEditing(false);
-      toast("Profile updated", "success");
     } catch (err: any) {
       toast(err?.message ?? "Failed to update profile", "error");
     } finally {

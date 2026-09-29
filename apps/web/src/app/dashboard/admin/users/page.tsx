@@ -27,6 +27,9 @@ export default function UsersPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { toast } = useToast();
 
+  /* Inline modal state — replaces window.prompt */
+  const [suspendModal, setSuspendModal] = useState<{ userId: string; reason: string } | null>(null);
+
   useEffect(() => {
     if (user && !isAdmin) {
       router.push("/dashboard");
@@ -50,9 +53,7 @@ export default function UsersPage() {
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
-  const handleSuspend = async (userId: string) => {
-    const reason = window.prompt("Suspension reason:");
-    if (!reason) return;
+  const handleSuspend = async (userId: string, reason: string) => {
     setActionLoading(userId);
     try {
       await suspendUser(userId, reason);
@@ -215,7 +216,7 @@ export default function UsersPage() {
                               size="sm"
                               variant="danger"
                               loading={actionLoading === u.id}
-                              onClick={() => handleSuspend(u.id)}
+                              onClick={() => setSuspendModal({ userId: u.id, reason: "" })}
                             >
                               Suspend
                             </Button>
@@ -236,6 +237,42 @@ export default function UsersPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Suspend user modal ─── */}
+      {suspendModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setSuspendModal(null)}>
+          <div
+            className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl shadow-xl w-full max-w-sm mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Suspend User</h3>
+            <label className="block text-sm text-[var(--text-secondary)] mb-1">Reason for suspension</label>
+            <textarea
+              value={suspendModal.reason}
+              onChange={(e) => setSuspendModal({ ...suspendModal, reason: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
+              rows={3}
+              placeholder="Provide a reason for suspending this user..."
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button size="sm" variant="ghost" onClick={() => setSuspendModal(null)}>Cancel</Button>
+              <Button
+                size="sm"
+                variant="danger"
+                loading={actionLoading === suspendModal.userId}
+                onClick={() => {
+                  if (!suspendModal.reason.trim()) return;
+                  handleSuspend(suspendModal.userId, suspendModal.reason);
+                  setSuspendModal(null);
+                }}
+              >
+                Confirm Suspend
+              </Button>
+            </div>
           </div>
         </div>
       )}

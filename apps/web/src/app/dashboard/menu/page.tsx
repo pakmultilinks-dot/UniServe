@@ -240,6 +240,7 @@ function MenuItemModal({
     preparation_time_minutes: item?.preparation_time_minutes ?? 15,
   });
   const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -259,8 +260,7 @@ function MenuItemModal({
       }
       onSaved();
     } catch (err: any) {
-      // Toast is inside the modal, use window.alert as fallback
-      window.alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed to save menu item", "error");
     } finally {
       setSaving(false);
     }

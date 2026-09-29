@@ -144,14 +144,6 @@ export default function RefundsPage() {
                           >
                             Approve
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            loading={actionLoading === refund.id}
-                            onClick={() => handleProcess(refund.id)}
-                          >
-                            Reject
-                          </Button>
                         </div>
                       )}
                     </td>

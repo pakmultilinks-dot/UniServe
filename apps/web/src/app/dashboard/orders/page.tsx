@@ -35,6 +35,10 @@ export default function OrdersPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { toast } = useToast();
 
+  /* Inline modal state — replaces window.prompt */
+  const [rejectModal, setRejectModal] = useState<{ orderId: string; reason: string } | null>(null);
+  const [delayModal, setDelayModal] = useState<{ orderId: string; minutes: string } | null>(null);
+
   const loadCafeterias = useCallback(async () => {
     try {
       const data = await getCafeterias();
@@ -199,10 +203,7 @@ export default function OrdersPage() {
                             size="sm"
                             variant="danger"
                             loading={actionLoading === order.id}
-                            onClick={() => {
-                              const reason = window.prompt("Rejection reason:");
-                              if (reason) handleAction(order.id, () => rejectOrder(order.id, reason));
-                            }}
+                            onClick={() => setRejectModal({ orderId: order.id, reason: "" })}
                           >
                             Reject
                           </Button>
@@ -233,10 +234,7 @@ export default function OrdersPage() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => {
-                          const mins = window.prompt("Additional minutes:");
-                          if (mins) handleAction(order.id, () => delayOrder(order.id, parseInt(mins)));
-                        }}
+                        onClick={() => setDelayModal({ orderId: order.id, minutes: "" })}
                       >
                         Delay
                       </Button>
@@ -246,6 +244,79 @@ export default function OrdersPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ─── Reject order modal ─── */}
+      {rejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRejectModal(null)}>
+          <div
+            className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl shadow-xl w-full max-w-sm mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Reject Order</h3>
+            <textarea
+              value={rejectModal.reason}
+              onChange={(e) => setRejectModal({ ...rejectModal, reason: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
+              rows={3}
+              placeholder="Provide a reason for rejection..."
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button size="sm" variant="ghost" onClick={() => setRejectModal(null)}>Cancel</Button>
+              <Button
+                size="sm"
+                variant="danger"
+                loading={actionLoading === rejectModal.orderId}
+                onClick={() => {
+                  if (!rejectModal.reason.trim()) return;
+                  handleAction(rejectModal.orderId, () => rejectOrder(rejectModal.orderId, rejectModal.reason));
+                  setRejectModal(null);
+                }}
+              >
+                Confirm Reject
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Delay order modal ─── */}
+      {delayModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDelayModal(null)}>
+          <div
+            className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl shadow-xl w-full max-w-sm mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Delay Order</h3>
+            <label className="block text-sm text-[var(--text-secondary)] mb-1">Additional minutes</label>
+            <input
+              type="number"
+              min={1}
+              value={delayModal.minutes}
+              onChange={(e) => setDelayModal({ ...delayModal, minutes: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
+              placeholder="e.g. 15"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button size="sm" variant="ghost" onClick={() => setDelayModal(null)}>Cancel</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={actionLoading === delayModal.orderId}
+                onClick={() => {
+                  const mins = parseInt(delayModal.minutes);
+                  if (!mins || mins < 1) return;
+                  handleAction(delayModal.orderId, () => delayOrder(delayModal.orderId, mins));
+                  setDelayModal(null);
+                }}
+              >
+                Confirm Delay
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

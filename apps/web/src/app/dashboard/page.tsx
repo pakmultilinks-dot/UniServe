@@ -23,25 +23,7 @@ import {
 import type { Order, Notification, Cafeteria } from "@uniserve/shared-types";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
-
-/* Status chip styling */
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  preparing: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  ready: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  completed: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-  cancelled: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-};
-
-function StatusChip({ status }: { status: string }) {
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[status] || "bg-neutral-100 text-neutral-600"}`}
-    >
-      {status}
-    </span>
-  );
-}
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 /* Stat card */
 function StatCard({
@@ -213,7 +195,7 @@ export default function DashboardPage() {
             </h2>
             {orders.length > 0 && (
               <Link
-                href="/orders"
+                href="/dashboard/orders"
                 className="text-sm font-medium text-brand-700 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-colors"
               >
                 View all
@@ -254,7 +236,7 @@ export default function DashboardPage() {
                       <span className="text-sm font-medium text-[var(--text-primary)]">
                         Order #{order.order_number}
                       </span>
-                      <StatusChip status={order.status} />
+                      <StatusBadge status={order.status} />
                     </div>
                     <p className="text-xs text-[var(--text-muted)] mt-0.5">
                       {order.items.length} item{order.items.length !== 1 ? "s" : ""} ·{" "}
@@ -263,7 +245,7 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <Link
-                    href="/orders"
+                    href="/dashboard/orders"
                     className="ml-4 flex-shrink-0 text-xs font-medium text-brand-700 dark:text-brand-400 hover:text-brand-600"
                   >
                     Details
@@ -282,7 +264,7 @@ export default function DashboardPage() {
             </h2>
             {notifications.length > 0 && (
               <Link
-                href="/notifications"
+                href="/dashboard/notifications"
                 className="text-sm font-medium text-brand-700 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-colors"
               >
                 View all
@@ -348,7 +330,7 @@ export default function DashboardPage() {
             {cafeterias.slice(0, 6).map((caf) => (
               <Link
                 key={caf.id}
-                href="/cafeterias"
+                href="/dashboard/cafeterias"
                 className="flex items-center gap-3 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 shadow-card hover:shadow-card-hover hover:border-brand-200 dark:hover:border-brand-800 transition-all"
               >
                 <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center">
