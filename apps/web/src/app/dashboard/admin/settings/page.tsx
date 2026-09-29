@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -9,6 +10,14 @@ export default function SettingsPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const isAdmin = user?.role === "university_admin";
+
+  useEffect(() => {
+    if (user && !isAdmin) {
+      router.push("/dashboard");
+    }
+  }, [user, isAdmin, router]);
+
+  if (!isAdmin) return null;
 
   return (
     <div className="animate-fade-in">

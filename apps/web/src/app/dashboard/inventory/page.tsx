@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 import { getCafeterias, getInventory, adjustInventory } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -11,10 +12,18 @@ import type { Cafeteria, InventoryItem } from "@uniserve/shared-types";
 
 export default function InventoryPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const isManager = user?.role === "cafeteria_manager";
   const isStaff = user?.role === "cafeteria_staff";
   const isAdmin = user?.role === "university_admin";
   const canAdjust = isManager || isStaff || isAdmin;
+  const hasAccess = isManager || isStaff || isAdmin;
+
+  useEffect(() => {
+    if (user && !hasAccess) {
+      router.push("/dashboard");
+    }
+  }, [user, hasAccess, router]);
 
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [selectedCafeteria, setSelectedCafeteria] = useState("");

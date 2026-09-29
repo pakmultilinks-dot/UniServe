@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 import { getCafeterias, updateCafeteriaStatus, updateCafeteria } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -11,9 +12,14 @@ import type { Cafeteria } from "@uniserve/shared-types";
 
 export default function CafeteriasPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const isManager = user?.role === "cafeteria_manager";
   const isAdmin = user?.role === "university_admin";
   const canManage = isManager || isAdmin;
+
+  useEffect(() => {
+    if (!user) return;
+  }, [user]);
 
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [loading, setLoading] = useState(true);

@@ -234,6 +234,13 @@ async def get_daily_menu(
     """Get a daily menu by ID."""
     service = MenuService(db)
     menu = await service.get_daily_menu(daily_menu_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=menu.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="DailyMenu",
+        db=db,
+        auth=auth,
+    )
     return DailyMenuResponse.model_validate(menu)
 
 
@@ -387,7 +394,21 @@ async def search_menu_items(
     search: str | None = None,
     is_available: bool | None = True,
 ) -> MenuItemListResponse:
-    """Search menu items across cafeterias."""
+    """Search menu items. Validates cafeteria access if cafeteria_id provided."""
+    # If a specific cafeteria is requested, verify access
+    if cafeteria_id:
+        from sqlalchemy import select as sa_select
+        from app.modules.cafeterias.models import Cafeteria, CafeteriaType
+        from app.core.exceptions import AuthorizationError
+        caf_result = await db.execute(sa_select(Cafeteria).where(Cafeteria.id == cafeteria_id))
+        caf = caf_result.scalar_one_or_none()
+        if caf is None:
+            from app.core.exceptions import NotFoundException
+            raise NotFoundException("Cafeteria", cafeteria_id)
+        if auth.user.role in (Role.STUDENT, Role.FACULTY):
+            if caf.type == CafeteriaType.FACULTY and auth.user.category.value != "faculty":
+                raise AuthorizationError("You cannot access this cafeteria")
+
     service = MenuService(db)
     items = await service.search_menu_items(
         cafeteria_id=cafeteria_id,

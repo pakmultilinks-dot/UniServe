@@ -2,29 +2,24 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
+import { apiClient } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 export default function FavoritesPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [favorites, setFavorites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadFavorites = useCallback(async () => {
     setLoading(true);
     try {
-      const token = typeof window !== "undefined" ? sessionStorage.getItem("uniserve_refresh_token") : null;
-      // Use the same api base
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/favorites`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem("uniserve_token") ?? ""}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setFavorites(Array.isArray(data) ? data : data.items ?? []);
-      } else {
-        setFavorites([]);
-      }
+      const data = await apiClient.get<any>("/favorites");
+      const favs = Array.isArray(data) ? data : data.favorites ?? data.items ?? [];
+      setFavorites(favs);
     } catch {
       setFavorites([]);
     } finally {

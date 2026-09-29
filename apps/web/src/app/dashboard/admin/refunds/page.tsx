@@ -38,12 +38,10 @@ export default function RefundsPage() {
 
   useEffect(() => { loadRefunds(); }, [loadRefunds]);
 
-  const handleProcess = async (refundId: string, action: "approve" | "reject") => {
-    const reason = prompt(`Reason for ${action}ing refund:`);
-    if (reason === null) return;
+  const handleProcess = async (refundId: string) => {
     setActionLoading(refundId);
     try {
-      await processRefund(refundId, { action, reason: reason || undefined });
+      await processRefund(refundId);
       await loadRefunds();
     } catch (err: any) {
       alert(err?.message ?? "Failed");
@@ -140,7 +138,7 @@ export default function RefundsPage() {
                             size="sm"
                             variant="primary"
                             loading={actionLoading === refund.id}
-                            onClick={() => handleProcess(refund.id, "approve")}
+                            onClick={() => handleProcess(refund.id)}
                           >
                             Approve
                           </Button>
@@ -148,7 +146,7 @@ export default function RefundsPage() {
                             size="sm"
                             variant="danger"
                             loading={actionLoading === refund.id}
-                            onClick={() => handleProcess(refund.id, "reject")}
+                            onClick={() => handleProcess(refund.id)}
                           >
                             Reject
                           </Button>

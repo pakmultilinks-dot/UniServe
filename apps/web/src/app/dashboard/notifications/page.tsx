@@ -29,7 +29,7 @@ export default function NotificationsPage() {
   const loadNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getNotifications({ is_read: showUnreadOnly ? false : undefined, limit: 50 });
+      const data = await getNotifications({ unread_only: showUnreadOnly || undefined, limit: 50 });
       setNotifications(data.items ?? []);
       setUnreadCount(data.unread_count ?? 0);
     } catch {

@@ -419,6 +419,24 @@ async def get_eta(
     service = OrderService(db)
     order = await service.get_order(order_id)
 
+    # Authorization: owner, admin, or assigned staff/manager
+    if order.user_id != auth.user.id and auth.user.role != Role.UNIVERSITY_ADMIN:
+        if auth.user.role in (Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF):
+            from sqlalchemy import select as sa_select
+            from app.modules.users.models import CafeteriaAssignment
+            result = await db.execute(
+                sa_select(CafeteriaAssignment).where(
+                    CafeteriaAssignment.user_id == auth.user.id,
+                    CafeteriaAssignment.cafeteria_id == order.cafeteria_id,
+                )
+            )
+            if result.scalar_one_or_none() is None:
+                from app.core.exceptions import AuthorizationError
+                raise AuthorizationError("Order not found")
+        else:
+            from app.core.exceptions import AuthorizationError
+            raise AuthorizationError("Order not found")
+
     from app.modules.orders.eta import calculate_eta
 
     eta_minutes = await calculate_eta(

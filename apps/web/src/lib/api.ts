@@ -213,12 +213,12 @@ export async function getOrders(params?: {
 }
 
 export async function getNotifications(params?: {
-  is_read?: boolean;
+  unread_only?: boolean;
   limit?: number;
 }): Promise<import("@uniserve/shared-types").NotificationListResponse> {
   const query = new URLSearchParams();
-  if (params?.is_read !== undefined)
-    query.set("is_read", String(params.is_read));
+  if (params?.unread_only !== undefined)
+    query.set("unread_only", String(params.unread_only));
   if (params?.limit) query.set("limit", String(params.limit));
   const qs = query.toString();
   return apiClient.get<import("@uniserve/shared-types").NotificationListResponse>(
@@ -427,7 +427,30 @@ export async function getAdministrationOverview(params?: {
   if (params?.start_date) query.set("start_date", params.start_date);
   if (params?.end_date) query.set("end_date", params.end_date);
   const qs = query.toString();
-  return apiClient.get<any>(`/administration/overview${qs ? `?${qs}` : ""}`);
+  const raw = await apiClient.get<any>(`/administration/overview${qs ? `?${qs}` : ""}`);
+  // Map nested backend response to flat frontend shape
+  return {
+    total_users: raw.users?.total ?? 0,
+    users_by_role: {
+      student: raw.users?.students ?? 0,
+      faculty: raw.users?.faculty ?? 0,
+      cafeteria_manager: raw.users?.cafeteria_managers ?? 0,
+      cafeteria_staff: raw.users?.cafeteria_staff ?? 0,
+      university_admin: raw.users?.university_admins ?? 0,
+    },
+    total_orders: raw.orders?.total_orders ?? 0,
+    orders_by_status: {
+      pending: raw.orders?.pending ?? 0,
+      preparing: raw.orders?.preparing ?? 0,
+      ready: raw.orders?.ready ?? 0,
+      completed: raw.orders?.completed ?? 0,
+      cancelled: raw.orders?.cancelled ?? 0,
+    },
+    total_revenue: (raw.financial?.total_revenue ?? 0) / 100, // paisa -> rupees
+    active_cafeterias: raw.cafeterias?.active ?? 0,
+    pending_refunds: raw.exceptions?.overdue_refunds ?? 0,
+    total_menu_items: 0,
+  };
 }
 
 // Reports
@@ -488,8 +511,8 @@ export async function getAllRefunds(params?: {
   );
 }
 
-export async function processRefund(refundId: string, body?: { action?: string; reason?: string }) {
-  return apiClient.post<any>(`/refunds/${refundId}/process`, body);
+export async function processRefund(refundId: string) {
+  return apiClient.post<any>(`/refunds/${refundId}/process`);
 }
 
 // Notifications

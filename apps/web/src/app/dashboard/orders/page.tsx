@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 import { getCafeterias, getCafeteriaOrders, confirmOrder, prepareOrder, readyOrder, delayOrder, rejectOrder } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -13,9 +14,17 @@ const ORDER_TABS = ["pending", "preparing", "ready", "completed", "cancelled"] a
 
 export default function OrdersPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const isStaff = user?.role === "cafeteria_staff";
   const isManager = user?.role === "cafeteria_manager";
   const isAdmin = user?.role === "university_admin";
+  const hasAccess = isStaff || isManager || isAdmin;
+
+  useEffect(() => {
+    if (user && !hasAccess) {
+      router.push("/dashboard");
+    }
+  }, [user, hasAccess, router]);
 
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [selectedCafeteria, setSelectedCafeteria] = useState<string>("");

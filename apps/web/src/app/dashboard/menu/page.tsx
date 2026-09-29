@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 import { getCafeterias, getMenuItems, updateMenuItem, createMenuItem } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -13,10 +14,18 @@ const CATEGORIES = ["all", "breakfast", "main_course", "side_dish", "dessert", "
 
 export default function MenuPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const isManager = user?.role === "cafeteria_manager";
   const isStaff = user?.role === "cafeteria_staff";
   const isAdmin = user?.role === "university_admin";
   const canEdit = isManager || isAdmin;
+  const hasAccess = isManager || isStaff || isAdmin;
+
+  useEffect(() => {
+    if (user && !hasAccess) {
+      router.push("/dashboard");
+    }
+  }, [user, hasAccess, router]);
 
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [selectedCafeteria, setSelectedCafeteria] = useState("");
