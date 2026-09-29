@@ -6,20 +6,18 @@
 
 @layer base {
   :root {
-    --brand-green: #005400;
-    --brand-green-light: #0d7a2e;
-    --brand-gold: #ffc000;
-    --brand-gold-dark: #d4a300;
-    --brand-navy: #212934;
-    --brand-charcoal: #4a4e57;
-    --bg-primary: #ffffff;
-    --bg-secondary: #f2f3f5;
-    --bg-tertiary: #f9f9fb;
-    --text-primary: #212934;
-    --text-secondary: #4a4e57;
-    --text-muted: #9ca3af;
-    --border-default: #e2e4e8;
-    --border-light: #f0f1f3;
+    --brand-green: #8c6935;
+    --brand-green-light: #ae8746;
+    --brand-gold: #c7a15b;
+    --brand-gold-dark: #ae8746;
+    --bg-primary: #fffdf8;
+    --bg-secondary: #f6efdf;
+    --bg-tertiary: #eee2ca;
+    --text-primary: #302116;
+    --text-secondary: #65513e;
+    --text-muted: #927e68;
+    --border-default: #e8dac0;
+    --border-light: #f0e7d7;
     --success: #16a34a;
     --warning: #d97706;
     --error: #dc2626;
@@ -27,14 +25,14 @@
   }
 
   .dark {
-    --bg-primary: #111318;
-    --bg-secondary: #1a1d24;
-    --bg-tertiary: #22262e;
-    --text-primary: #f0f1f3;
-    --text-secondary: #b0b5be;
-    --text-muted: #6b7280;
-    --border-default: #2d323c;
-    --border-light: #1f2329;
+    --bg-primary: #21170f;
+    --bg-secondary: #2d2016;
+    --bg-tertiary: #3c2b1d;
+    --text-primary: #f8efdf;
+    --text-secondary: #dac7a9;
+    --text-muted: #ad9474;
+    --border-default: #4a3523;
+    --border-light: #3a291b;
   }
 }
 

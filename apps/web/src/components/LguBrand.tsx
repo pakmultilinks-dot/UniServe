@@ -75,24 +75,24 @@ export function LguSeal({ size = 36 }: { size?: number }) {
       {/* Shield body */}
       <path
         d="M32 4L8 14v16c0 14.4 10.24 27.84 24 32 13.76-4.16 24-17.6 24-32V14L32 4z"
-        fill="#005400"
+        fill="#8c6935"
       />
       {/* Inner shield accent */}
       <path
         d="M32 8.5L12 17v13c0 12.8 9.12 24.8 21.6 28.8C46.08 54.8 55.2 41.8 55.2 30V17L32 8.5z"
-        fill="#0d7a2e"
+        fill="#ae8746"
       />
       {/* Gold accent bar */}
-      <rect x="16" y="22" width="32" height="2.5" rx="1.25" fill="#ffc000" />
+      <rect x="16" y="22" width="32" height="2.5" rx="1.25" fill="#c7a15b" />
       {/* Open book symbol */}
       <path
         d="M24 28h16v12H24z"
         fill="none"
-        stroke="#ffc000"
+        stroke="#c7a15b"
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
-      <line x1="32" y1="28" x2="32" y2="40" stroke="#ffc000" strokeWidth="1.5" />
+      <line x1="32" y1="28" x2="32" y2="40" stroke="#c7a15b" strokeWidth="1.5" />
       {/* LGU text */}
       <text
         x="32"

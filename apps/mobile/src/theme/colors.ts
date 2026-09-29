@@ -1,7 +1,7 @@
 /**
  * UniServe — Mobile Color Theme
  *
- * Uni Cafe palette based on the supplied mobile design references.
+ * UniServe palette based on the supplied mobile design references.
  * Cream surfaces, espresso text, and caramel-gold actions.
  */
 

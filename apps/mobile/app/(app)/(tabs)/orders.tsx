@@ -117,7 +117,7 @@ export default function OrdersScreen() {
       >
         <View style={styles.screenHeader}>
           <Text style={[styles.screenTitle, { color: tc }]}>Order history</Text>
-          <Text style={[styles.screenSubtitle, { color: tcMuted }]}>Uni Cafe · your recent orders</Text>
+          <Text style={[styles.screenSubtitle, { color: tcMuted }]}>UniServe · your recent orders</Text>
         </View>
         {isLoading ? (
           <>

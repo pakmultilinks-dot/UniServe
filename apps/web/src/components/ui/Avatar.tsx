@@ -24,8 +24,8 @@ function getInitials(firstName?: string, lastName?: string): string {
 
 function hashColor(str: string): string {
   const colors = [
-    "bg-brand-700", "bg-brand-600", "bg-emerald-600",
-    "bg-teal-600", "bg-lgu-navy", "bg-lgu-charcoal",
+    "bg-brand-700", "bg-brand-600", "bg-warm-600",
+    "bg-warm-500", "bg-warm-700", "bg-warm-800",
     "bg-gold-600", "bg-amber-600",
   ];
   let hash = 0;

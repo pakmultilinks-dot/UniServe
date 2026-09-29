@@ -26,7 +26,7 @@ export default function OnboardingScreen() {
       <View style={styles.content}>
         <Text style={[styles.title, { color: text }]}>Campus Food{`\n`}Made Easy</Text>
         <Text style={[styles.subtitle, { color: muted }]}>
-          Order meals, snacks, and drinks from your university cafe in seconds.
+          Order meals, snacks, and drinks from your university in seconds.
         </Text>
 
         <Pressable
