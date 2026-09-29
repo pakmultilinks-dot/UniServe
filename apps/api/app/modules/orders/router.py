@@ -42,7 +42,7 @@ async def list_cafeteria_orders(
     status: str | None = Query(None),
     order_date: date | None = Query(None),
     auth: AuthContext = Depends(
-        RequireCafeteriaWriteScope(Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)
     ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderListResponse:
