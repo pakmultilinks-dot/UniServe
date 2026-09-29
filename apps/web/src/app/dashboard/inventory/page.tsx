@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getCafeterias, getInventory, adjustInventory } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -31,6 +32,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [lowOnly, setLowOnly] = useState(false);
   const [adjustingItem, setAdjustingItem] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const loadCafeterias = useCallback(async () => {
     try {
@@ -57,9 +59,9 @@ export default function InventoryPage() {
   useEffect(() => { loadInventory(); }, [loadInventory]);
 
   const handleAdjust = async (itemId: string) => {
-    const qty = prompt("Adjustment quantity (positive = add, negative = subtract):");
+    const qty = window.prompt("Adjustment quantity (positive = add, negative = subtract):");
     if (!qty) return;
-    const reason = prompt("Reason (optional):") ?? undefined;
+    const reason = window.prompt("Reason (optional):") ?? undefined;
     setAdjustingItem(itemId);
     try {
       await adjustInventory(selectedCafeteria, {
@@ -68,8 +70,9 @@ export default function InventoryPage() {
         reason,
       });
       await loadInventory();
+      toast("Inventory adjusted", "success");
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     } finally {
       setAdjustingItem(null);
     }

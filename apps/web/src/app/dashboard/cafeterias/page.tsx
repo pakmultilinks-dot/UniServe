@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getCafeterias, updateCafeteriaStatus, updateCafeteria } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -13,6 +14,7 @@ import type { Cafeteria } from "@uniserve/shared-types";
 export default function CafeteriasPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const isManager = user?.role === "cafeteria_manager";
   const isAdmin = user?.role === "university_admin";
   const canManage = isManager || isAdmin;
@@ -39,7 +41,7 @@ export default function CafeteriasPage() {
     }
   }, []);
 
-  useEffect(() => { loadCafeterias(); }, [loadCafeterias]);
+  useEffect(() => { if (user) loadCafeterias(); }, [user, loadCafeterias]);
 
   const handleToggleStatus = async (cafeteria: Cafeteria) => {
     const newStatus = cafeteria.operational_status === "open" ? "closed" : "open";
@@ -47,8 +49,9 @@ export default function CafeteriasPage() {
     try {
       await updateCafeteriaStatus(cafeteria.id, newStatus);
       await loadCafeterias();
+      toast("Status updated", "success");
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     } finally {
       setActionLoading(null);
     }
@@ -70,8 +73,9 @@ export default function CafeteriasPage() {
       await updateCafeteria(editingId, editForm);
       setEditingId(null);
       await loadCafeterias();
+      toast("Cafeteria updated", "success");
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     } finally {
       setActionLoading(null);
     }

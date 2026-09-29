@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getCafeterias, getCafeteriaOrders, confirmOrder, prepareOrder, readyOrder, delayOrder, rejectOrder } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -32,6 +33,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const loadCafeterias = useCallback(async () => {
     try {
@@ -73,7 +75,7 @@ export default function OrdersPage() {
       await action();
       await loadOrders();
     } catch (err: any) {
-      alert(err?.message ?? "Action failed");
+      toast(err?.message ?? "Action failed", "error");
     } finally {
       setActionLoading(null);
     }
@@ -198,7 +200,7 @@ export default function OrdersPage() {
                             variant="danger"
                             loading={actionLoading === order.id}
                             onClick={() => {
-                              const reason = prompt("Rejection reason:");
+                              const reason = window.prompt("Rejection reason:");
                               if (reason) handleAction(order.id, () => rejectOrder(order.id, reason));
                             }}
                           >
@@ -232,7 +234,7 @@ export default function OrdersPage() {
                         size="sm"
                         variant="secondary"
                         onClick={() => {
-                          const mins = prompt("Additional minutes:");
+                          const mins = window.prompt("Additional minutes:");
                           if (mins) handleAction(order.id, () => delayOrder(order.id, parseInt(mins)));
                         }}
                       >

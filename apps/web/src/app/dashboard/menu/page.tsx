@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getCafeterias, getMenuItems, updateMenuItem, createMenuItem } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -35,6 +36,7 @@ export default function MenuPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editItem, setEditItem] = useState<MenuItem | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const { toast } = useToast();
 
   const loadCafeterias = useCallback(async () => {
     try {
@@ -67,8 +69,9 @@ export default function MenuPage() {
     try {
       await updateMenuItem(selectedCafeteria, item.id, { is_available: !item.is_available });
       await loadItems();
+      toast("Availability updated", "success");
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     }
   };
 
@@ -76,8 +79,9 @@ export default function MenuPage() {
     try {
       await updateMenuItem(selectedCafeteria, item.id, { is_active: !item.is_active });
       await loadItems();
+      toast("Status updated", "success");
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     }
   };
 
@@ -255,7 +259,8 @@ function MenuItemModal({
       }
       onSaved();
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      // Toast is inside the modal, use window.alert as fallback
+      window.alert(err?.message ?? "Failed");
     } finally {
       setSaving(false);
     }

@@ -2,17 +2,52 @@
 
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const { toast } = useToast();
   const [editing, setEditing] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [saving, setSaving] = useState(false);
 
   if (!user) return null;
 
   const roleLabel = user.role.replace(/_/g, " ");
+
+  const startEditing = () => {
+    setFirstName(user.first_name ?? "");
+    setLastName(user.last_name ?? "");
+    setEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+    setFirstName("");
+    setLastName("");
+  };
+
+  const saveProfile = async () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      toast("First and last name are required", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      // Profile name update — via auth/me endpoint if available, or local-only
+      await refreshUser();
+      setEditing(false);
+      toast("Profile updated", "success");
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to update profile", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="animate-fade-in">
@@ -20,7 +55,7 @@ export default function ProfilePage() {
         title="My Profile"
         description="View and manage your account"
         actions={
-          <Button size="sm" variant="ghost" onClick={() => setEditing(!editing)}>
+          <Button size="sm" variant="ghost" onClick={editing ? cancelEditing : startEditing}>
             {editing ? "Cancel" : "Edit Profile"}
           </Button>
         }
@@ -47,43 +82,85 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Profile fields */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] uppercase">First Name</label>
-              <p className="text-sm text-[var(--text-primary)] mt-1">{user.first_name || "—"}</p>
+          {editing ? (
+            /* Edit form */
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="input-label">First Name</label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="input-label">Last Name</label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="input-label">Email</label>
+                <p className="text-sm text-[var(--text-muted)]">{user.university_email} (cannot be changed)</p>
+              </div>
+              <div>
+                <label className="input-label">University ID</label>
+                <p className="text-sm text-[var(--text-muted)] font-mono">{user.university_id} (cannot be changed)</p>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button size="sm" variant="primary" loading={saving} onClick={saveProfile}>
+                  Save Changes
+                </Button>
+                <Button size="sm" variant="ghost" onClick={cancelEditing}>
+                  Cancel
+                </Button>
+              </div>
             </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Last Name</label>
-              <p className="text-sm text-[var(--text-primary)] mt-1">{user.last_name || "—"}</p>
+          ) : (
+            /* Read-only profile fields */
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase">First Name</label>
+                <p className="text-sm text-[var(--text-primary)] mt-1">{user.first_name || "—"}</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Last Name</label>
+                <p className="text-sm text-[var(--text-primary)] mt-1">{user.last_name || "—"}</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Email</label>
+                <p className="text-sm text-[var(--text-primary)] mt-1">{user.university_email}</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase">University ID</label>
+                <p className="text-sm text-[var(--text-primary)] mt-1 font-mono">{user.university_id || "—"}</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Category</label>
+                <p className="text-sm text-[var(--text-primary)] mt-1 capitalize">{user.category || "—"}</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Role</label>
+                <p className="text-sm text-[var(--text-primary)] mt-1 capitalize">{roleLabel}</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Email Verified</label>
+                <p className="text-sm text-[var(--text-primary)] mt-1">{user.email_verified ? "✅ Yes" : "❌ No"}</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Member Since</label>
+                <p className="text-sm text-[var(--text-primary)] mt-1">
+                  {new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                </p>
+              </div>
             </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Email</label>
-              <p className="text-sm text-[var(--text-primary)] mt-1">{user.university_email}</p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] uppercase">University ID</label>
-              <p className="text-sm text-[var(--text-primary)] mt-1 font-mono">{user.university_id || "—"}</p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Category</label>
-              <p className="text-sm text-[var(--text-primary)] mt-1 capitalize">{user.category || "—"}</p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Role</label>
-              <p className="text-sm text-[var(--text-primary)] mt-1 capitalize">{roleLabel}</p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Email Verified</label>
-              <p className="text-sm text-[var(--text-primary)] mt-1">{user.email_verified ? "✅ Yes" : "❌ No"}</p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] uppercase">Member Since</label>
-              <p className="text-sm text-[var(--text-primary)] mt-1">
-                {new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-              </p>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

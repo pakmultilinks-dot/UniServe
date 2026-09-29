@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ToastProvider } from "@/components/ui/Toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,7 +11,8 @@ export const metadata: Metadata = {
 /**
  * UniServe — Root Layout
  *
- * Wraps the app with AuthProvider for authentication state management.
+ * Wraps the app with AuthProvider for authentication state management
+ * and ToastProvider for non-blocking notification toasts.
  */
 export default function RootLayout({
   children,
@@ -28,7 +30,9 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans antialiased min-h-screen">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

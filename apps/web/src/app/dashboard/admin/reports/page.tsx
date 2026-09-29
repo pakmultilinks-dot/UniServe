@@ -32,15 +32,16 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isAdmin && !isManager) {
+    if (user && !isAdmin && !isManager) {
       router.push("/dashboard");
       return;
     }
+    if (!isAdmin && !isManager) return;
     getCafeterias().then((data) => {
       setCafeterias(data);
       if (data.length > 0) setSelectedCafeteria(data[0].id);
     }).catch(() => {});
-  }, [isAdmin, isManager, router]);
+  }, [user, isAdmin, isManager, router]);
 
   useEffect(() => {
     if (!selectedCafeteria) return;
@@ -60,7 +61,7 @@ export default function ReportsPage() {
 
   const formatCurrency = (amount: number) => `Rs. ${amount.toLocaleString("en-PK", { minimumFractionDigits: 0 })}`;
 
-  if (!isAdmin && !isManager) return null;
+  if (!user || (!isAdmin && !isManager)) return null;
 
   return (
     <div className="animate-fade-in">

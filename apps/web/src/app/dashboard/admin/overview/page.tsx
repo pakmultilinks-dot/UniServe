@@ -29,10 +29,11 @@ export default function AdminOverviewPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (user && !isAdmin) {
       router.push("/dashboard");
       return;
     }
+    if (!isAdmin) return;
     Promise.all([
       getAdministrationOverview().catch(() => null),
       getCafeterias().catch(() => []),
@@ -40,11 +41,11 @@ export default function AdminOverviewPage() {
       setOverview(overviewData);
       setCafeterias(cafData);
     }).finally(() => setLoading(false));
-  }, [isAdmin, router]);
+  }, [user, isAdmin, router]);
 
   const formatCurrency = (amount: number) => `Rs. ${amount.toLocaleString("en-PK")}`;
 
-  if (!isAdmin) return null;
+  if (!user || !isAdmin) return null;
 
   return (
     <div className="animate-fade-in">

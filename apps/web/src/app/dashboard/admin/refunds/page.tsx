@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getAllRefunds, processRefund } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,10 +20,11 @@ export default function RefundsPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (!isAdmin) router.push("/dashboard");
-  }, [isAdmin, router]);
+    if (user && !isAdmin) router.push("/dashboard");
+  }, [user, isAdmin, router]);
 
   const loadRefunds = useCallback(async () => {
     setLoading(true);
@@ -44,7 +46,7 @@ export default function RefundsPage() {
       await processRefund(refundId);
       await loadRefunds();
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     } finally {
       setActionLoading(null);
     }
@@ -57,7 +59,7 @@ export default function RefundsPage() {
     catch { return iso; }
   };
 
-  if (!isAdmin) return null;
+  if (!user || !isAdmin) return null;
 
   return (
     <div className="animate-fade-in">

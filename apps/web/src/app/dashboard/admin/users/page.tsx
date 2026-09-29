@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getUsers, suspendUser, activateUser, changeUserRole } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -24,12 +25,13 @@ export default function UsersPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (user && !isAdmin) {
       router.push("/dashboard");
     }
-  }, [isAdmin, router]);
+  }, [user, isAdmin, router]);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -49,14 +51,15 @@ export default function UsersPage() {
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
   const handleSuspend = async (userId: string) => {
-    const reason = prompt("Suspension reason:");
+    const reason = window.prompt("Suspension reason:");
     if (!reason) return;
     setActionLoading(userId);
     try {
       await suspendUser(userId, reason);
       await loadUsers();
+      toast("User suspended", "success");
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     } finally {
       setActionLoading(null);
     }
@@ -67,8 +70,9 @@ export default function UsersPage() {
     try {
       await activateUser(userId);
       await loadUsers();
+      toast("User activated", "success");
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     } finally {
       setActionLoading(null);
     }
@@ -79,8 +83,9 @@ export default function UsersPage() {
     try {
       await changeUserRole(userId, newRole);
       await loadUsers();
+      toast("Role updated", "success");
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     } finally {
       setActionLoading(null);
     }
@@ -102,7 +107,7 @@ export default function UsersPage() {
     catch { return iso; }
   };
 
-  if (!isAdmin) return null;
+  if (!user || !isAdmin) return null;
 
   return (
     <div className="animate-fade-in">

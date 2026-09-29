@@ -17,7 +17,7 @@ export default function SettingsPage() {
     }
   }, [user, isAdmin, router]);
 
-  if (!isAdmin) return null;
+  if (!user || !isAdmin) return null;
 
   return (
     <div className="animate-fade-in">

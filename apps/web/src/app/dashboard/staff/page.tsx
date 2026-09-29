@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getUsers, changeUserRole, suspendUser, activateUser, getCafeterias } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -13,6 +14,7 @@ import type { User, Cafeteria } from "@uniserve/shared-types";
 export default function StaffPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const isManager = user?.role === "cafeteria_manager";
   const isAdmin = user?.role === "university_admin";
 
@@ -22,10 +24,10 @@ export default function StaffPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isManager && !isAdmin) {
+    if (user && !isManager && !isAdmin) {
       router.push("/dashboard");
     }
-  }, [isManager, isAdmin, router]);
+  }, [user, isManager, isAdmin, router]);
 
   const loadStaff = useCallback(async () => {
     setLoading(true);
@@ -55,13 +57,13 @@ export default function StaffPage() {
       }
       await loadStaff();
     } catch (err: any) {
-      alert(err?.message ?? "Failed");
+      toast(err?.message ?? "Failed", "error");
     } finally {
       setActionLoading(null);
     }
   };
 
-  if (!isManager && !isAdmin) return null;
+  if (!user || (!isManager && !isAdmin)) return null;
 
   return (
     <div className="animate-fade-in">

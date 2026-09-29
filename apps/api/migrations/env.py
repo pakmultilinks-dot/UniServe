@@ -14,6 +14,7 @@ from app.core.audit import SecurityAuditEvent  # noqa: F401
 from app.core.config import settings
 from app.core.database import Base
 from app.modules.cafeterias.models import Cafeteria, OperationalStatus  # noqa: F401
+from app.modules.carts.models import Cart, CartItem  # noqa: F401
 from app.modules.inventory.models import (  # noqa: F401
     InventoryAdjustment,
     InventoryItem,
@@ -27,6 +28,20 @@ from app.modules.menus.models import (  # noqa: F401
     MenuFavorite,
     MenuItem,
 )
+from app.modules.notifications.models import Notification  # noqa: F401
+from app.modules.orders.models import (  # noqa: F401
+    NoShow,
+    Order,
+    OrderEvent,
+    OrderItem,
+    OrderNumberSequence,
+)
+from app.modules.payments.models import (  # noqa: F401
+    Payment,
+    PaymentAttempt,
+    WebhookEvent,
+)
+from app.modules.refunds.models import Refund, RefundEvent  # noqa: F401
 
 # Import all models so Alembic can detect them
 from app.modules.users.models import (  # noqa: F401

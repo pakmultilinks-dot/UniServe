@@ -63,8 +63,8 @@ export default function FavoritesPage() {
                   <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-2">{item.description}</p>
                 )}
                 <div className="flex items-center justify-between mt-3">
-                  <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                    Rs. {item.price ?? 0}
+                  <span className="text-sm font-bold text-brand-700 dark:text-brand-400">
+                    PKR {Math.round((item.price ?? 0) / 100).toLocaleString()}
                   </span>
                   {item.category && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-muted)] capitalize">
