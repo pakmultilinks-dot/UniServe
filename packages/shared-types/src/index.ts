@@ -311,6 +311,7 @@ export interface MenuItemCreate {
   image_url?: string;
   dietary_info?: string;
   allergens?: string;
+  preparation_time_minutes?: number;
 }
 
 export interface MenuItemUpdate {
@@ -322,6 +323,7 @@ export interface MenuItemUpdate {
   image_url?: string;
   dietary_info?: string;
   allergens?: string;
+  preparation_time_minutes?: number;
   is_available?: boolean;
   is_active?: boolean;
 }

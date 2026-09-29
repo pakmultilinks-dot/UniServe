@@ -178,36 +178,43 @@ export async function getOrder(orderId: string): Promise<Order> {
 // ---- Notifications ----
 
 interface NotificationListResponse {
-  notifications: Notification[];
+  items: Notification[];
   total: number;
+  unread_count: number;
 }
 
 export interface Notification {
   id: string;
   title: string;
   body: string;
-  type: string;
+  notification_type: string;
   is_read: boolean;
   created_at: string;
+  order_id?: string;
+  cafeteria_id?: string;
+  reference_type?: string;
+  reference_id?: string;
+  delivery_status?: string;
+  read_at?: string;
 }
 
 export interface NotificationParams {
-  is_read?: boolean;
+  unread_only?: boolean;
   limit?: number;
 }
 
 export async function getNotifications(params?: NotificationParams): Promise<Notification[]> {
   const queryParams = new URLSearchParams();
-  if (params?.is_read !== undefined) queryParams.append("is_read", String(params.is_read));
+  if (params?.unread_only !== undefined) queryParams.append("unread_only", String(params.unread_only));
   if (params?.limit) queryParams.append("limit", String(params.limit));
   const qs = queryParams.toString();
   const data = await apiClient.get<NotificationListResponse>(
     `/notifications${qs ? `?${qs}` : ""}`,
   );
-  return data.notifications ?? [];
+  return data.items ?? [];
 }
 
 export async function getUnreadNotificationCount(): Promise<number> {
-  const response = await apiClient.get<{ count: number }>("/notifications/unread-count");
-  return response.count;
+  const response = await apiClient.get<{ unread_count: number }>("/notifications/unread-count");
+  return response.unread_count;
 }
