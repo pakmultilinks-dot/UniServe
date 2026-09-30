@@ -8,6 +8,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.core.config import settings
@@ -155,6 +156,12 @@ def create_application() -> FastAPI:
 
     # API routes
     application.include_router(api_router, prefix="/api/v1")
+
+    # Static files — food images served from app/static/food/
+    import os as _os
+    _static_dir = _os.path.join(_os.path.dirname(__file__), "static")
+    if _os.path.isdir(_static_dir):
+        application.mount("/api/v1/static", StaticFiles(directory=_static_dir), name="static")
 
     return application
 
