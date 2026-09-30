@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { isWebDashboardRole } from "@/lib/roles";
 import { LguBrand, LguSeal } from "@/components/LguBrand";
 import { Avatar } from "@/components/ui/Avatar";
 import type { UserRole } from "@uniserve/shared-types";
@@ -45,16 +46,6 @@ const navItems: NavItem[] = [
       </svg>
     ),
     roles: ["cafeteria_staff", "cafeteria_manager", "university_admin"],
-  },
-  {
-    label: "Favorites",
-    href: "/dashboard/favorites",
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-      </svg>
-    ),
-    roles: ["student", "faculty"],
   },
   {
     label: "Notifications",
@@ -166,7 +157,9 @@ const adminNavItems: NavItem[] = [
 ];
 
 function getNavForRole(role: UserRole | undefined): NavItem[] {
-  if (!role) return navItems.filter((n) => !n.roles);
+  // Students/faculty never reach the dashboard (RoleGuard redirects them),
+  // but guard here too so no student-only nav can ever render.
+  if (!role || !isWebDashboardRole(role)) return [];
 
   let items = navItems.filter((n) => !n.roles || n.roles.includes(role));
 

@@ -3,12 +3,18 @@
 import React, { useState } from "react";
 import { Sidebar, MobileSidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
+import { RoleGuard } from "@/components/RoleGuard";
 
 /**
  * UniServe — Dashboard Layout
  *
  * Authenticated shell with sidebar navigation and header.
  * Responsive: full sidebar on desktop, hamburger + overlay on mobile.
+ *
+ * The entire /dashboard/* tree is wrapped in RoleGuard so only
+ * university_admin, cafeteria_manager, and cafeteria_staff can render it.
+ * Students and faculty are redirected to /mobile-required before any
+ * dashboard content is shown.
  */
 export default function DashboardLayout({
   children,
@@ -19,6 +25,7 @@ export default function DashboardLayout({
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
+    <RoleGuard>
     <div className="min-h-screen">
       {/* Desktop sidebar */}
       <Sidebar
@@ -40,5 +47,6 @@ export default function DashboardLayout({
         </main>
       </div>
     </div>
+    </RoleGuard>
   );
 }

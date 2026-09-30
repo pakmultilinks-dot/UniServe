@@ -7,12 +7,38 @@
  *   - (app):  authenticated screens (main app content)
  */
 
+import React, { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
 import { ThemeProvider, useTheme } from "../src/contexts/ThemeContext";
 import { CartProvider } from "../src/contexts/CartContext";
+
+/**
+ * Roles allowed in the mobile ordering app.
+ * The mobile app is for students and faculty only — cafeteria staff and
+ * university admins use the web dashboard (localhost:3000) instead.
+ */
+const MOBILE_ROLES = ["student", "faculty"];
+
+function RoleGate({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, user, logout } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated && user && !MOBILE_ROLES.includes(user.role)) {
+      logout();
+    }
+  }, [isAuthenticated, user, logout]);
+
+  if (isLoading) return null;
+
+  if (isAuthenticated && user && !MOBILE_ROLES.includes(user.role)) {
+    return null; // logout in progress — blank while redirecting to (auth)
+  }
+
+  return <>{children}</>;
+}
 
 function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -41,7 +67,9 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <CartProvider>
-          <RootNavigator />
+          <RoleGate>
+            <RootNavigator />
+          </RoleGate>
         </CartProvider>
       </AuthProvider>
     </ThemeProvider>

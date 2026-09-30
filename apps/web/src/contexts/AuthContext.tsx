@@ -28,7 +28,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   hasRole: (role: UserRole | UserRole[]) => boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (data: {
     firstName: string;
     lastName: string;
@@ -86,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
       setUser(response.user);
+      return response.user;
     },
     [],
   );
