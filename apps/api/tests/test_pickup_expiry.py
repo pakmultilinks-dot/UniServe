@@ -1051,9 +1051,8 @@ class TestClosingBefore30Minutes:
 
         tz = ZoneInfo("Asia/Karachi")
         # Set cafeteria closing to 5 minutes ago (in UTC) so it's in the past
-        local_closing_past = now_utc.astimezone(tz).replace(
-            minute=now_utc.astimezone(tz).minute - 5, second=0, microsecond=0
-        )
+        local_closing_past = now_utc.astimezone(tz) - timedelta(minutes=5)
+        local_closing_past = local_closing_past.replace(second=0, microsecond=0)
         utc_closing = local_closing_past.astimezone(UTC)
 
         # closing is earlier than 30-min window

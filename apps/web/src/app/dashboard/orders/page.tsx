@@ -205,14 +205,16 @@ export default function OrdersPage() {
                   <div className="flex gap-2 flex-shrink-0">
                     {order.status === "pending" && (isManager || isStaff) && (
                       <>
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          loading={actionLoading === order.id}
-                          onClick={() => handleAction(order.id, () => confirmOrder(order.id))}
-                        >
-                          Confirm
-                        </Button>
+                        {!order.confirmed_at && (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            loading={actionLoading === order.id}
+                            onClick={() => handleAction(order.id, () => confirmOrder(order.id))}
+                          >
+                            Confirm
+                          </Button>
+                        )}
                         {isManager && (
                           <Button
                             size="sm"

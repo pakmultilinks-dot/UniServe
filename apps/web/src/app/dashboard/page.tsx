@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   getCafeterias,
   getOrders,
+  getCafeteriaOrders,
   getNotifications,
 } from "@/lib/api";
 import type { Order, Notification, Cafeteria } from "@uniserve/shared-types";
@@ -67,24 +68,46 @@ export default function DashboardPage() {
   }, [isLoading, isAuthenticated, router]);
 
   const loadDashboardData = useCallback(async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !user) return;
     setDataLoading(true);
 
     const results = await Promise.allSettled([
       getCafeterias(),
-      getOrders({ limit: 5 }),
       getNotifications({ limit: 5 }),
     ]);
 
     if (results[0].status === "fulfilled") setCafeterias(results[0].value);
-    if (results[1].status === "fulfilled") setOrders(results[1].value);
-    if (results[2].status === "fulfilled") {
-      setNotifications(results[2].value.items);
-      setUnreadCount(results[2].value.unread_count);
+    if (results[1].status === "fulfilled") {
+      setNotifications(results[1].value.items);
+      setUnreadCount(results[1].value.unread_count);
+    }
+
+    // Fetch orders: students get their own orders; staff/admin get cafeteria orders
+    const isStaff = ["cafeteria_staff", "cafeteria_manager", "university_admin"].includes(user.role);
+    try {
+      if (isStaff && results[0].status === "fulfilled" && results[0].value.length > 0) {
+        // Aggregate orders from all cafeterias, sorted by newest first
+        const allCafeOrders = await Promise.allSettled(
+          results[0].value.map((c) => getCafeteriaOrders(c.id)),
+        );
+        const merged: Order[] = [];
+        for (const r of allCafeOrders) {
+          if (r.status === "fulfilled") {
+            merged.push(...((r.value.orders ?? []) as Order[]));
+          }
+        }
+        merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        setOrders(merged.slice(0, 5));
+      } else {
+        const myOrders = await getOrders({ limit: 5 });
+        setOrders(myOrders);
+      }
+    } catch {
+      setOrders([]);
     }
 
     setDataLoading(false);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     loadDashboardData();
