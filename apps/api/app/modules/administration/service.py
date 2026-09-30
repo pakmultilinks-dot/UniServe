@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.cafeterias.models import Cafeteria
+from app.modules.menus.models import MenuItem
 from app.modules.orders.models import NoShow, Order, OrderStatus, PaymentMethod
 from app.modules.payments.models import Payment, PaymentStatus
 from app.modules.refunds.models import Refund, RefundReason, RefundStatus
@@ -52,6 +53,14 @@ class AdminService:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+
+    # -- Menu Items --------------------------------------------------------
+
+    async def get_menu_item_count(self) -> int:
+        """Count all active menu items across all cafeterias."""
+        q = select(func.count(MenuItem.id)).where(MenuItem.is_active == True)
+        result = await self.db.execute(q)
+        return result.scalar() or 0
 
     # -- Users -------------------------------------------------------------
 

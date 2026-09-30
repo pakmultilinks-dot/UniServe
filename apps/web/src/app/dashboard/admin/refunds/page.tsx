@@ -52,7 +52,7 @@ export default function RefundsPage() {
     }
   };
 
-  const formatCurrency = (amount: number) => `Rs. ${amount.toLocaleString("en-PK")}`;
+  const formatCurrency = (amount: number) => `Rs. ${(amount / 100).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const formatDate = (iso: string) => {
     try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }); }

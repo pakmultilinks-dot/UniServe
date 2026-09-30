@@ -58,6 +58,7 @@ async def administration_overview(
     orders = await service.get_order_summary(start_date=start_date, end_date=end_date)
     financial = await service.get_financial_summary(start_date=start_date, end_date=end_date)
     exceptions = await service.get_exceptions_summary(start_date=start_date, end_date=end_date)
+    menu_items = await service.get_menu_item_count()
 
     return AdministrationOverviewResponse(
         users=UserSummary(**users),
@@ -65,4 +66,5 @@ async def administration_overview(
         orders=OrderSummary(**orders),
         financial=FinancialSummary(**financial),
         exceptions=ExceptionsSummary(**exceptions),
+        menu_items=menu_items,
     )

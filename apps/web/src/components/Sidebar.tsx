@@ -44,6 +44,7 @@ const navItems: NavItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
       </svg>
     ),
+    roles: ["cafeteria_staff", "cafeteria_manager", "university_admin"],
   },
   {
     label: "Favorites",
@@ -53,6 +54,7 @@ const navItems: NavItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
       </svg>
     ),
+    roles: ["student", "faculty"],
   },
   {
     label: "Notifications",
@@ -166,7 +168,7 @@ const adminNavItems: NavItem[] = [
 function getNavForRole(role: UserRole | undefined): NavItem[] {
   if (!role) return navItems.filter((n) => !n.roles);
 
-  let items = [...navItems];
+  let items = navItems.filter((n) => !n.roles || n.roles.includes(role));
 
   if (role === "cafeteria_manager" || role === "cafeteria_staff") {
     items = [...items, ...managerNavItems.filter((n) => n.roles?.includes(role))];

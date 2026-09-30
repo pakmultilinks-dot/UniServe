@@ -86,6 +86,21 @@ export default function OrdersPage() {
   };
 
   const formatDate = (iso: string) => {
+    if (!iso) return "";
+    // Time-only string like "18:18"
+    if (/^\d{1,2}:\d{2}$/.test(iso)) {
+      const [h, m] = iso.split(":").map(Number);
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+    }
+    // Date-only string like "2026-09-30" — format as date without timezone conversion
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      const [y, mo, d] = iso.split("-").map(Number);
+      return new Date(y, mo - 1, d).toLocaleString("en-US", {
+        month: "short", day: "numeric",
+      });
+    }
     try {
       return new Date(iso).toLocaleString("en-US", {
         month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",

@@ -118,3 +118,4 @@ class AdministrationOverviewResponse(BaseModel):
     orders: OrderSummary
     financial: FinancialSummary
     exceptions: ExceptionsSummary
+    menu_items: int = 0

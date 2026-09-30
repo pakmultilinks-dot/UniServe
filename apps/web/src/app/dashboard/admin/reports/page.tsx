@@ -48,18 +48,19 @@ export default function ReportsPage() {
     setLoading(true);
 
     const now = new Date();
+    const toDateStr = (d: Date) => d.toISOString().split("T")[0];
     let start: string;
-    if (dateRange === "7d") start = new Date(now.getTime() - 7 * 86400000).toISOString();
-    else if (dateRange === "30d") start = new Date(now.getTime() - 30 * 86400000).toISOString();
-    else start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    if (dateRange === "7d") start = toDateStr(new Date(now.getTime() - 7 * 86400000));
+    else if (dateRange === "30d") start = toDateStr(new Date(now.getTime() - 30 * 86400000));
+    else start = toDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
 
-    getSalesReport({ cafeteria_id: selectedCafeteria, start_date: start, end_date: now.toISOString() })
+    getSalesReport({ cafeteria_id: selectedCafeteria, start_date: start, end_date: toDateStr(now) })
       .then((data) => setSalesData(data))
       .catch(() => setSalesData(null))
       .finally(() => setLoading(false));
   }, [selectedCafeteria, dateRange]);
 
-  const formatCurrency = (amount: number) => `Rs. ${amount.toLocaleString("en-PK", { minimumFractionDigits: 0 })}`;
+  const formatCurrency = (amount: number) => `Rs. ${(amount / 100).toLocaleString("en-PK", { minimumFractionDigits: 0 })}`;
 
   if (!user || (!isAdmin && !isManager)) return null;
 

@@ -114,20 +114,30 @@ export default function DashboardPage() {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
   const formatDate = (iso: string) => {
+    if (!iso) return "";
+    // Time-only string like "18:18"
+    if (/^\d{1,2}:\d{2}$/.test(iso)) {
+      const [h, m] = iso.split(":").map(Number);
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+    }
+    // Date-only string like "2026-09-30"
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      const [y, mo, d] = iso.split("-").map(Number);
+      return new Date(y, mo - 1, d).toLocaleDateString("en-US", {
+        month: "short", day: "numeric",
+      });
+    }
     try {
       return new Date(iso).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
+        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
       });
-    } catch {
-      return iso;
-    }
+    } catch { return iso; }
   };
 
   const formatCurrency = (amount: number, currency: string) => {
-    return `${currency} ${amount.toFixed(2)}`;
+    return `${currency} ${(amount / 100).toFixed(2)}`;
   };
 
   return (

@@ -449,7 +449,7 @@ export async function getAdministrationOverview(params?: {
     total_revenue: (raw.financial?.total_revenue ?? 0) / 100, // paisa -> rupees
     active_cafeterias: raw.cafeterias?.active ?? 0,
     pending_refunds: raw.exceptions?.overdue_refunds ?? 0,
-    total_menu_items: 0,
+    total_menu_items: raw.menu_items ?? 0,
   };
 }
 

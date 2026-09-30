@@ -43,7 +43,7 @@ export default function AdminOverviewPage() {
     }).finally(() => setLoading(false));
   }, [user, isAdmin, router]);
 
-  const formatCurrency = (amount: number) => `Rs. ${amount.toLocaleString("en-PK")}`;
+  const formatCurrency = (amount: number) => `Rs. ${(amount / 100).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   if (!user || !isAdmin) return null;
 
