@@ -45,6 +45,7 @@ env/
 .env
 .env.local
 .env.*.local
+.env.production
 
 # ---- Node.js / React Native / Next.js ----
 node_modules/
@@ -73,6 +74,13 @@ Thumbs.db
 
 # ---- Docker ----
 docker-compose.override.yml
+
+# ---- Caddy runtime (created by production stack) ----
+infrastructure/caddy/data/
+infrastructure/caddy/config/
+
+# ---- Backups ----
+backups/
 
 # ---- JetBrains ----
 .idea/
