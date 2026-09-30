@@ -1,0 +1,54 @@
+# UniServe — Caddy Configuration for Production
+# Copy this file to infrastructure/caddy/Caddyfile
+# Replace example.com with your actual domains.
+
+# API server — reverse proxy
+api.example.com {
+    reverse_proxy uniserve_api:8000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}
+
+# Web application — static files
+app.example.com {
+    root * /srv
+
+    @static path /_next/static/*
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    @images path /_next/image/*
+    header @images Cache-Control "public, max-age=86400"
+
+    try_files {path} /index.html
+
+    file_server
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        -Server
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}
