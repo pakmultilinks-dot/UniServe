@@ -83,12 +83,15 @@ docker cp uniserve_postgres:/tmp/backup_*.pgdump ./backups/
 
 ### Backup via Host (if port is exposed)
 
+> ⚠️ **Production Note:** The production Docker Compose does NOT expose PostgreSQL ports to the host. Use the container-based backup above. The port-based backup below only works in development where port 5433 is exposed.
+
 ```bash
+# Development only (port 5433 exposed)
 pg_dump \
   -h localhost \
   -p 5433 \
   -U uniserve \
-  -d uniserve_prod \
+  -d uniserve_dev \
   --format=custom \
   --compress=9 \
   -f backup_$(date +%Y%m%d_%H%M%S).pgdump
@@ -108,7 +111,7 @@ docker exec uniserve_postgres pg_dump \
 
 ```bash
 # Stop the API first to prevent writes
-docker compose stop api
+docker compose -f docker-compose.prod.yml stop api
 
 # Restore from backup
 docker exec -i uniserve_postgres pg_restore \
@@ -126,32 +129,32 @@ docker compose start api
 
 ```bash
 # Stop all services
-docker compose down
+docker compose -f docker-compose.prod.yml down
 
 # Remove volume
 docker volume rm uniserve_postgres_data
 
 # Restart (fresh database)
-docker compose up -d postgres
+docker compose -f docker-compose.prod.yml up -d postgres
 
 # Wait for healthy, then migrate
-docker compose exec postgres pg_isready -U uniserve
-alembic upgrade head
+docker compose -f docker-compose.prod.yml exec postgres pg_isready -U uniserve
+docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
 ```
 
 ## Health Check
 
 ```bash
 # Check PostgreSQL is accepting connections
-docker exec uniserve_postgres pg_isready -U uniserve -d uniserve_prod
+docker compose -f docker-compose.prod.yml exec postgres pg_isready -U uniserve -d uniserve_prod
 
 # Check table count
-docker exec uniserve_postgres psql -U uniserve -d uniserve_prod -c \
+docker compose -f docker-compose.prod.yml exec postgres psql -U uniserve -d uniserve_prod -c \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';"
 # Expected: 27
 
 # Check connection count
-docker exec uniserve_postgres psql -U uniserve -d uniserve_prod -c \
+docker compose -f docker-compose.prod.yml exec postgres psql -U uniserve -d uniserve_prod -c \
   "SELECT count(*) FROM pg_stat_activity WHERE state = 'active';"
 ```
 

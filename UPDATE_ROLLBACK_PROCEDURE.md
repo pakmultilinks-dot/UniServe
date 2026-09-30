@@ -58,11 +58,14 @@ docker compose -f docker-compose.prod.yml run --rm api alembic check
 ### 6. Rebuild Web (If Changed)
 
 ```bash
-# Rebuild static export
-docker compose -f docker-compose.prod.yml build caddy
+# Rebuild static export on the server
+cd apps/web
+npm ci
+NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 npm run build
+cd ../..
 
-# Or if using Next.js in a separate container:
-# docker compose -f docker-compose.prod.yml build web
+# Restart Caddy to pick up new static files
+docker compose -f docker-compose.prod.yml restart caddy
 ```
 
 ### 7. Restart Services
@@ -145,7 +148,7 @@ docker exec -i uniserve_postgres pg_restore \
 git checkout <good-commit-hash>
 
 # 4. Rebuild and restart
-docker compose -f docker-compose.prod.yml build api
+docker compose -f docker-compose.prod.yml build
 docker compose -f docker-compose.prod.yml up -d
 
 # 5. Verify

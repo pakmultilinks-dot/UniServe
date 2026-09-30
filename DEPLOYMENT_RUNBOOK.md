@@ -102,8 +102,18 @@ echo "NEXT_PUBLIC_API_URL=https://api.example.com/api/v1" > apps/web/.env.produc
 # Create backup directory
 mkdir -p backups
 
-# Build all images
-docker compose -f docker-compose.prod.yml build
+# Build API image
+docker compose -f docker-compose.prod.yml build api
+
+# Build web static export (on the server)
+cd apps/web
+npm ci
+NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 npm run build
+cd ../..
+
+# Verify static files were generated
+ls apps/web/out/index.html
+# Expected: apps/web/out/index.html
 
 # Start PostgreSQL first
 docker compose -f docker-compose.prod.yml up -d postgres

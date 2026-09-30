@@ -63,6 +63,8 @@
 | **PostgreSQL** | 5432 | ❌ No (internal only) | Primary data store |
 | **Redis** | 6379 | ❌ No (internal only) | Placeholder — not used at runtime |
 
+> **Note:** The web static files are built on the server (`apps/web/out/`) and served by Caddy via bind mount. There is no separate web container in production.
+
 ## Network Flow
 
 ### Web Browser → API
@@ -89,6 +91,7 @@ Mobile → HTTPS :443 → Caddy → HTTP :8000 → FastAPI
 | Volume | Mount Point | Contents | Backup Priority |
 |--------|------------|----------|-----------------|
 | `postgres_data` | `/var/lib/postgresql/data` | All database tables, indexes, migrations | **Critical** |
+| `./apps/web/out` | `/srv` (Caddy) | Next.js static export files (host bind mount) | Build artifact |
 
 Redis is ephemeral — no persistent storage needed (not used at runtime).
 

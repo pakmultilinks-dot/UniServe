@@ -1,7 +1,8 @@
 # UniServe — Web (Next.js) Static Export
-# Multi-stage: build static files, then serve with Caddy
+# Builds static files. In production, Caddy serves them via bind mount.
+# This Dockerfile is kept for CI/CD and optional container-based builds.
 
-# ---- Stage 1: Build ----
+# ---- Build ----
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -23,13 +24,4 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # Build static export
 RUN npm run build
 
-# ---- Stage 2: Serve with Caddy ----
-FROM caddy:2-alpine
-
-# Copy Caddyfile
-COPY Caddyfile /etc/caddy/Caddyfile
-
-# Copy built static files
-COPY --from=builder /app/out /srv
-
-EXPOSE 80 443
+# Output is in /app/out — use 'docker cp' to extract, or mount as volume.
