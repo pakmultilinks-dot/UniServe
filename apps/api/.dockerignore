@@ -1,0 +1,22 @@
+# Docker ignore for apps/api build context
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+.env.local
+.env.*.local
+.pytest_cache/
+.coverage
+htmlcov/
+.git/
+.gitignore
+*.log
+*.md
+!README.md
+tests/
