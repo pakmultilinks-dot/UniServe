@@ -160,7 +160,12 @@ export default function CafeteriasPage() {
                       {cafeteria.type ?? "student"}
                     </span>
                     {cafeteria.operating_hours && (
-                      <span>🕐 {cafeteria.operating_hours}</span>
+                      <span className="flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {cafeteria.operating_hours}
+                      </span>
                     )}
                   </div>
                   {canManage && (
