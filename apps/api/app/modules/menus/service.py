@@ -372,14 +372,29 @@ class MenuService:
         await self.db.flush()
         logger.info("favorite_removed", user_id=user_id, menu_item_id=menu_item_id)
 
-    async def list_favorites(self, user_id: str) -> list[MenuFavorite]:
-        """List a user's favorite menu items with menu_item eagerly loaded."""
-        result = await self.db.execute(
+    async def list_favorites(
+        self, user_id: str, *, exclude_faculty_cafeteria: bool = False
+    ) -> list[MenuFavorite]:
+        """List a user's favorite menu items with menu_item eagerly loaded.
+
+        When exclude_faculty_cafeteria is True, favorites belonging to the
+        faculty cafeteria are filtered out (non-faculty users).
+        """
+        query = (
             select(MenuFavorite)
             .where(MenuFavorite.user_id == user_id)
             .options(selectinload(MenuFavorite.menu_item))
             .order_by(MenuFavorite.created_at.desc())
         )
+        if exclude_faculty_cafeteria:
+            from app.modules.cafeterias.models import Cafeteria, CafeteriaType
+
+            query = (
+                query.join(MenuItem, MenuItem.id == MenuFavorite.menu_item_id)
+                .join(Cafeteria, Cafeteria.id == MenuItem.cafeteria_id)
+                .where(Cafeteria.type != CafeteriaType.FACULTY)  # noqa: E712
+            )
+        result = await self.db.execute(query)
         return list(result.scalars().all())
 
     async def check_favorite(self, user_id: str, menu_item_id: str) -> bool:
@@ -401,11 +416,20 @@ class MenuService:
         category: MenuCategory | None = None,
         search: str | None = None,
         is_available: bool | None = True,
+        exclude_faculty_cafeteria: bool = False,
     ) -> list[MenuItem]:
         """Search menu items across cafeterias."""
         query = select(MenuItem).where(MenuItem.is_active == True)  # noqa: E712
         if cafeteria_id is not None:
             query = query.where(MenuItem.cafeteria_id == cafeteria_id)
+        if exclude_faculty_cafeteria:
+            # Non-faculty users must not discover faculty-cafeteria items.
+            from app.modules.cafeterias.models import Cafeteria, CafeteriaType
+
+            query = (
+                query.join(Cafeteria, Cafeteria.id == MenuItem.cafeteria_id)
+                .where(Cafeteria.type != CafeteriaType.FACULTY)  # noqa: E712
+            )
         if category is not None:
             query = query.where(MenuItem.category == category)
         if search:

@@ -797,7 +797,8 @@ class TestOrderCancellation:
         checkout_resp = await _checkout(student_client, cafeteria.id)
         order_id = checkout_resp.json()["id"]
 
-        # Manager starts preparation
+        # Manager confirms, then starts preparation
+        await manager_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
         await manager_client.put(
             f"/api/v1/orders/{order_id}/status",
             json={"status": "preparing"},
@@ -888,7 +889,9 @@ class TestStatusTransitions:
         order_id = checkout_resp.json()["id"]
         assert checkout_resp.json()["status"] == "pending"
 
-        # pending → preparing
+        # pending → preparing (confirmation required first)
+        resp = await manager_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
+        assert resp.status_code == 200
         resp = await manager_client.put(
             f"/api/v1/orders/{order_id}/status",
             json={"status": "preparing"},
@@ -956,6 +959,7 @@ class TestStatusTransitions:
         checkout_resp = await _checkout(student_client, cafeteria.id)
         order_id = checkout_resp.json()["id"]
 
+        await staff_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
         resp = await staff_client.put(
             f"/api/v1/orders/{order_id}/status",
             json={"status": "preparing"},
@@ -1009,7 +1013,8 @@ class TestCollection:
         order_id = checkout_resp.json()["id"]
         order_number = checkout_resp.json()["order_number"]
 
-        # Move to ready
+        # Move to ready (confirm required before preparation)
+        await staff_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
         await staff_client.put(
             f"/api/v1/orders/{order_id}/status",
             json={"status": "preparing"},
@@ -1045,7 +1050,8 @@ class TestCollection:
         checkout_resp = await _checkout(student_client, cafeteria.id)
         order_id = checkout_resp.json()["id"]
 
-        # Move to ready + complete
+        # Move to ready + complete (confirm required before preparation)
+        await staff_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
         await staff_client.put(
             f"/api/v1/orders/{order_id}/status",
             json={"status": "preparing"},
@@ -1113,13 +1119,15 @@ class TestCollection:
         await _add_cart_item(student_client, cafeteria.id, item.id)
         checkout_resp = await _checkout(student_client, cafeteria.id)
 
-        # Move to ready
+        # Move to ready (confirm required before preparation)
+        order_id = checkout_resp.json()["id"]
+        await staff_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
         await staff_client.put(
-            f"/api/v1/orders/{checkout_resp.json()['id']}/status",
+            f"/api/v1/orders/{order_id}/status",
             json={"status": "preparing"},
         )
         await staff_client.put(
-            f"/api/v1/orders/{checkout_resp.json()['id']}/status",
+            f"/api/v1/orders/{order_id}/status",
             json={"status": "ready"},
         )
 
@@ -1178,7 +1186,8 @@ class TestInventoryReservation:
         inv = inv_result.scalar_one()
         assert inv.quantity == 10
 
-        # Start preparation
+        # Start preparation (confirm required first)
+        await manager_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
         await manager_client.put(
             f"/api/v1/orders/{order_id}/status",
             json={"status": "preparing"},
@@ -1265,3 +1274,193 @@ class TestAuthorization:
             json={"status": "preparing"},
         )
         assert resp.status_code == 403
+
+
+# ===========================================================================
+# Phase 27: Non-Payment Release Readiness — Regression Tests
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestScheduledCancellationTimezone:
+    """Phase 27 fix: the cancellation deadline uses cafeteria-local time.
+
+    scheduled_collection_time is cafeteria-local (checkout validation uses
+    ZoneInfo(cafeteria.timezone)). The deadline check must interpret it the
+    same way — previously it treated HH:MM as UTC, shifting the deadline by
+    the cafeteria's UTC offset (5 hours for PKT).
+    """
+
+    async def test_deadline_past_in_local_time_rejected(self, db: AsyncSession):
+        """A collection time already past in cafeteria-local time must reject."""
+        from datetime import datetime as dt
+        from datetime import timedelta
+
+        from app.core.exceptions import ValidationError
+        from app.modules.orders.models import Order
+        from app.modules.orders.service import OrderService
+
+        from zoneinfo import ZoneInfo
+
+        caf = await create_test_cafeteria(db, name="TZ Cafeteria Midway")
+        caf.timezone = "Pacific/Midway"  # UTC-11
+        await db.flush()
+
+        # Collection is 2 hours ahead in UTC = 9 hours behind in Midway local
+        # time. Derive the date/time from the local datetime directly — the
+        # local clock may roll back to the previous calendar day.
+        local_now = dt.now(ZoneInfo("Pacific/Midway"))
+        past_local = local_now - timedelta(hours=9)
+        collection = past_local.strftime("%H:%M")
+        local_date = past_local.date()
+
+        order = Order(
+            cafeteria_id=caf.id,
+            order_number="TZTEST-0001",
+            order_date=local_date,
+            scheduled_collection_time=collection,
+        )
+
+        service = OrderService(db)
+        with pytest.raises(ValidationError):
+            await service._check_scheduled_cancellation_deadline(order)
+
+    async def test_future_local_time_allows_cancellation(self, db: AsyncSession):
+        """A collection time still future in cafeteria-local time must pass."""
+        from datetime import datetime as dt
+        from datetime import timedelta
+
+        from app.modules.orders.models import Order
+        from app.modules.orders.service import OrderService
+
+        from zoneinfo import ZoneInfo
+
+        caf = await create_test_cafeteria(db, name="TZ Cafeteria Karachi")
+        caf.timezone = "Asia/Karachi"  # UTC+5
+        await db.flush()
+
+        # 8 hours ahead in UTC = 13 hours ahead in PKT — well within deadline.
+        # Derive from the local datetime so the date rolls correctly.
+        local_now = dt.now(ZoneInfo("Asia/Karachi"))
+        future_local = local_now + timedelta(hours=13)
+        collection = future_local.strftime("%H:%M")
+        local_date = future_local.date()
+
+        order = Order(
+            cafeteria_id=caf.id,
+            order_number="TZTEST-0002",
+            order_date=local_date,
+            scheduled_collection_time=collection,
+        )
+
+        service = OrderService(db)
+        # Must NOT raise — collection time is future in cafeteria-local time.
+        await service._check_scheduled_cancellation_deadline(order)
+
+
+@pytest.mark.asyncio
+class TestUpdateStatusBusinessGates:
+    """Phase 27 fix: PUT /orders/{id}/status enforces the same gates as /prepare."""
+
+    async def test_preparing_requires_confirmation(
+        self,
+        student_client: AsyncClient,
+        student_user,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """Generic status endpoint cannot start preparation on unconfirmed order."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+
+        resp = await manager_client.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "preparing"},
+        )
+        assert resp.status_code == 400
+        assert "confirm" in resp.json()["detail"].lower()
+
+    async def test_online_order_unpaid_blocked_from_generic_status(
+        self,
+        student_client: AsyncClient,
+        student_user,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """Online order without succeeded payment cannot enter preparing via PUT."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(
+            student_client, cafeteria.id, payment_method="online"
+        )
+        order_id = checkout_resp.json()["id"]
+
+        # Confirm first (confirmation gate passes), payment still unpaid.
+        await manager_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
+
+        resp = await manager_client.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "preparing"},
+        )
+        assert resp.status_code == 400
+        assert "payment" in resp.json()["detail"].lower()
+
+    async def test_online_order_succeeded_payment_allows_generic_status(
+        self,
+        student_client: AsyncClient,
+        student_user,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """Control: online order with succeeded payment can enter preparing via PUT."""
+        from app.modules.payments.models import Payment, PaymentStatus
+
+        cafeteria, item, _ = await _setup_order_test_data(db)
+
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(
+            student_client, cafeteria.id, payment_method="online"
+        )
+        order_id = checkout_resp.json()["id"]
+
+        resp = await student_client.post(
+            f"/api/v1/payments/initiate/{order_id}",
+            json={"idempotency_key": f"idem_{order_id}"},
+        )
+        assert resp.status_code in (200, 201), resp.text
+
+        result = await db.execute(select(Payment).where(Payment.order_id == order_id))
+        payment = result.scalar_one()
+        payment.status = PaymentStatus.SUCCEEDED
+        await db.flush()
+
+        await manager_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
+
+        resp = await manager_client.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "preparing"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "preparing"

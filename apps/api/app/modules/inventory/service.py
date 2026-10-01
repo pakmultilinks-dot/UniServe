@@ -75,8 +75,22 @@ class InventoryService:
         adjusted_by: str | None = None,
         reason: str | None = None,
     ) -> InventoryAdjustment:
-        """Adjust inventory quantity and record the adjustment."""
-        item = await self.get_inventory_item(inventory_item_id)
+        """Adjust inventory quantity and record the adjustment.
+
+        Uses SELECT FOR UPDATE on PostgreSQL so concurrent adjustments cannot
+        lose updates or drive the quantity negative (read-modify-write race).
+        Row locking is a no-op on SQLite (tests/dev), matching the orders
+        service convention.
+        """
+        # Lock the inventory row for the read-modify-write cycle.
+        stmt = select(InventoryItem).where(InventoryItem.id == inventory_item_id)
+        dialect_name = self.db.bind.dialect.name if self.db.bind else ""
+        if dialect_name == "postgresql":
+            stmt = stmt.with_for_update()
+        result = await self.db.execute(stmt)
+        item = result.scalar_one_or_none()
+        if item is None:
+            raise NotFoundException("Inventory Item", inventory_item_id)
 
         new_quantity = item.quantity + adjustment_quantity
         if new_quantity < 0:

@@ -375,7 +375,7 @@ class OrderService:
 
             # Scheduled cancellation deadline check
             if order.order_type == OrderType.SCHEDULED and order.scheduled_collection_time:
-                self._check_scheduled_cancellation_deadline(order)
+                await self._check_scheduled_cancellation_deadline(order)
 
         # Release inventory if it was reserved
         if order.inventory_reserved:
@@ -427,6 +427,7 @@ class OrderService:
         READY → COMPLETED
         """
         order = await self.get_order(order_id)
+        previous_status = order.status
 
         valid_transitions = {
             OrderStatus.PENDING: OrderStatus.PREPARING,
@@ -437,6 +438,28 @@ class OrderService:
         expected_next = valid_transitions.get(order.status)
         if expected_next is None or expected_next.value != new_status:
             raise ValidationError(f"Invalid status transition: {order.status.value} → {new_status}")
+
+        # PENDING → PREPARING through this generic endpoint must satisfy the
+        # same business gates as start_preparation (POST /prepare): the order
+        # must be confirmed, and online orders must have a succeeded payment.
+        if new_status == "preparing":
+            if order.confirmed_at is None:
+                raise ValidationError("Order must be confirmed before starting preparation")
+            if order.payment_method == PaymentMethod.ONLINE:
+                from app.modules.payments.models import Payment, PaymentStatus
+
+                result = await self.db.execute(
+                    select(Payment).where(Payment.order_id == order.id)
+                )
+                payment = result.scalar_one_or_none()
+
+                if payment is None:
+                    raise ValidationError("Payment not found for online order")
+                if payment.status != PaymentStatus.SUCCEEDED:
+                    raise ValidationError(
+                        f"Cannot start preparation: payment is {payment.status.value}, "
+                        f"must be succeeded"
+                    )
 
         order.status = OrderStatus(new_status)
 
@@ -467,7 +490,7 @@ class OrderService:
         logger.info(
             "order_status_updated",
             order_id=order.id,
-            old_status=order.status.value,
+            old_status=previous_status.value,
             new_status=new_status,
         )
         return order
@@ -1364,10 +1387,14 @@ class OrderService:
             except (ValueError, IndexError):
                 pass  # Invalid closing_time format — skip operating-hours check
 
-    def _check_scheduled_cancellation_deadline(self, order: Order) -> None:
+    async def _check_scheduled_cancellation_deadline(self, order: Order) -> None:
         """Check if a scheduled order can still be cancelled by the user.
 
         User can cancel until 30 minutes before scheduled collection time.
+
+        scheduled_collection_time is cafeteria-local (same convention as
+        checkout validation in _validate_scheduled_order_time), so it is
+        combined with the order date using the cafeteria's timezone — not UTC.
         """
         if not order.scheduled_collection_time:
             return
@@ -1376,12 +1403,29 @@ class OrderService:
         collection_hour = int(parts[0])
         collection_minute = int(parts[1])
 
+        from datetime import time as dt_time
+        from zoneinfo import ZoneInfo
+
+        from app.modules.cafeterias.models import Cafeteria
+
+        try:
+            caf_result = await self.db.execute(
+                select(Cafeteria).where(Cafeteria.id == order.cafeteria_id)
+            )
+            cafeteria = caf_result.scalar_one_or_none()
+            tz = ZoneInfo(cafeteria.timezone) if cafeteria else UTC
+        except (ValueError, KeyError):
+            tz = UTC
+
         collection_dt = datetime.combine(
             order.order_date,
-            datetime.min.time().replace(hour=collection_hour, minute=collection_minute),
-            tzinfo=UTC,
+            dt_time(collection_hour, collection_minute),
+            tzinfo=tz,
         )
-        deadline = collection_dt - timedelta(minutes=CANCELLATION_DEADLINE_MINUTES)
+        deadline = (
+            collection_dt.astimezone(UTC)
+            - timedelta(minutes=CANCELLATION_DEADLINE_MINUTES)
+        )
         now = datetime.now(UTC)
 
         if now > deadline:

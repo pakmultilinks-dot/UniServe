@@ -48,6 +48,23 @@ favorites_router = APIRouter()
 search_router = APIRouter()
 
 
+def _can_view_all_cafeterias(auth: AuthContext) -> bool:
+    """True when the user may see items from every cafeteria (incl. faculty).
+
+    Students (and any other non-faculty, non-staff role) must never discover
+    faculty-cafeteria items through unscoped search or favorites.
+    """
+    if auth.user.role in (
+        Role.UNIVERSITY_ADMIN,
+        Role.CAFETERIA_MANAGER,
+        Role.CAFETERIA_STAFF,
+    ):
+        return True
+    from app.modules.users.models import UserCategory
+
+    return auth.user.category == UserCategory.FACULTY
+
+
 # ===================================================================
 # Menu Items
 # ===================================================================
@@ -109,9 +126,16 @@ async def get_menu_item(
     auth: AuthContext = Depends(RequireCafeteriaScope()),
     db: AsyncSession = Depends(get_db),
 ) -> MenuItemResponse:
-    """Get a menu item by ID."""
+    """Get a menu item by ID (must belong to the path cafeteria)."""
     service = MenuService(db)
     item = await service.get_menu_item(menu_item_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=item.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="MenuItem",
+        db=db,
+        auth=auth,
+    )
     return MenuItemResponse.model_validate(item)
 
 
@@ -351,6 +375,22 @@ async def add_favorite(
 ) -> FavoriteResponse:
     """Add a menu item to favorites."""
     service = MenuService(db)
+    # Students must not favorite items from the faculty cafeteria
+    if not _can_view_all_cafeterias(auth):
+        from sqlalchemy import select as sa_select
+
+        from app.core.exceptions import AuthorizationError, NotFoundException
+        from app.modules.cafeterias.models import Cafeteria, CafeteriaType
+
+        item = await service.get_menu_item(body.menu_item_id)
+        caf_result = await db.execute(
+            sa_select(Cafeteria).where(Cafeteria.id == item.cafeteria_id)
+        )
+        cafeteria = caf_result.scalar_one_or_none()
+        if cafeteria is None:
+            raise NotFoundException("Cafeteria", item.cafeteria_id)
+        if cafeteria.type == CafeteriaType.FACULTY:
+            raise AuthorizationError("You cannot access this cafeteria")
     fav = await service.add_favorite(auth.user.id, body.menu_item_id)
     return FavoriteResponse.model_validate(fav)
 
@@ -362,7 +402,10 @@ async def list_favorites(
 ) -> FavoriteListResponse:
     """List user's favorite menu items."""
     service = MenuService(db)
-    favs = await service.list_favorites(auth.user.id)
+    favs = await service.list_favorites(
+        auth.user.id,
+        exclude_faculty_cafeteria=not _can_view_all_cafeterias(auth),
+    )
     return FavoriteListResponse(
         favorites=[FavoriteResponse.model_validate(f) for f in favs],
         total=len(favs),
@@ -415,6 +458,11 @@ async def search_menu_items(
         category=category,
         search=search,
         is_available=is_available,
+        # Unscoped search must never surface faculty-cafeteria items
+        # to users who cannot access the faculty cafeteria.
+        exclude_faculty_cafeteria=(
+            cafeteria_id is None and not _can_view_all_cafeterias(auth)
+        ),
     )
     return MenuItemListResponse(
         items=[MenuItemResponse.model_validate(i) for i in items],

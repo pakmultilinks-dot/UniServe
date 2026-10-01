@@ -238,3 +238,57 @@ async def test_low_stock_items(manager_client: AsyncClient, db):
     data = response.json()
     assert data["total"] == 1
     assert data["items"][0]["quantity"] == 5
+
+
+# ===========================================================================
+# Phase 27: Non-Payment Release Readiness — Adjustment Locking Regression
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_adjust_inventory_not_found(manager_client: AsyncClient, db):
+    """Refactored locked-select path raises NotFound for a missing item."""
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+
+    resp = await manager_client.post(
+        f"/api/v1/cafeterias/{caf.id}/inventory/adjust",
+        json={
+            "inventory_item_id": "00000000-0000-0000-0000-000000000002",
+            "adjustment_quantity": 5,
+        },
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_adjust_inventory_sequential_accumulation(manager_client: AsyncClient, db):
+    """Two sequential adjustments accumulate exactly (read-modify-write path)."""
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+    await db.flush()
+    menu_item = await create_test_menu_item(db, cafeteria_id=caf.id, name="Lock Test Item")
+
+    inv = InventoryItem(
+        cafeteria_id=caf.id,
+        menu_item_id=menu_item.id,
+        quantity=10,
+        unit=InventoryUnit.PIECES,
+        low_threshold=5,
+    )
+    db.add(inv)
+    await db.flush()
+
+    for qty in (7, -4):
+        resp = await manager_client.post(
+            f"/api/v1/cafeterias/{caf.id}/inventory/adjust",
+            json={"inventory_item_id": inv.id, "adjustment_quantity": qty},
+        )
+        assert resp.status_code == 200, resp.text
+
+    result = await db.execute(select(InventoryItem).where(InventoryItem.id == inv.id))
+    final = result.scalar_one()
+    await db.refresh(final)  # adjustments committed in a separate session
+    assert final.quantity == 13  # 10 + 7 - 4

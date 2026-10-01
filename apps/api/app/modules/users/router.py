@@ -217,6 +217,9 @@ async def suspend_user(
     if auth.user.role == Role.CAFETERIA_MANAGER:
         if user.role in (Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER):
             raise AuthorizationError("Managers cannot suspend other managers or admins")
+        # Students and faculty are not cafeteria users — suspension is admin-only
+        if user.role in (Role.STUDENT, Role.FACULTY):
+            raise AuthorizationError("Only a University Admin can suspend students or faculty")
         # Check if staff is in manager's cafeteria
         if user.role == Role.CAFETERIA_STAFF:
             assignment_result = await db.execute(

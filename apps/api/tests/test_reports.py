@@ -1004,3 +1004,91 @@ class TestExistingTestsUnaffected:
         )
         # Should get 401, not 500
         assert resp.status_code in (401, 422)
+
+
+# ===========================================================================
+# Phase 27: Non-Payment Release Readiness — Query-Scoped Report Tests
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestQueryScopedReportResolution:
+    """Phase 27 fix: omitted cafeteria_id no longer yields university-wide data."""
+
+    async def test_manager_single_assignment_defaults_to_own_cafeteria(
+        self,
+        manager_client: AsyncClient,
+        db: AsyncSession,
+        manager_user: User,
+        student_cafeteria_obj: Cafeteria,
+    ):
+        """Manager with one assignment gets their cafeteria scope automatically."""
+        await assign_user_to_cafeteria(
+            db, manager_user.id, student_cafeteria_obj.id, Role.CAFETERIA_MANAGER
+        )
+        item = await create_test_menu_item(db, cafeteria_id=student_cafeteria_obj.id)
+        await _seed_orders(db, cafeteria=student_cafeteria_obj, item=item, count=1)
+
+        resp = await manager_client.get("/api/v1/reports/sales")
+        assert resp.status_code == 200
+
+    async def test_manager_unassigned_denied_when_omitted(
+        self,
+        manager_client: AsyncClient,
+        db: AsyncSession,
+        manager_user: User,
+    ):
+        """Manager with no assignment cannot pull any report scope."""
+        resp = await manager_client.get("/api/v1/reports/sales")
+        assert resp.status_code == 403
+
+    async def test_staff_single_assignment_defaults_to_own_cafeteria(
+        self,
+        staff_client: AsyncClient,
+        db: AsyncSession,
+        staff_user: User,
+        student_cafeteria_obj: Cafeteria,
+    ):
+        """Staff with one assignment gets their cafeteria scope automatically."""
+        await assign_user_to_cafeteria(
+            db, staff_user.id, student_cafeteria_obj.id, Role.CAFETERIA_STAFF
+        )
+        item = await create_test_menu_item(db, cafeteria_id=student_cafeteria_obj.id)
+        await _seed_orders(db, cafeteria=student_cafeteria_obj, item=item, count=1)
+
+        resp = await staff_client.get("/api/v1/reports/orders/summary")
+        assert resp.status_code == 200
+
+    async def test_admin_omitted_cafeteria_id_still_university_wide(
+        self,
+        admin_client: AsyncClient,
+        db: AsyncSession,
+        student_cafeteria_obj: Cafeteria,
+    ):
+        """Control: admin retains the university-wide view when omitted."""
+        resp = await admin_client.get("/api/v1/reports/sales")
+        assert resp.status_code == 200
+
+    async def test_all_five_query_scoped_endpoints_resolved(
+        self,
+        manager_client: AsyncClient,
+        db: AsyncSession,
+        manager_user: User,
+        student_cafeteria_obj: Cafeteria,
+    ):
+        """Every query-scoped endpoint resolves scope for a single-assignment manager."""
+        await assign_user_to_cafeteria(
+            db, manager_user.id, student_cafeteria_obj.id, Role.CAFETERIA_MANAGER
+        )
+        item = await create_test_menu_item(db, cafeteria_id=student_cafeteria_obj.id)
+        await _seed_orders(db, cafeteria=student_cafeteria_obj, item=item, count=1)
+
+        for path in (
+            "/api/v1/reports/sales",
+            "/api/v1/reports/sales/daily",
+            "/api/v1/reports/orders/summary",
+            "/api/v1/reports/orders/volume",
+            "/api/v1/reports/orders/cancellation-rate",
+        ):
+            resp = await manager_client.get(path)
+            assert resp.status_code == 200, f"{path}: {resp.status_code} {resp.text[:200]}"

@@ -1113,3 +1113,239 @@ class TestUnauthenticatedAccess:
     async def test_menu_search_requires_auth(self, client: AsyncClient):
         resp = await client.get("/api/v1/menu-search/")
         assert resp.status_code == 401
+
+
+# ===================================================================
+# Phase 27: Non-Payment Release Readiness — Regression Tests
+# ===================================================================
+
+
+@pytest.mark.asyncio
+class TestMenuItemGetCrossCafeteriaIDOR:
+    """GET /cafeterias/{cid}/menu-items/{item_id} — Phase 27 fix: resource check."""
+
+    async def test_student_cannot_read_faculty_item_via_own_cafeteria_path(
+        self, client: AsyncClient, db: AsyncSession
+    ):
+        await _seed_cafeterias(db)
+        faculty_item = await _create_menu_item(db, FACULTY_CAF_ID, "Faculty Special", 900)
+
+        student = await create_test_user(
+            db,
+            first_name="IdorGet",
+            last_name="Student",
+            university_id="SRCH-IDOR-GET-001",
+            university_email="idor.get@lgu.edu.pk",
+            role=Role.STUDENT,
+            category=UserCategory.STUDENT,
+        )
+        sc = await _make_client(client, student, db)
+
+        resp = await sc.get(
+            f"/api/v1/cafeterias/{STUDENT_CAF_ID}/menu-items/{faculty_item.id}"
+        )
+        assert resp.status_code in (403, 404)
+
+    async def test_manager_assigned_elsewhere_cannot_read_faculty_item(
+        self, client: AsyncClient, db: AsyncSession
+    ):
+        await _seed_cafeterias(db)
+        faculty_item = await _create_menu_item(db, FACULTY_CAF_ID, "Faculty Only", 700)
+
+        manager = await create_test_user(
+            db,
+            first_name="IdorMgr",
+            last_name="User",
+            university_id="SRCH-IDOR-MGR-001",
+            university_email="idor.mgr@lgu.edu.pk",
+            role=Role.CAFETERIA_MANAGER,
+            category=UserCategory.FACULTY,
+        )
+        await _assign_user(db, manager, STUDENT_CAF_ID, Role.CAFETERIA_MANAGER)
+        mc = await _make_client(client, manager, db)
+
+        resp = await mc.get(
+            f"/api/v1/cafeterias/{STUDENT_CAF_ID}/menu-items/{faculty_item.id}"
+        )
+        assert resp.status_code in (403, 404)
+
+    async def test_manager_can_read_own_cafeteria_item(
+        self, client: AsyncClient, db: AsyncSession
+    ):
+        """Control: same request pattern succeeds for the assigned cafeteria."""
+        await _seed_cafeterias(db)
+        item = await _create_menu_item(db, STUDENT_CAF_ID, "Own Item", 400)
+
+        manager = await create_test_user(
+            db,
+            first_name="IdorOwn",
+            last_name="User",
+            university_id="SRCH-IDOR-OWN-001",
+            university_email="idor.own@lgu.edu.pk",
+            role=Role.CAFETERIA_MANAGER,
+            category=UserCategory.FACULTY,
+        )
+        await _assign_user(db, manager, STUDENT_CAF_ID, Role.CAFETERIA_MANAGER)
+        mc = await _make_client(client, manager, db)
+
+        resp = await mc.get(f"/api/v1/cafeterias/{STUDENT_CAF_ID}/menu-items/{item.id}")
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Own Item"
+
+
+@pytest.mark.asyncio
+class TestMenuSearchFacultyExclusion:
+    """GET /menu-search/ without cafeteria_id — Phase 27 fix: faculty items hidden."""
+
+    async def _make_student(self, client: AsyncClient, db: AsyncSession, suffix: str):
+        student = await create_test_user(
+            db,
+            first_name="FacHide",
+            last_name="Student",
+            university_id=f"SRCH-FACHIDE-{suffix}",
+            university_email=f"fac.hide.{suffix.lower()}@lgu.edu.pk",
+            role=Role.STUDENT,
+            category=UserCategory.STUDENT,
+        )
+        return await _make_client(client, student, db)
+
+    async def test_student_unscoped_search_excludes_faculty_items(
+        self, client: AsyncClient, db: AsyncSession
+    ):
+        await _seed_cafeterias(db)
+        await _create_menu_item(db, STUDENT_CAF_ID, "Student Fries", 200)
+        await _create_menu_item(db, FACULTY_CAF_ID, "Faculty Fries", 250)
+
+        sc = await self._make_student(client, db, "001")
+        resp = await sc.get("/api/v1/menu-search/", params={"search": "Fries"})
+        assert resp.status_code == 200
+        data = resp.json()
+        names = [i["name"] for i in data["items"]]
+        assert "Student Fries" in names
+        assert "Faculty Fries" not in names
+
+    async def test_faculty_user_unscoped_search_includes_faculty_items(
+        self, client: AsyncClient, db: AsyncSession
+    ):
+        """Control: faculty-category users still see faculty items."""
+        await _seed_cafeterias(db)
+        await _create_menu_item(db, FACULTY_CAF_ID, "Faculty Fries", 250)
+
+        faculty = await create_test_user(
+            db,
+            first_name="FacSee",
+            last_name="User",
+            university_id="SRCH-FACSEE-001",
+            university_email="fac.see@lgu.edu.pk",
+            role=Role.FACULTY,
+            category=UserCategory.FACULTY,
+        )
+        fc = await _make_client(client, faculty, db)
+        resp = await fc.get("/api/v1/menu-search/", params={"search": "Fries"})
+        assert resp.status_code == 200
+        names = [i["name"] for i in resp.json()["items"]]
+        assert "Faculty Fries" in names
+
+    async def test_admin_unscoped_search_includes_faculty_items(
+        self, client: AsyncClient, db: AsyncSession
+    ):
+        """Control: admin sees everything."""
+        await _seed_cafeterias(db)
+        await _create_menu_item(db, FACULTY_CAF_ID, "Faculty Fries", 250)
+
+        admin = await create_test_user(
+            db,
+            first_name="FacAdmin",
+            last_name="User",
+            university_id="SRCH-FACADM-001",
+            university_email="fac.adm@lgu.edu.pk",
+            role=Role.UNIVERSITY_ADMIN,
+            category=UserCategory.FACULTY,
+        )
+        ac = await _make_client(client, admin, db)
+        resp = await ac.get("/api/v1/menu-search/", params={"search": "Fries"})
+        assert resp.status_code == 200
+        names = [i["name"] for i in resp.json()["items"]]
+        assert "Faculty Fries" in names
+
+
+@pytest.mark.asyncio
+class TestFavoritesFacultyExclusion:
+    """POST/GET /favorites/ — Phase 27 fix: faculty items blocked for students."""
+
+    async def test_student_cannot_favorite_faculty_cafeteria_item(
+        self, client: AsyncClient, db: AsyncSession
+    ):
+        await _seed_cafeterias(db)
+        faculty_item = await _create_menu_item(db, FACULTY_CAF_ID, "Faculty Mocha", 350)
+
+        student = await create_test_user(
+            db,
+            first_name="FavBlock",
+            last_name="Student",
+            university_id="SRCH-FAVB-001",
+            university_email="fav.block@lgu.edu.pk",
+            role=Role.STUDENT,
+            category=UserCategory.STUDENT,
+        )
+        sc = await _make_client(client, student, db)
+
+        resp = await sc.post(
+            "/api/v1/favorites/", json={"menu_item_id": faculty_item.id}
+        )
+        assert resp.status_code == 403
+
+    async def test_faculty_user_can_favorite_faculty_item(
+        self, client: AsyncClient, db: AsyncSession
+    ):
+        """Control: faculty users can favorite faculty-cafeteria items."""
+        await _seed_cafeterias(db)
+        faculty_item = await _create_menu_item(db, FACULTY_CAF_ID, "Faculty Mocha", 350)
+
+        faculty = await create_test_user(
+            db,
+            first_name="FavOk",
+            last_name="User",
+            university_id="SRCH-FAVO-001",
+            university_email="fav.ok@lgu.edu.pk",
+            role=Role.FACULTY,
+            category=UserCategory.FACULTY,
+        )
+        fc = await _make_client(client, faculty, db)
+
+        resp = await fc.post(
+            "/api/v1/favorites/", json={"menu_item_id": faculty_item.id}
+        )
+        assert resp.status_code == 201
+
+    async def test_student_list_favorites_hides_faculty_items(
+        self, client: AsyncClient, db: AsyncSession
+    ):
+        """A legacy faculty favorite must not appear in a student's list."""
+        await _seed_cafeterias(db)
+        faculty_item = await _create_menu_item(db, FACULTY_CAF_ID, "Legacy Fac", 300)
+        student_item = await _create_menu_item(db, STUDENT_CAF_ID, "Student Deli", 280)
+
+        student = await create_test_user(
+            db,
+            first_name="FavList",
+            last_name="Student",
+            university_id="SRCH-FAVL-001",
+            university_email="fav.list@lgu.edu.pk",
+            role=Role.STUDENT,
+            category=UserCategory.STUDENT,
+        )
+        sc = await _make_client(client, student, db)
+
+        # Insert the faculty favorite directly (simulates pre-fix data)
+        from app.modules.menus.models import MenuFavorite
+
+        db.add(MenuFavorite(user_id=student.id, menu_item_id=faculty_item.id))
+        await db.flush()
+        await sc.post("/api/v1/favorites/", json={"menu_item_id": student_item.id})
+
+        resp = await sc.get("/api/v1/favorites/")
+        assert resp.status_code == 200
+        names = [f["menu_item"]["name"] for f in resp.json()["favorites"]]
+        assert "Student Deli" in names
+        assert "Legacy Fac" not in names

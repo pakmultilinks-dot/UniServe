@@ -145,6 +145,67 @@ class TestSuspendActivate:
         )
         assert resp.status_code == 403
 
+    async def test_manager_cannot_suspend_student(
+        self, manager_client: AsyncClient, db: AsyncSession
+    ):
+        """Managers must not suspend students — admin-only (Phase 27 fix)."""
+        target = await create_test_user(
+            db,
+            first_name="Stu",
+            last_name="Target",
+            university_id="TGT-MGR-STU-001",
+            university_email="tgt.mgr.stu@lgu.edu.pk",
+            role=Role.STUDENT,
+            category=UserCategory.STUDENT,
+        )
+        resp = await manager_client.post(
+            f"/api/v1/users/{target.id}/suspend",
+            json={"reason": "test"},
+        )
+        assert resp.status_code == 403
+
+    async def test_manager_cannot_suspend_faculty(
+        self, manager_client: AsyncClient, db: AsyncSession
+    ):
+        """Managers must not suspend faculty — admin-only (Phase 27 fix)."""
+        target = await create_test_user(
+            db,
+            first_name="Fac",
+            last_name="Target",
+            university_id="TGT-MGR-FAC-001",
+            university_email="tgt.mgr.fac@lgu.edu.pk",
+            role=Role.FACULTY,
+            category=UserCategory.FACULTY,
+        )
+        resp = await manager_client.post(
+            f"/api/v1/users/{target.id}/suspend",
+            json={"reason": "test"},
+        )
+        assert resp.status_code == 403
+        # Account must remain untouched
+        await db.refresh(target)
+        assert target.status != AccountStatus.SUSPENDED
+
+    async def test_admin_can_suspend_student(
+        self, admin_client: AsyncClient, db: AsyncSession
+    ):
+        """Admin can still suspend students (control for the new guard)."""
+        target = await create_test_user(
+            db,
+            first_name="Stu",
+            last_name="Admin",
+            university_id="TGT-ADM-STU-001",
+            university_email="tgt.adm.stu@lgu.edu.pk",
+            role=Role.STUDENT,
+            category=UserCategory.STUDENT,
+        )
+        resp = await admin_client.post(
+            f"/api/v1/users/{target.id}/suspend",
+            json={"reason": "policy"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "suspended"
+
     async def test_admin_activate_user(self, admin_client: AsyncClient, db: AsyncSession):
         target = await create_test_user(
             db,

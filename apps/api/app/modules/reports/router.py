@@ -26,7 +26,7 @@ from app.core.deps import (
     AuthContext,
     RequireRole,
 )
-from app.core.exceptions import AuthorizationError
+from app.core.exceptions import AuthorizationError, ValidationError
 from app.modules.users.models import CafeteriaAssignment, Role
 
 from .schemas import (
@@ -82,6 +82,46 @@ async def _verify_cafeteria_assignment(
         raise AuthorizationError("Insufficient permissions for reporting")
 
 
+async def _resolve_cafeteria_scope(
+    *,
+    auth: AuthContext,
+    cafeteria_id: str | None,
+    db: AsyncSession,
+) -> str | None:
+    """Resolve the cafeteria scope for a query-scoped report endpoint.
+
+    - University Admin: cafeteria_id as provided (None = all cafeterias).
+    - Manager/Staff: cafeteria_id if provided and assigned; if omitted, the
+      single assigned cafeteria is used. Unassigned users are denied and
+      users assigned to multiple cafeterias must specify cafeteria_id.
+
+    Prevents managers/staff from receiving university-wide aggregates when
+    the cafeteria_id query parameter is omitted.
+    """
+    if auth.user.role == Role.UNIVERSITY_ADMIN:
+        return cafeteria_id
+    if auth.user.role in (Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF):
+        if cafeteria_id:
+            await _verify_cafeteria_assignment(
+                auth=auth, cafeteria_id=cafeteria_id, db=db
+            )
+            return cafeteria_id
+        result = await db.execute(
+            select(CafeteriaAssignment.cafeteria_id).where(
+                CafeteriaAssignment.user_id == auth.user.id
+            )
+        )
+        assigned = list(result.scalars().all())
+        if len(assigned) == 1:
+            return assigned[0]
+        if not assigned:
+            raise AuthorizationError("You are not assigned to any cafeteria")
+        raise ValidationError(
+            "You are assigned to multiple cafeterias — specify cafeteria_id"
+        )
+    raise AuthorizationError("Insufficient permissions for reporting")
+
+
 # ---------------------------------------------------------------------------
 # Sales Reports
 # ---------------------------------------------------------------------------
@@ -101,8 +141,9 @@ async def sales_report(
     for orders in the date range. Failed, abandoned, and cancelled
     payments are excluded. Succeeded refund amounts are subtracted separately.
     """
-    if cafeteria_id:
-        await _verify_cafeteria_assignment(auth=auth, cafeteria_id=cafeteria_id, db=db)
+    cafeteria_id = await _resolve_cafeteria_scope(
+        auth=auth, cafeteria_id=cafeteria_id, db=db
+    )
     service = ReportService(db)
     data = await service.get_sales_summary(
         start_date=start_date, end_date=end_date, cafeteria_id=cafeteria_id
@@ -119,8 +160,9 @@ async def sales_daily(
     db: AsyncSession = Depends(get_db),
 ) -> SalesDailyResponse:
     """Daily revenue breakdown."""
-    if cafeteria_id:
-        await _verify_cafeteria_assignment(auth=auth, cafeteria_id=cafeteria_id, db=db)
+    cafeteria_id = await _resolve_cafeteria_scope(
+        auth=auth, cafeteria_id=cafeteria_id, db=db
+    )
     service = ReportService(db)
     rows = await service.get_sales_daily(
         start_date=start_date, end_date=end_date, cafeteria_id=cafeteria_id
@@ -155,8 +197,9 @@ async def order_summary(
     db: AsyncSession = Depends(get_db),
 ) -> OrderSummaryResponse:
     """Order counts by status, type, and payment method."""
-    if cafeteria_id:
-        await _verify_cafeteria_assignment(auth=auth, cafeteria_id=cafeteria_id, db=db)
+    cafeteria_id = await _resolve_cafeteria_scope(
+        auth=auth, cafeteria_id=cafeteria_id, db=db
+    )
     service = ReportService(db)
     data = await service.get_order_summary(
         start_date=start_date, end_date=end_date, cafeteria_id=cafeteria_id
@@ -173,8 +216,9 @@ async def order_volume(
     db: AsyncSession = Depends(get_db),
 ) -> OrderVolumeResponse:
     """Daily and hourly order volume."""
-    if cafeteria_id:
-        await _verify_cafeteria_assignment(auth=auth, cafeteria_id=cafeteria_id, db=db)
+    cafeteria_id = await _resolve_cafeteria_scope(
+        auth=auth, cafeteria_id=cafeteria_id, db=db
+    )
     service = ReportService(db)
     data = await service.get_order_volume(
         start_date=start_date, end_date=end_date, cafeteria_id=cafeteria_id
@@ -191,8 +235,9 @@ async def cancellation_rate(
     db: AsyncSession = Depends(get_db),
 ) -> CancellationRateResponse:
     """Cancellation count, rate, and reason breakdown."""
-    if cafeteria_id:
-        await _verify_cafeteria_assignment(auth=auth, cafeteria_id=cafeteria_id, db=db)
+    cafeteria_id = await _resolve_cafeteria_scope(
+        auth=auth, cafeteria_id=cafeteria_id, db=db
+    )
     service = ReportService(db)
     data = await service.get_cancellation_rate(
         start_date=start_date, end_date=end_date, cafeteria_id=cafeteria_id
