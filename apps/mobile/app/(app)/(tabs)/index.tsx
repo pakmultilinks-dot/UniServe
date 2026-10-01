@@ -25,7 +25,6 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useAuth } from "../../../src/contexts/AuthContext";
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
 import { FoodCard } from "../../../src/components/ui";
@@ -81,7 +80,6 @@ interface ToastState {
 // ── Main Home Screen ──
 
 export default function HomeScreen() {
-  const { user } = useAuth();
   const { resolvedTheme } = useTheme();
   const router = useRouter();
   const {
@@ -227,10 +225,6 @@ export default function HomeScreen() {
     [selectCafeteria],
   );
 
-  // Greeting
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: bg }]} edges={["top"]}>
       {/* Toast */}
@@ -244,9 +238,7 @@ export default function HomeScreen() {
       {/* ── Zone 2: Header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.greeting, { color: tc }]}>
-            {greeting}, {user?.first_name ?? "Student"}
-          </Text>
+          <Text style={[styles.greeting, { color: tc }]}>Uni Cafe Menu</Text>
           {selectedCafeteria && (
             <Pressable
               onPress={() => setCafeteriaSheetVisible(true)}
@@ -254,7 +246,8 @@ export default function HomeScreen() {
               accessibilityLabel={`Current cafeteria: ${selectedCafeteria.name}. Tap to change.`}
               accessibilityRole="button"
             >
-              <Text style={[styles.cafeteriaInlineName, { color: tcSec }]}>
+              <Ionicons name="location-outline" size={14} color={brand} />
+              <Text style={[styles.cafeteriaInlineName, { color: tcSec }]}> 
                 {selectedCafeteria.name}
               </Text>
               {selectedCafeteria.location ? (
@@ -267,11 +260,8 @@ export default function HomeScreen() {
             </Pressable>
           )}
         </View>
-        <Pressable
-          style={[styles.notifBtn, { backgroundColor: bgSec, borderColor: bc }]}
-          hitSlop={8}
-        >
-          <Ionicons name="notifications-outline" size={21} color={tc} />
+        <Pressable style={styles.headerIcon} hitSlop={8}>
+          <Ionicons name="person-circle-outline" size={26} color={brand} />
         </Pressable>
       </View>
 
@@ -280,7 +270,7 @@ export default function HomeScreen() {
         <SearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search food, drinks, snacks..."
+          placeholder="Search products..."
         />
       </View>
 
@@ -472,11 +462,11 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
-  greeting: { fontSize: 24, fontWeight: "700", lineHeight: 29, letterSpacing: -0.5 },
+  greeting: { fontSize: 27, fontWeight: "800", lineHeight: 32, letterSpacing: -0.7 },
   cafeteriaInline: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 4,
+    marginTop: 7,
   },
   cafeteriaInlineName: {
     fontSize: 14,
@@ -490,16 +480,14 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginLeft: 6,
+    marginLeft: 7,
     marginRight: 2,
   },
-  notifBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  headerIcon: {
+    width: 40,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
   },
 
   // Loading
@@ -549,12 +537,12 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    paddingHorizontal: 20,
-    gap: 12,
-    paddingTop: 4,
+    paddingHorizontal: 16,
+    gap: 10,
+    paddingTop: 8,
   },
   gridItem: {
-    width: "48%",
+    width: "48.5%",
     flexGrow: 0,
     flexShrink: 0,
   },
