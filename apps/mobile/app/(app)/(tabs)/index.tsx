@@ -171,10 +171,20 @@ export default function HomeScreen() {
     });
   }, [loadMenu]);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
+    // Pull-to-retry must also recover a failed cafeteria load — the empty
+    // banner promises "Pull to retry", and loadMenu is a no-op without a
+    // selected cafeteria.
+    if (cafeterias.length === 0) {
+      try {
+        setCafeterias(await getCafeterias());
+      } catch {
+        setError("Failed to load cafeterias. Pull to retry.");
+      }
+    }
     loadMenu();
-  }, [loadMenu]);
+  }, [loadMenu, cafeterias.length]);
 
   // Search: switch to "all" when searching
   useEffect(() => {

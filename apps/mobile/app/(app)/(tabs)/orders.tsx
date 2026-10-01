@@ -84,7 +84,8 @@ export default function OrdersScreen() {
   const loadOrders = useCallback(async () => {
     try {
       setError("");
-      const data = await getOrders({ limit: 20 });
+      // Backend returns orders from the last 7 days (no limit param).
+      const data = await getOrders();
       setOrders(data);
     } catch {
       setError("Failed to load order history.");

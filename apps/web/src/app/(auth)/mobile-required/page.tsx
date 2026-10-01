@@ -81,13 +81,14 @@ export default function MobileRequiredPage() {
             </p>
           )}
 
-          {/* Mobile app URL */}
+          {/* Mobile app availability */}
           <div className="mt-6 p-4 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg">
             <p className="text-sm font-medium text-[var(--text-primary)] mb-1">
-              Mobile App (local development)
+              Mobile App
             </p>
-            <p className="text-sm text-brand-700 dark:text-brand-400 font-mono">
-              http://localhost:8081
+            <p className="text-sm text-[var(--text-muted)]">
+              Download the UniServe mobile app to order meals, view schedules,
+              and pick up your orders.
             </p>
           </div>
 

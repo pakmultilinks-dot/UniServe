@@ -199,11 +199,11 @@ export async function getCafeterias(): Promise<
 
 export async function getOrders(params?: {
   status?: string;
-  limit?: number;
 }): Promise<import("@uniserve/shared-types").Order[]> {
+  // Backend GET /orders accepts only cafeteria_id/status/days — a `limit`
+  // param was never supported and was silently ignored.
   const query = new URLSearchParams();
   if (params?.status) query.set("status", params.status);
-  if (params?.limit) query.set("limit", String(params.limit));
   const qs = query.toString();
   const response = await apiClient.get<{
     orders: import("@uniserve/shared-types").Order[];
@@ -464,7 +464,19 @@ export async function getSalesReport(params?: {
   if (params?.end_date) query.set("end_date", params.end_date);
   if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
   const qs = query.toString();
-  return apiClient.get<any>(`/reports/sales${qs ? `?${qs}` : ""}`);
+  const raw = await apiClient.get<any>(`/reports/sales${qs ? `?${qs}` : ""}`);
+  // Backend returns SalesReportResponse { summary: {...}, currency } with all
+  // money in paisa. Unwrap the summary here so callers receive a flat shape.
+  // Fields with no source in this endpoint (peak hour, popular items, daily
+  // and cafeteria breakdowns) are intentionally not fabricated — they exist
+  // only on separate dedicated report endpoints.
+  const summary = raw?.summary ?? {};
+  return {
+    total_orders: summary.total_orders ?? 0,
+    total_revenue: summary.total_revenue ?? 0,
+    net_revenue: summary.net_revenue ?? 0,
+    total_refunded: summary.total_refunded ?? 0,
+  };
 }
 
 export async function getDailySalesReport(params?: {

@@ -88,6 +88,7 @@ export default function CheckoutScreen() {
     }
     setIsPlacing(true);
     setError("");
+    let createdOrder: { id: string } | null = null;
     try {
       const order = await checkoutCart(selectedCafeteria.id, {
         payment_method: paymentMethod,
@@ -96,6 +97,7 @@ export default function CheckoutScreen() {
         note: note.trim() || undefined,
         idempotency_key: checkoutKey,
       });
+      createdOrder = order;
       if (paymentMethod === "online") {
         const payment = await initiatePayment(order.id, checkoutKey);
         if (payment.status === "failed") {
@@ -105,6 +107,15 @@ export default function CheckoutScreen() {
       await refreshCart();
       router.replace(`/order/${order.id}`);
     } catch (err: any) {
+      if (createdOrder) {
+        // The order was already created server-side before payment initiation
+        // failed (e.g. the production 503 guard). Route the user to the real
+        // order so its truthful state is visible, and sync the cart — never
+        // claim the payment succeeded.
+        await refreshCart().catch(() => {});
+        router.replace(`/order/${createdOrder.id}`);
+        return;
+      }
       const msg = err?.message || "Failed to place order. Please try again.";
       setError(msg);
     } finally {

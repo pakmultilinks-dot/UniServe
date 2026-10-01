@@ -128,7 +128,9 @@ export default function ProfileScreen() {
       {/* ── Security Section ── */}
       <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
         <Text style={[styles.sectionTitle, { color: tcMuted }]}>SECURITY</Text>
-        <SectionRow icon="lock-closed-outline" label="Change Password" onPress={() => {}} theme={theme} />
+        {/* "Change Password" was removed — it was a no-op stub with no UI.
+            The change-password API and client service exist; wiring the
+            screen is deferred to a future feature phase. */}
         <SectionRow
           icon="phone-portrait-outline"
           label="Sign Out All Devices"
@@ -136,14 +138,6 @@ export default function ProfileScreen() {
           isLast
           theme={theme}
         />
-      </View>
-
-      {/* ── Support Section ── */}
-      <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
-        <Text style={[styles.sectionTitle, { color: tcMuted }]}>SUPPORT</Text>
-        <SectionRow icon="help-circle-outline" label="Help Center" onPress={() => {}} theme={theme} />
-        <SectionRow icon="document-text-outline" label="Terms of Service" onPress={() => {}} theme={theme} />
-        <SectionRow icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => {}} isLast theme={theme} />
       </View>
 
       {/* ── Logout ── */}

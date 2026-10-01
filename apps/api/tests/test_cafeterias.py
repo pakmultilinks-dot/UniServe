@@ -105,6 +105,31 @@ async def test_list_cafeterias_filter_type(admin_client: AsyncClient, db):
     assert data["cafeterias"][0]["name"] == "Faculty Caf"
 
 
+@pytest.mark.asyncio
+async def test_student_cannot_discover_faculty_cafeteria_via_type_param(
+    student_client: AsyncClient, db
+):
+    """Students must never see FACULTY cafeterias — even via ?cafeteria_type=faculty.
+
+    Phase 29 regression: an explicit cafeteria_type query param must not bypass
+    the student-only filter (previously returned faculty cafeterias to students).
+    """
+    await create_test_cafeteria(db, name="Student Caf", cafeteria_type=CafeteriaType.STUDENT)
+    await create_test_cafeteria(db, name="Faculty Caf", cafeteria_type=CafeteriaType.FACULTY)
+
+    # Default listing: student sees only the student cafeteria
+    response = await student_client.get("/api/v1/cafeterias/")
+    assert response.status_code == 200
+    data = response.json()
+    names = {c["name"] for c in data["cafeterias"]}
+    assert "Student Caf" in names
+    assert "Faculty Caf" not in names
+
+    # Explicit type=faculty query param: isolation must still hold (403)
+    response = await student_client.get("/api/v1/cafeterias/?cafeteria_type=faculty")
+    assert response.status_code == 403  # AuthorizationError
+
+
 # ===================================================================
 # Get Cafeteria
 # ===================================================================

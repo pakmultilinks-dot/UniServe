@@ -99,8 +99,10 @@ export default function DashboardPage() {
         merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         setOrders(merged.slice(0, 5));
       } else {
-        const myOrders = await getOrders({ limit: 5 });
-        setOrders(myOrders);
+        // Backend GET /orders has no limit param (7-day window default);
+        // take the 5 most recent client-side.
+        const myOrders = await getOrders();
+        setOrders(myOrders.slice(0, 5));
       }
     } catch {
       setOrders([]);

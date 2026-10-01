@@ -89,6 +89,10 @@ const managerNavItems: NavItem[] = [
     ),
     roles: ["cafeteria_manager", "cafeteria_staff"],
   },
+];
+
+/* Admin extra nav */
+const adminNavItems: NavItem[] = [
   {
     label: "Staff",
     href: "/dashboard/staff",
@@ -97,12 +101,10 @@ const managerNavItems: NavItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
-    roles: ["cafeteria_manager"],
+    // GET /users is university-admin only; managers cannot list users, so the
+    // Staff Management page is admin-only.
+    roles: ["university_admin"],
   },
-];
-
-/* Admin extra nav */
-const adminNavItems: NavItem[] = [
   {
     label: "Overview",
     href: "/dashboard/admin/overview",

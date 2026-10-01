@@ -158,13 +158,13 @@ interface OrderListResponse {
 
 export interface OrderParams {
   status?: string;
-  limit?: number;
 }
 
 export async function getOrders(params?: OrderParams): Promise<Order[]> {
+  // Backend GET /orders accepts only cafeteria_id/status/days — there is no
+  // `limit` param (the default window is the last 7 days).
   const queryParams = new URLSearchParams();
   if (params?.status) queryParams.append("status", params.status);
-  if (params?.limit) queryParams.append("limit", String(params.limit));
   const qs = queryParams.toString();
   const data = await apiClient.get<OrderListResponse>(`/orders${qs ? `?${qs}` : ""}`);
   return data.orders ?? [];

@@ -17,7 +17,10 @@ export default function CafeteriasPage() {
   const { toast } = useToast();
   const isManager = user?.role === "cafeteria_manager";
   const isAdmin = user?.role === "university_admin";
+  // Status toggle: manager + admin (PATCH allows both). Edit: admin only
+  // (PUT /cafeterias/{id} is university-admin only).
   const canManage = isManager || isAdmin;
+  const canEdit = isAdmin;
 
   useEffect(() => {
     if (!user) return;
@@ -178,9 +181,11 @@ export default function CafeteriasPage() {
                       >
                         {cafeteria.operational_status === "open" ? "Close" : "Open"}
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleEdit(cafeteria)}>
-                        Edit
-                      </Button>
+                      {canEdit && (
+                        <Button size="sm" variant="ghost" onClick={() => handleEdit(cafeteria)}>
+                          Edit
+                        </Button>
+                      )}
                     </div>
                   )}
                 </>

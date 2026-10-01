@@ -15,7 +15,8 @@ export default function StaffPage() {
   const { user } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const isManager = user?.role === "cafeteria_manager";
+  // GET /users is university-admin only — managers cannot list users, so this
+  // page is admin-only (matching Sidebar nav and the backend authorization).
   const isAdmin = user?.role === "university_admin";
 
   const [staff, setStaff] = useState<User[]>([]);
@@ -24,10 +25,10 @@ export default function StaffPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user && !isManager && !isAdmin) {
+    if (user && !isAdmin) {
       router.push("/dashboard");
     }
-  }, [user, isManager, isAdmin, router]);
+  }, [user, isAdmin, router]);
 
   const loadStaff = useCallback(async () => {
     setLoading(true);
@@ -51,7 +52,7 @@ export default function StaffPage() {
     setActionLoading(u.id);
     try {
       if (u.status === "active") {
-        await suspendUser(u.id, "Suspended by manager");
+        await suspendUser(u.id, "Suspended by administrator");
       } else {
         await activateUser(u.id);
       }
@@ -63,7 +64,7 @@ export default function StaffPage() {
     }
   };
 
-  if (!user || (!isManager && !isAdmin)) return null;
+  if (!user || !isAdmin) return null;
 
   return (
     <div className="animate-fade-in">

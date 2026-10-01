@@ -10,6 +10,7 @@ from app.core.deps import (
     RequireCafeteriaWriteScope,
     RequireRole,
 )
+from app.core.exceptions import AuthorizationError
 from app.modules.cafeterias.models import CafeteriaType
 from app.modules.cafeterias.schemas import (
     CafeteriaCreateRequest,
@@ -75,10 +76,13 @@ async def list_cafeterias(
     service = CafeteriaService(db)
 
     # Role-based filtering --------------------------------------------------
-    if cafeteria_type is None:  # only auto-filter when caller didn't specify
-        if auth.user.role == Role.STUDENT:
-            cafeteria_type = CafeteriaType.STUDENT
-        # Faculty and admins see all cafeterias (no filter)
+    if auth.user.role == Role.STUDENT:
+        # Students must never see FACULTY cafeterias — an explicit
+        # ?cafeteria_type=faculty query param must not bypass this rule.
+        if cafeteria_type == CafeteriaType.FACULTY:
+            raise AuthorizationError("You cannot access this cafeteria")
+        cafeteria_type = CafeteriaType.STUDENT
+    # Faculty and admins see all cafeterias (no filter)
 
     cafeterias = await service.list_cafeterias(
         is_active=is_active,

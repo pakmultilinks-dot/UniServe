@@ -43,7 +43,9 @@ export default function AdminOverviewPage() {
     }).finally(() => setLoading(false));
   }, [user, isAdmin, router]);
 
-  const formatCurrency = (amount: number) => `Rs. ${(amount / 100).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // getAdministrationOverview (lib/api.ts) already converts paisa -> rupees
+  // in exactly one layer; do not divide by 100 again here.
+  const formatCurrency = (amount: number) => `Rs. ${amount.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   if (!user || !isAdmin) return null;
 

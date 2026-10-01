@@ -5,18 +5,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getSalesReport, getCafeterias } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { Cafeteria } from "@uniserve/shared-types";
 
+// Flat shape produced by getSalesReport (lib/api.ts) after unwrapping the
+// backend SalesReportResponse.summary. All money values are in paisa.
 interface SalesData {
   total_orders: number;
   total_revenue: number;
-  average_order_value: number;
-  peak_hour: string;
-  popular_items: Array<{ name: string; quantity: number; revenue: number }>;
-  daily_breakdown: Array<{ date: string; orders: number; revenue: number }>;
-  cafeteria_breakdown: Array<{ cafeteria_id: string; cafeteria_name: string; orders: number; revenue: number }>;
+  net_revenue: number;
+  total_refunded: number;
 }
 
 export default function ReportsPage() {
@@ -117,7 +115,7 @@ export default function ReportsPage() {
         />
       ) : (
         <>
-          {/* Summary cards */}
+          {/* Summary cards — fields sourced from GET /reports/sales only */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 shadow-card">
               <p className="text-xs font-medium text-[var(--text-muted)] uppercase">Total Orders</p>
@@ -129,62 +127,23 @@ export default function ReportsPage() {
             </div>
             <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 shadow-card">
               <p className="text-xs font-medium text-[var(--text-muted)] uppercase">Avg. Order Value</p>
-              <p className="text-2xl font-bold text-[var(--text-primary)] mt-1">{formatCurrency(salesData.average_order_value)}</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)] mt-1">
+                {formatCurrency(salesData.total_orders > 0 ? Math.round(salesData.total_revenue / salesData.total_orders) : 0)}
+              </p>
             </div>
             <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 shadow-card">
-              <p className="text-xs font-medium text-[var(--text-muted)] uppercase">Peak Hour</p>
-              <p className="text-2xl font-bold text-[var(--text-primary)] mt-1">{salesData.peak_hour ?? "N/A"}</p>
+              <p className="text-xs font-medium text-[var(--text-muted)] uppercase">Net Revenue</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{formatCurrency(salesData.net_revenue)}</p>
             </div>
           </div>
 
-          {/* Popular items */}
-          {salesData.popular_items && salesData.popular_items.length > 0 && (
-            <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5 shadow-card mb-6">
-              <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Popular Items</h3>
-              <div className="space-y-2">
-                {salesData.popular_items.slice(0, 5).map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between py-2 border-b border-[var(--border-default)] last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-[var(--text-primary)]">{item.name}</span>
-                      <span className="text-xs text-[var(--text-muted)]">{item.quantity} sold</span>
-                    </div>
-                    <span className="text-sm font-medium text-green-600 dark:text-green-400">{formatCurrency(item.revenue)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Daily breakdown */}
-          {salesData.daily_breakdown && salesData.daily_breakdown.length > 0 && (
-            <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5 shadow-card">
-              <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Daily Breakdown</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--border-default)]">
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--text-muted)] uppercase">Date</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold text-[var(--text-muted)] uppercase">Orders</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold text-[var(--text-muted)] uppercase">Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border-default)]">
-                    {salesData.daily_breakdown.map((day, idx) => (
-                      <tr key={idx} className="hover:bg-[var(--bg-secondary)]/50">
-                        <td className="px-3 py-2 text-[var(--text-primary)]">
-                          {new Date(day.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[var(--text-secondary)]">{day.orders}</td>
-                        <td className="px-3 py-2 text-right font-medium text-green-600 dark:text-green-400">
-                          {formatCurrency(day.revenue)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          {/* Refunds summary */}
+          <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5 shadow-card">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">Refunds</h3>
+            <p className="text-sm text-[var(--text-secondary)]">
+              {formatCurrency(salesData.total_refunded)} refunded in this period (already deducted from net revenue).
+            </p>
+          </div>
         </>
       )}
     </div>

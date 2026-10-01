@@ -83,16 +83,8 @@ export default function SettingsPage() {
               <p className="text-[var(--text-primary)] font-medium">1.0.0</p>
             </div>
             <div>
-              <span className="text-[var(--text-muted)]">Environment</span>
-              <p className="text-[var(--text-primary)] font-medium">Development</p>
-            </div>
-            <div>
               <span className="text-[var(--text-muted)]">Role</span>
               <p className="text-[var(--text-primary)] font-medium capitalize">{user?.role?.replace(/_/g, " ")}</p>
-            </div>
-            <div>
-              <span className="text-[var(--text-muted)]">API</span>
-              <p className="text-[var(--text-primary)] font-medium">localhost:8000</p>
             </div>
           </div>
         </div>

@@ -1,9 +1,8 @@
 /**
  * UniServe — Order Pickup QR Screen
  *
- * Shows a large QR-like card with the order number for pickup scanning.
- * Since we can't install a QR library, this shows a stylized order card
- * that cafeteria staff can use to verify the order number.
+ * Shows a large QR code encoding the order number for pickup scanning by
+ * cafeteria staff.
  */
 import React, { useState, useEffect } from "react";
 import {
