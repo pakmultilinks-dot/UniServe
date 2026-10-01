@@ -5,9 +5,10 @@ payments, notifications, edge cases.
 """
 import httpx
 import json
+import os
 import time
 
-BASE = "http://localhost:8000/api/v1"
+BASE = os.environ.get("UNISERVE_E2E_BASE_URL", "http://localhost:8000/api/v1")
 
 # Test accounts
 STUDENT = {"university_email": "ayesha.khan@student.lgu.edu.pk", "password": "TestPass123!"}
