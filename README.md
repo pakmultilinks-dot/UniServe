@@ -31,9 +31,8 @@ UniServe/
 ├── packages/
 │   └── shared-types/     # Shared TypeScript type definitions
 ├── infrastructure/
-│   ├── docker/           # Docker configurations
-│   ├── database/         # Database setup and migrations
-│   └── deployment/       # Deployment configurations
+│   ├── caddy/            # Caddy reverse proxy configuration
+│   └── database/         # Database setup and init scripts
 ├── docs/
 │   ├── architecture/     # Architecture documentation
 │   ├── decisions/        # Architecture Decision Records (ADRs)

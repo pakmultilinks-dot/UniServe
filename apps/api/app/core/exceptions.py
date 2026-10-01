@@ -15,6 +15,13 @@ class UniServeException(Exception):  # noqa: N818
         super().__init__(self.message)
 
 
+class ServiceUnavailableError(UniServeException):
+    """Service is temporarily unavailable — required backend not configured."""
+
+    def __init__(self, message: str = "Service temporarily unavailable"):
+        super().__init__(message=message, code="SERVICE_UNAVAILABLE")
+
+
 class NotFoundException(UniServeException):
     """Resource not found."""
 

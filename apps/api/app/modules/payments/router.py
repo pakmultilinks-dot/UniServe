@@ -12,8 +12,10 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import AuthContext, get_current_user
+from app.core.exceptions import ServiceUnavailableError
 from app.modules.payments.providers.test_provider import TestPaymentProvider
 from app.modules.payments.schemas import (
     PaymentInitiateRequest,
@@ -83,6 +85,15 @@ async def initiate_payment_for_order(
     db: AsyncSession = Depends(get_db),
 ) -> PaymentInitiationResponse:
     """Initiate an online payment for a specific order."""
+    # Fail closed: the only wired provider is the test provider, which
+    # simulates successful payments. It must never process real money in
+    # production — refuse initiation until a real provider is configured.
+    if settings.APP_ENV == "production" and isinstance(
+        _get_payment_provider(), TestPaymentProvider
+    ):
+        raise ServiceUnavailableError(
+            "Online payments are unavailable: no production payment provider is configured"
+        )
     service = _get_payment_service(db)
     payment, redirect_url = await service.initiate_online_payment(
         order_id=order_id,

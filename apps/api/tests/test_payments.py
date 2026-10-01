@@ -285,6 +285,34 @@ class TestOnlinePaymentInitiation:
         assert data["status"] in ("processing", "succeeded")
         assert data["provider_name"] == "test_provider"
 
+    async def test_initiate_online_payment_blocked_in_production(
+        self, student_client: AsyncClient, student_user, db: AsyncSession, monkeypatch
+    ):
+        """In production, online initiation fails closed — test provider not allowed.
+
+        The test provider simulates successful payments. If it were active in
+        production, orders could be marked paid without real financial
+        processing. The API must refuse initiation (503) until a real
+        production provider is configured.
+        """
+        from app.core.config import settings
+
+        cafeteria, item, _ = await _setup_test_data(db)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        resp = await _checkout(student_client, cafeteria.id, payment_method="online")
+        assert resp.status_code == 201, resp.text
+        order_id = resp.json()["id"]
+
+        monkeypatch.setattr(settings, "APP_ENV", "production")
+
+        resp = await student_client.post(
+            f"/api/v1/payments/initiate/{order_id}",
+            json={"idempotency_key": "prod_guard_key"},
+        )
+        assert resp.status_code == 503, resp.text
+        assert resp.json()["code"] == "SERVICE_UNAVAILABLE"
+
     async def test_initiate_payment_validates_ownership(
         self, student_client: AsyncClient, student_user, faculty_user, db: AsyncSession
     ):

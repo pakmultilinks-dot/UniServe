@@ -25,6 +25,7 @@ from app.core.exceptions import (
     PINError,
     PINLockedError,
     RateLimitError,
+    ServiceUnavailableError,
     TokenExpiredError,
     TokenRevokedError,
     UniServeException,
@@ -55,6 +56,7 @@ _EXCEPTION_STATUS_MAP: dict[type[UniServeException], int] = {
     RateLimitError: 429,
     PINError: 400,
     PINLockedError: 423,
+    ServiceUnavailableError: 503,
 }
 
 
