@@ -99,6 +99,21 @@ class Settings(BaseSettings):
         "faculty": [r"^[a-z].*@lgu\.edu\.pk$", r".+@faculty\.lgu\.edu\.pk$"],
     }
 
+    # ---- Online Payment Provider ----
+    # Provider-neutral configuration (backend-only — server env only).
+    # "test" selects the mock provider (development/testing only; rejected
+    # in production on the initiation endpoint). Set PAYMENT_PROVIDER to a
+    # registered real provider name to enable online payments. Unknown
+    # names fail closed (HTTP 503) — no silent fallback to the mock.
+    # Credentials stay blank until a real provider is provisioned.
+    PAYMENT_PROVIDER: str = "test"
+    PAYMENT_ENVIRONMENT: str = "sandbox"  # sandbox | production (provider-side)
+    PAYMENT_MERCHANT_ID: str = ""
+    PAYMENT_API_KEY: str = ""
+    PAYMENT_API_SECRET: str = ""
+    PAYMENT_WEBHOOK_SECRET: str = ""
+    PAYMENT_CALLBACK_URL: str = ""
+
     # ---- CORS ----
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8081"]
 

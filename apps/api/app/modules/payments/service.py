@@ -330,24 +330,30 @@ class PaymentService:
         Idempotent — the same event_id will only be processed once.
         Returns True if the event was processed, False if already processed.
         """
-        # Check if already processed
-        existing = await self._get_webhook_event(provider_event_id)
-        if existing and existing.processed:
-            logger.info("webhook_already_processed", event_id=provider_event_id)
-            return False
-
-        # Verify and parse webhook
+        # Verify and parse webhook FIRST. Idempotency decisions must be based
+        # on the provider-verified event ID from the signed payload — never
+        # on unverified client/header input (e.g. x-event-id), which may be
+        # absent, forged, or collapse distinct events into a single key.
         result = await self.provider.verify_webhook_signature(
             payload=payload,
             headers={"provider": provider_name},
         )
+
+        # Prefer the verified event ID; fall back to the caller-supplied ID.
+        event_id = (result.event_id or "").strip() or provider_event_id
+
+        # Check if already processed (keyed by the verified event ID)
+        existing = await self._get_webhook_event(event_id)
+        if existing and existing.processed:
+            logger.info("webhook_already_processed", event_id=event_id)
+            return False
 
         if not result.valid:
             # Log the failed webhook
             if not existing:
                 event = WebhookEvent(
                     provider_name=provider_name,
-                    provider_event_id=provider_event_id,
+                    provider_event_id=event_id,
                     payload_json=payload.decode("utf-8", errors="replace"),
                     processed=False,
                     error_message=result.error_message,
@@ -358,7 +364,7 @@ class PaymentService:
             await self.db.flush()
             logger.warning(
                 "webhook_signature_invalid",
-                event_id=provider_event_id,
+                event_id=event_id,
                 error=result.error_message,
             )
             return False
@@ -366,7 +372,7 @@ class PaymentService:
         # Find the payment
         if not result.payment_reference:
             await self._log_unprocessed_webhook(
-                provider_name, provider_event_id, payload, "No payment reference in event"
+                provider_name, event_id, payload, "No payment reference in event"
             )
             return False
 
@@ -374,7 +380,7 @@ class PaymentService:
         if not payment:
             await self._log_unprocessed_webhook(
                 provider_name,
-                provider_event_id,
+                event_id,
                 payload,
                 f"Unknown payment reference: {result.payment_reference}",
             )
@@ -385,7 +391,7 @@ class PaymentService:
         if result.amount is not None and result.amount != order.total_amount:
             await self._log_unprocessed_webhook(
                 provider_name,
-                provider_event_id,
+                event_id,
                 payload,
                 f"Amount mismatch: webhook={result.amount}, order={order.total_amount}",
             )
@@ -394,7 +400,7 @@ class PaymentService:
         if result.currency and result.currency != order.currency:
             await self._log_unprocessed_webhook(
                 provider_name,
-                provider_event_id,
+                event_id,
                 payload,
                 f"Currency mismatch: webhook={result.currency}, order={order.currency}",
             )
@@ -434,7 +440,7 @@ class PaymentService:
         else:
             event = WebhookEvent(
                 provider_name=provider_name,
-                provider_event_id=provider_event_id,
+                provider_event_id=event_id,
                 payload_json=payload.decode("utf-8", errors="replace"),
                 processed=True,
                 processed_at=datetime.now(UTC),

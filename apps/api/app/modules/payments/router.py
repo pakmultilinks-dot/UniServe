@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import AuthContext, get_current_user
 from app.core.exceptions import ServiceUnavailableError
+from app.modules.payments.providers import create_payment_provider
 from app.modules.payments.providers.test_provider import TestPaymentProvider
 from app.modules.payments.schemas import (
     PaymentInitiateRequest,
@@ -34,12 +35,14 @@ router = APIRouter()
 
 
 def _get_payment_provider() -> PaymentProvider:
-    """Get the payment provider.
+    """Get the configured payment provider.
 
-    In production, this would load the configured provider.
-    For now, uses the test provider.
+    Selection is configuration-driven (settings.PAYMENT_PROVIDER) via the
+    provider registry. Unknown names fail closed (HTTP 503) — there is no
+    silent fallback to the mock provider. In production, the test provider
+    is additionally rejected on the initiation endpoint.
     """
-    return TestPaymentProvider()
+    return create_payment_provider()
 
 
 def _get_payment_service(db: AsyncSession) -> PaymentService:
