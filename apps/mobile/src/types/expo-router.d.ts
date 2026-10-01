@@ -22,6 +22,15 @@ declare module "expo-router" {
 
   export function useSegments(): string[];
 
+  /**
+   * Runs an effect when the screen becomes focused, similar to React.useEffect.
+   * The callback may return a cleanup function that runs on blur/unmount.
+   * Matches expo-router's re-export of React Navigation's useFocusEffect.
+   */
+  export function useFocusEffect(
+    effect: () => undefined | void | (() => void),
+  ): void;
+
   export type Href = string;
 
   interface StackScreenOptions {

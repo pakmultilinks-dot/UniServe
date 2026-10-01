@@ -4,7 +4,7 @@
  * Shows order status, items, and pickup QR code.
  * Uses OrderStatusTimeline for status visualization.
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   Pressable,
   ActivityIndicator,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
@@ -50,6 +50,14 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; icon: keyof typeof Ion
 };
 
 const STATUS_ORDER: OrderStatus[] = ["pending", "preparing", "ready", "completed"];
+
+// ── Real-time polling (Phase 22) ──
+// REST polling on the existing authenticated endpoints — the same mechanism the
+// web dashboard uses (30 s on the order list). Interval is 15 s here because
+// this screen watches a single, actively awaited order. Polling runs only while
+// the screen is focused and the order is non-terminal.
+const ORDER_POLL_INTERVAL_MS = 15000;
+const TERMINAL_ORDER_STATUSES: readonly OrderStatus[] = ["completed", "cancelled"];
 
 // ── Status Timeline ──
 
@@ -158,6 +166,7 @@ export default function OrderDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [payment, setPayment] = useState<Payment | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -179,6 +188,51 @@ export default function OrderDetailScreen() {
       }
     })();
   }, [id]);
+
+  /** Silent background refresh — never toggles the initial-loading state. */
+  const refreshOrderQuietly = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await getOrder(id);
+      setOrder(data);
+      if (data.payment_method === "online") {
+        try {
+          setPayment(await getOrderPayment(data.id));
+        } catch {
+          // Payment details are optional; order status remains authoritative.
+        }
+      }
+    } catch {
+      // Keep last-known state on transient errors. Auth expiry is handled by
+      // the global ApiClient failure path (tokens cleared → redirect → unmount).
+    }
+  }, [id]);
+
+  // Stop polling once the order reaches a terminal state.
+  useEffect(() => {
+    if (order && TERMINAL_ORDER_STATUSES.includes(order.status) && pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, [order]);
+
+  // Focus-aware REST polling (Phase 22): refresh the order every 15 s while this
+  // screen is focused and the order is still active. Cleanup runs on blur,
+  // unmount, and terminal-status transitions — single timer, no duplicates.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      if (order && TERMINAL_ORDER_STATUSES.includes(order.status)) return;
+
+      pollTimerRef.current = setInterval(refreshOrderQuietly, ORDER_POLL_INTERVAL_MS);
+      return () => {
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      };
+    }, [id, order?.status, refreshOrderQuietly]),
+  );
 
   if (isLoading) {
     return (

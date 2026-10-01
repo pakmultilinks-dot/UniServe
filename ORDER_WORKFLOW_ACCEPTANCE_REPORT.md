@@ -159,6 +159,86 @@ Three defects identified during Phase 21 were fixed:
 | # | Issue | Severity | Surface | Notes |
 |---|-------|----------|---------|-------|
 | 1 | RN Web `Pressable` interaction limitation | Medium | Mobile (Expo Web) | Playwright `page.click()` times out on React Native `Pressable`. Fiber-invoked `onPress` works. This is a tooling limitation, not an app bug. |
+
+---
+
+# Phase 22 — Product Readiness & Known-Gaps Resolution Audit
+
+**Date:** 2026-10-01
+**Status:** PRODUCT READINESS AUDIT — PASS
+**Audited from:** Phase 21 gaps (notification UI, Pay Now / online payment UI, real-time order polling)
+**Rules applied:** Inspect first; implement only justified changes; no redesign; no invented requirements; two-surface model and backend RBAC preserved; no VPS/DNS/deployment work.
+
+---
+
+## Gap Audit
+
+### Gap 1 — Notifications screen (mobile inbox)
+
+- **Original requirement:** No. A dedicated mobile notification inbox was explicitly deferred as a "future slice" (`docs/UI_MOBILE_REDESIGN.md` §6.2, §18 Non-Goals). Native push is deferred in ADR-001. The implementable Phase 6 deliverable — order-status notifications generated from real order events — is implemented and verified.
+- **Current implementation:** Backend notification module complete (models, service, 4 API endpoints, emission from 17 integration points; 64 unit tests + 15 live checks). Web inbox at `/dashboard/notifications` works. Mobile API clients exist (`getNotifications`, `getUnreadNotificationCount`) but no screen consumes them; the former decorative bell was replaced by a profile icon in the pre-Phase-22 UI commit `5d519ff`.
+- **Decision:** KEEP AS-IS + document limitation. Creating the screen now would implement an explicitly deferred enhancement, which the Phase 22 rules prohibit.
+- **Evidence:** `PHASE_22_GAP_MATRIX.md` §A; `EVIDENCE_NOTIFICATIONS.md`; `apps/api/app/modules/notifications/`; `docs/UI_MOBILE_REDESIGN.md` §6.2/§18; ADR-001 deferred list.
+- **Action taken:** None in code. Documented as an intentional deferral.
+
+### Gap 2 — Online payment / "Pay Now" button
+
+- **Original requirement:** Partially. "Online payment gateway integration" (Phase 5) is required and implemented as architecture: provider abstraction, initiation endpoint with server-side validation, webhook confirmation, refunds, idempotency, and prepare-gating on `PaymentStatus.SUCCEEDED`. A "Pay Now" retry button on order detail is **not** an explicit spec requirement.
+- **Current implementation:** Full payment architecture verified (91/91 live assertions). Mobile checkout initiates online payment through the real API. Order detail displays payment status; no retry button. The router instantiates `TestPaymentProvider` — a mock explicitly marked "NOT a production provider"; real provider integration is optional / not configured per `PRODUCTION_INTEGRATION_AUDIT.md`.
+- **Decision:** KEEP AS-IS + document limitation. The retry button is a UX completion tied to a real provider lifecycle, not a spec requirement.
+- **Evidence:** `PHASE_22_GAP_MATRIX.md` §B; `EVIDENCE_ONLINE_PAYMENTS.md`; `apps/api/app/modules/payments/`; `PRODUCTION_INTEGRATION_AUDIT.md`.
+- **Action taken:** None in code. Limitation documented verbatim below.
+
+### Gap 3 — Real-time order updates (mobile polling)
+
+- **Original requirement:** Yes, refined by ADR-001. `docs/architecture/phases.md` lists "Real-time order updates (WebSockets)" as a Phase 6 deliverable; ADR-001 refines it to REST-first, real-time only where genuinely valuable, satisfied on web via 30 s REST polling. Mobile order detail loaded once and never auto-updates — a partially implemented requirement.
+- **Current implementation:** Web: REST polling (orders page + header, 30 s). Mobile order detail: single `useEffect([id])` load; pull-to-refresh only on the orders tab. Backend endpoints correct and RBAC-enforced. No WebSockets/SSE exist anywhere; none are required.
+- **Decision:** FIX with the smallest architecture-compatible change — focus-aware REST polling on mobile order detail.
+- **Evidence:** `PHASE_22_GAP_MATRIX.md` §C; ADR-001 Communication section; `apps/web/src/app/dashboard/orders/page.tsx:72`; `apps/mobile/app/(app)/order/[id].tsx`.
+- **Action taken:** Implemented in `apps/mobile/app/(app)/order/[id].tsx`: 15 s interval on the existing authenticated endpoints (`getOrder`, `getOrderPayment`), silent background refresh (no loading-state flicker), stops at terminal statuses (`completed`, `cancelled`), focus-aware via `useFocusEffect` with cleanup on blur/unmount, single timer guarded by a ref, auth expiry handled by the existing global `ApiClient` failure path. Extended the project's `expo-router` type shim (`apps/mobile/src/types/expo-router.d.ts`) with the package's real `useFocusEffect` signature so the ambient declaration (which shadows package types for CI installs without postinstall) stays accurate.
+
+---
+
+## Changes Made (Phase 22)
+
+| File | Change |
+|------|--------|
+| `PHASE_22_GAP_MATRIX.md` | Created — gap matrix + detailed adjudication (A/B/C), delivery-channel and polling-mechanism tables, security/RBAC impact statement |
+| `apps/mobile/app/(app)/order/[id].tsx` | Added focus-aware 15 s REST polling with terminal-state stop and timer cleanup (+58/−2) |
+| `apps/mobile/src/types/expo-router.d.ts` | Added `useFocusEffect` declaration to the ambient expo-router shim (+9) |
+| `ORDER_WORKFLOW_ACCEPTANCE_REPORT.md` | This Phase 22 section |
+
+Note: the mobile cafe home UI restyle (`apps/mobile/app/(app)/(tabs)/index.tsx`, `apps/mobile/src/components/FoodCard.tsx`) was committed separately before Phase 22 as `5d519ff style: refine mobile cafe home UI`, so Phase 22 commits stay isolated. No backend, web, infrastructure, or deployment files were touched.
+
+---
+
+## External Dependencies / Documented Limitations
+
+- Real payment-provider transaction not verified because no sandbox credentials/provider configuration are available.
+- Native push notifications are not implemented and not claimed — they require an external provider and are deferred in ADR-001.
+- Web 375 px overflow items, the 401 console-refresh noise, and other pre-existing low-severity items from Phase 21 remain unchanged (out of Phase 22 scope).
+- Web dashboard service (port 3000) was not running during Phase 22; web surfaces were validated via `tsc --noEmit` + production build rather than live browser re-verification. Mobile was validated via type-check; the polling endpoints are the same ones exercised by the passing E2E suite.
+
+---
+
+## Regression (Phase 22)
+
+| Suite | Result |
+|-------|--------|
+| Backend pytest (`apps/api`) | **562 passed, 0 failed** (450.71s) — matches baseline |
+| E2E (`scripts/phase19_e2e_test.py`) | **31/31 passed (100%)** — includes Phase 12 notification ownership and Phase 13 RBAC edge cases (401/403/422/404) |
+| Web TypeScript (`tsc --noEmit`) | **0 errors** |
+| Web production build (`next build`) | **All routes compiled successfully** |
+| Mobile TypeScript (`tsc --noEmit`) | **0 errors** (after adding `useFocusEffect` to the expo-router type shim) |
+| RBAC / critical paths | Code-level: diff touches only two mobile files — no endpoint, permission, order rule, or two-surface boundary changed. Test-level: backend security suites (IDOR, role separation) + E2E 401/403 checks pass. Student → web admin, faculty → admin, student → faculty cafeteria, staff → mobile ordering, and unauthorized refund/administration access remain blocked by unchanged backend RBAC. |
+
+---
+
+## Final Status
+
+**PASS**
+
+Remaining gaps are either resolved (mobile order-detail real-time updates via REST polling) or explicitly determined to be outside the actual requirements (mobile notification inbox — deferred "future slice"; "Pay Now" retry button — non-spec UX enhancement; real payment provider — external dependency with architecture implemented and verified). No new requirements were invented, no redesign was performed, the two-surface model and backend RBAC are unchanged, and all regression suites match or exceed their baselines.
 | 2 | Session redirect bug when tokens cleared | Low | Mobile | Shows degraded "Good evening, Student" with 401 errors instead of redirecting to login |
 | 3 | Favorites placeholder | Low | Mobile | Shows text but no heart icon or actual favorites functionality |
 | 4 | Notification bell decorative | Medium | Mobile | No `onPress` handler, no notifications screen, no badge count. Backend generates all 4 notification types correctly. |
