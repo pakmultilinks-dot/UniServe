@@ -6,7 +6,7 @@ Loads settings from environment variables with validation and safe defaults.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -133,6 +133,24 @@ class Settings(BaseSettings):
             if v in defaults:
                 raise ValueError(f"Secret key must be changed for production. Got: {v[:10]}...")
         return v
+
+    @model_validator(mode="after")
+    def reject_debug_in_production(self) -> "Settings":
+        """Fail closed if APP_DEBUG is left on in production.
+
+        APP_DEBUG gates exposure of /api/docs, /api/redoc and /api/openapi.json
+        (see app.main). An operator who sets APP_ENV=production but forgets
+        APP_DEBUG=false would otherwise publish the interactive API schema
+        surface in production. Mirrors the reject_default_secrets posture:
+        misconfiguration must fail at startup, not degrade silently.
+        """
+        if self.APP_ENV == "production" and self.APP_DEBUG:
+            raise ValueError(
+                "APP_DEBUG must be false when APP_ENV=production "
+                "(debug mode exposes /api/docs, /api/redoc and /api/openapi.json). "
+                "Set APP_DEBUG=false."
+            )
+        return self
 
 
 @lru_cache

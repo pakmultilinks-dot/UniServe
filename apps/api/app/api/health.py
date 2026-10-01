@@ -28,17 +28,42 @@ async def health_check() -> dict[str, str]:
 
 @router.get("/ready")
 async def readiness_check(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
-    """Readiness check — confirms the API and database are operational."""
+    """Readiness check — confirms the API, database connectivity AND schema.
+
+    Phase 28A rehearsal demonstrated that `SELECT 1` alone stays successful
+    after the database schema has been wiped while the server is alive, so a
+    disaster state could still be reported as "ready". The readiness probe
+    therefore also queries the core `users` table — created by both the
+    Alembic migrations (0001) and metadata.create_all, in every environment
+    the API actually runs in — so monitoring can distinguish "connected" from
+    "operational". A wiped or never-migrated database fails this probe and is
+    reported as degraded.
+    """
     try:
         await db.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as exc:
         logger.error("Database readiness check failed", error=str(exc))
-        db_status = "disconnected"
+        return {
+            "status": "degraded",
+            "service": "uniserve-api",
+            "database": "disconnected",
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+    try:
+        await db.execute(text("SELECT 1 FROM users LIMIT 1"))
+        schema_status = "present"
+    except Exception as exc:
+        logger.error(
+            "Schema readiness check failed (core tables missing)", error=str(exc)
+        )
+        schema_status = "missing"
 
     return {
-        "status": "ready" if db_status == "connected" else "degraded",
+        "status": "ready" if schema_status == "present" else "degraded",
         "service": "uniserve-api",
         "database": db_status,
+        "schema": schema_status,
         "timestamp": datetime.now(UTC).isoformat(),
     }

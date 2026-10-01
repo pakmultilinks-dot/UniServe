@@ -4,6 +4,10 @@
 # Required: .env.production file in project root
 # See: .env.production.example for all variables
 
+# Fixed project name so the production stack (and its postgres_data volume)
+# NEVER shares a volume with the dev compose project (same directory default).
+name: uniserve-prod
+
 services:
   # ---- Caddy (reverse proxy + HTTPS) ----
   caddy:
