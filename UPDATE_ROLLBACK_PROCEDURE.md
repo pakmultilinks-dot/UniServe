@@ -59,8 +59,9 @@ docker compose -f docker-compose.prod.yml run --rm api alembic check
 
 ```bash
 # Rebuild static export on the server
+# (no package-lock.json in the repo — use npm install, NOT npm ci)
 cd apps/web
-npm ci
+npm install
 NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 npm run build
 cd ../..
 
@@ -111,6 +112,10 @@ docker compose -f docker-compose.prod.yml up -d api
 
 If the update included new migrations that need to be reverted:
 
+> ⚠️ **Preferred alternative: forward fix.** Deploy a new migration that
+> corrects the problem instead of downgrading a production database.
+> Only downgrade when you fully understand the data implications.
+
 ```bash
 # ⚠️ DANGEROUS: Only do this if you understand the data implications
 
@@ -133,16 +138,15 @@ docker compose -f docker-compose.prod.yml up -d api
 If the database is corrupted or a migration caused critical issues:
 
 ```bash
-# 1. Stop API (prevent writes)
+# 1. Snapshot current state first (even if corrupted — may aid forensics)
+./scripts/backup_database.sh ./backups
+
+# 2. Stop API (prevent writes)
 docker compose -f docker-compose.prod.yml stop api
 
-# 2. Restore database from backup
-docker exec -i uniserve_postgres pg_restore \
-  -U uniserve \
-  -d uniserve_prod \
-  --clean \
-  --if-exists \
-  < backups/uniserve_YYYYMMDD_HHMMSS.pgdump
+# 3. Restore database from backup (script verifies the dump first;
+#    CONFIRM=yes is mandatory — the script refuses without it)
+CONFIRM=yes ./scripts/restore_database.sh backups/uniserve_YYYYMMDD_HHMMSS.pgdump
 
 # 3. Revert code to last known good state
 git checkout <good-commit-hash>
@@ -166,6 +170,7 @@ curl -s https://api.example.com/api/v1/health
 5. **Never** change enum values by dropping and recreating — use ALTER TYPE ADD VALUE
 6. **Always** run `alembic check` after migration to verify no drift
 7. **Backup immediately** before any migration in production
+8. **Prefer forward-fix** (a new corrective migration) over `alembic downgrade` in production — downgrades are a last resort
 
 ## Deployment Checklist
 

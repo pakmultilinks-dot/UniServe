@@ -72,8 +72,11 @@ services:
 
 
 
-  # ---- Redis (optional — not used at runtime) ----
-  # Uncomment if you enable Redis-based caching in the future.
+  # ---- Redis (optional — NOT required at runtime) ----
+  # Verified during production deployment preparation: no Redis client is
+  # imported anywhere in apps/api/app — the API starts and serves normally
+  # without Redis. Uncomment only if you enable Redis-based caching or
+  # sessions in the future.
   # redis:
   #   image: redis:7-alpine
   #   container_name: uniserve_redis

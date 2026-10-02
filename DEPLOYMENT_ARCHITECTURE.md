@@ -3,7 +3,7 @@
 > **Pattern:** Single-server modular monolith
 > **Orchestration:** Docker Compose
 > **HTTPS:** Caddy (automatic Let's Encrypt)
-> **Last verified:** 2026-09-30
+> **Last verified:** 2026-10-01 (Phase 30 — production deployment preparation)
 
 ---
 
@@ -63,6 +63,11 @@
 | **PostgreSQL** | 5432 | ❌ No (internal only) | Primary data store |
 | **Redis** | 6379 | ❌ No (internal only) | Placeholder — not used at runtime |
 
+> **Redis (verified in Phase 30):** no Redis client is imported anywhere in
+> `apps/api/app`. The API starts and serves normally without Redis;
+> `docker-compose.prod.yml` ships with the Redis service commented out.
+> Only uncomment it if Redis-based caching/sessions are implemented later.
+
 > **Note:** The web static files are built on the server (`apps/web/out/`) and served by Caddy via bind mount. There is no separate web container in production.
 
 ## Network Flow
@@ -104,8 +109,8 @@ All secrets and configuration are injected via environment variables. No hardcod
 | Database credentials | `.env.production` |
 | JWT secrets | `.env.production` |
 | API CORS origins | `.env.production` |
-| Web API URL | `.env.local` (build-time) |
-| Mobile API URL | `app.json` extra (build-time) |
+| Web API URL | `apps/web/.env.production.local` (build-time `NEXT_PUBLIC_API_URL`) |
+| Mobile API URL | `apps/mobile/src/config.ts` (keyed by EAS channel, build-time) |
 
 ## Deployment / Update Flow
 

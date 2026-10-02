@@ -152,6 +152,29 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def reject_dev_database_password_in_production(self) -> "Settings":
+        """Fail closed if the development database password is used in production.
+
+        The default POSTGRES_PASSWORD is the documented development credential.
+        An operator who sets APP_ENV=production but leaves that default (or
+        leaves the password empty) would ship a production database protected
+        by a publicly known development secret. Mirrors the
+        reject_default_secrets posture: misconfiguration must fail at startup,
+        not degrade silently.
+        """
+        if self.APP_ENV == "production" and self.POSTGRES_PASSWORD in (
+            "uniserve_dev_password",
+            "",
+        ):
+            raise ValueError(
+                "POSTGRES_PASSWORD must be set to a strong value when "
+                "APP_ENV=production (empty and the development default are "
+                "rejected). Generate one with: "
+                "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            )
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:

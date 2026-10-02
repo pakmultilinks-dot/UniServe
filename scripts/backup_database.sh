@@ -31,6 +31,10 @@ docker exec "$CONTAINER_NAME" pg_dump \
   --compress=9 \
   -f "/tmp/$BACKUP_FILE"
 
+# Verify the dump is readable BEFORE copying it out or deleting the temp file
+docker exec "$CONTAINER_NAME" pg_restore --list "/tmp/$BACKUP_FILE" > /dev/null
+echo "[$(date)] Backup verified (pg_restore --list succeeded)"
+
 # Copy to host
 docker cp "$CONTAINER_NAME:/tmp/$BACKUP_FILE" "$BACKUP_DIR/$BACKUP_FILE"
 

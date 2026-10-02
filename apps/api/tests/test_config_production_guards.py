@@ -26,6 +26,9 @@ def _prod_kwargs(**overrides: object) -> dict:
         "APP_DEBUG": False,
         "APP_SECRET_KEY": "prod-secret-" + "a" * 32,
         "JWT_SECRET_KEY": "prod-jwt-" + "b" * 32,
+        # Strong password so the DB-password production guard (added in
+        # Phase 30 deployment preparation) does not trip on the base fixture.
+        "POSTGRES_PASSWORD": "prod-db-pass-" + "c" * 32,
     }
     kwargs.update(overrides)
     return kwargs
@@ -78,6 +81,30 @@ class TestSecretProductionGuard:
     def test_custom_secret_allowed_in_production(self) -> None:
         settings = Settings(**_prod_kwargs())
         assert settings.APP_SECRET_KEY.startswith("prod-secret-")
+
+
+class TestDbPasswordProductionGuard:
+    """Development/empty POSTGRES_PASSWORD must be rejected in production."""
+
+    def test_dev_password_rejected_in_production(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(**_prod_kwargs(POSTGRES_PASSWORD="uniserve_dev_password"))
+        assert "POSTGRES_PASSWORD must be set" in str(exc_info.value)
+
+    def test_empty_password_rejected_in_production(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(**_prod_kwargs(POSTGRES_PASSWORD=""))
+        assert "POSTGRES_PASSWORD must be set" in str(exc_info.value)
+
+    def test_strong_password_allowed_in_production(self) -> None:
+        settings = Settings(**_prod_kwargs())
+        assert settings.POSTGRES_PASSWORD.startswith("prod-db-pass-")
+
+    def test_dev_default_password_unchanged_in_development(self) -> None:
+        # Guard is production-only; development defaults must not change.
+        settings = Settings(_env_file=None)
+        assert settings.APP_ENV == "development"
+        assert settings.POSTGRES_PASSWORD == "uniserve_dev_password"
 
 
 class TestPaymentFailClosedConfigIntrospection:

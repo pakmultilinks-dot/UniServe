@@ -90,11 +90,16 @@ Replace `api.example.com` and `app.example.com` with your actual domains.
 
 ## Step 6: Configure Web Build
 
-Edit `apps/web/.env.production.local`:
+Copy the template and confirm the API URL matches your real domain:
 
 ```bash
-echo "NEXT_PUBLIC_API_URL=https://api.example.com/api/v1" > apps/web/.env.production.local
+cp apps/web/.env.production.example apps/web/.env.production.local
+nano apps/web/.env.production.local
+# NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
 ```
+
+> `NEXT_PUBLIC_API_URL` is baked into the static bundle at build time —
+> changing it later requires a rebuild.
 
 ## Step 7: Build and Start Services
 
@@ -106,8 +111,9 @@ mkdir -p backups
 docker compose -f docker-compose.prod.yml build api
 
 # Build web static export (on the server)
+# NOTE: the repo has no package-lock.json — use npm install, NOT npm ci
 cd apps/web
-npm ci
+npm install
 NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 npm run build
 cd ../..
 
@@ -273,3 +279,27 @@ docker compose -f docker-compose.prod.yml logs --tail=50 caddy
 - Verify backup ran successfully at 2 AM
 - Set up uptime monitoring (e.g., UptimeRobot, BetterStack)
 - Configure email notifications for critical alerts
+
+---
+
+## Appendix: Mobile App (EAS) — Not Part of Server Deployment
+
+The mobile app is built and distributed with Expo EAS (`apps/mobile/eas.json`);
+it is **not** deployed by this server runbook. Before an EAS production build:
+
+1. Set the production API URL in `apps/mobile/src/config.ts`
+   (`ENV.production.API_BASE_URL`) to your real API domain.
+   The committed placeholder is `https://api.uniserve.app/api/v1`.
+2. Build from `apps/mobile/` with an Expo account (external requirement):
+   `eas build --platform all --profile production`
+3. This repository produces no APK/IPA in CI — store submission is manual.
+
+---
+
+## Appendix: Redis — Not Required at Runtime
+
+Verified during production deployment preparation: **no Redis client is
+imported anywhere in `apps/api/app`**. The API starts and serves normally
+without Redis; `docker-compose.prod.yml` ships with the Redis service
+commented out. Only uncomment it if you later implement Redis-based
+caching or sessions.

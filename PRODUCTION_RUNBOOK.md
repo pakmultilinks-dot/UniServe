@@ -36,6 +36,16 @@ Key properties (verified in rehearsal):
   mount) and reverse-proxies `/api/…` to `uniserve_api:8000`.
 - The API does **not** auto-migrate on startup. Migrations are a deliberate,
   manual step (section 4).
+- **Background workers run inside the API process.** The pickup-expiry worker
+  starts from the FastAPI lifespan hook and ticks every 60 seconds
+  (`_PICKUP_CHECK_INTERVAL` in `apps/api/app/main.py`). uvicorn runs with
+  `--workers 2`, so each worker process runs its own tick — safe by design:
+  the expiry query uses `SELECT ... FOR UPDATE SKIP LOCKED`, so concurrent
+  ticks never double-process an order. **Do not deploy a separate worker
+  container** — it would duplicate the same in-process worker with no benefit.
+- **Redis is not required at runtime** (verified Phase 30): no Redis client is
+  imported anywhere in `apps/api/app`; the prod compose ships Redis
+  commented out.
 
 ## 2. Prerequisites
 
@@ -148,6 +158,8 @@ If a migration fails:
 
 - Runs `pg_dump` **inside** the container (PostgreSQL has no host port), then
   copies the dump to the host.
+- Verifies each dump with `pg_restore --list` inside the container before it
+  is copied out; the script exits non-zero on any failure.
 - Retention: dumps older than 30 days in the backup directory are deleted.
 - Copy dumps off the machine (object storage / another host). A backup that
   only lives on the database server does not survive the server.
@@ -166,8 +178,9 @@ schema and recovered it from a section-5 backup; follow exactly these steps:
 # 1. Stop the API — writes must not race the restore
 docker compose -f docker-compose.prod.yml stop api
 
-# 2. Restore the dump (replaces current contents; --clean --if-exists)
-./scripts/restore_database.sh backups/uniserve_<ts>.pgdump
+# 2. Restore the dump (CONFIRM=yes is mandatory — the script refuses without
+#    it; the dump is verified with pg_restore --list before anything destructive)
+CONFIRM=yes ./scripts/restore_database.sh backups/uniserve_<ts>.pgdump
 
 # 3. Verify schema revision
 docker compose -f docker-compose.prod.yml run --rm api alembic current   # -> 0009 (head)
@@ -186,7 +199,7 @@ container `uniserve_postgres`) match `.env.production.example`. If you renamed
 the database user/name, override them explicitly:
 
 ```bash
-DB_USER=<user> DB_NAME=<db> ./scripts/restore_database.sh backups/uniserve_<ts>.pgdump
+CONFIRM=yes DB_USER=<user> DB_NAME=<db> ./scripts/restore_database.sh backups/uniserve_<ts>.pgdump
 ```
 
 ## 7. Health checks & monitoring
