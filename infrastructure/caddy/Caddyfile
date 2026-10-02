@@ -34,7 +34,7 @@ app.example.com {
     @images path /_next/image/*
     header @images Cache-Control "public, max-age=86400"
 
-    try_files {path} /index.html
+    try_files {path} {path}.html {path}/index.html /index.html
 
     file_server
 
