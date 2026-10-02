@@ -21,7 +21,7 @@
 | Backend suite (`pytest apps/api/tests`) | **613 passed** (609 baseline + 4 new config-guard tests) |
 | Production config-guard tests | **12/12 passed** (`test_config_production_guards.py`) |
 | Web type-check (`apps/web`) | Clean (tsc --noEmit, no errors) |
-| Web production build (`next build`, static export) | Green — Next.js 14.2.35, 24/24 static pages, `apps/web/out` regenerated **byte-identical** to the committed artifact |
+| Web production build (`next build`, static export) | Green — Next.js 14.2.35, 24/24 static pages; `apps/web/out` regenerated **byte-identical** to the existing local artifact. Note: `out/` is **gitignored, not committed** — production always rebuilds it on the server (Phase 31 verified this tracking state) |
 | Mobile type-check (`apps/mobile`) | Clean (tsc --noEmit, no errors) |
 | `alembic current` (dev volume, isolated :5433 container) | `0009 (head)` |
 | `alembic check` (dev volume) | `No new upgrade operations detected` — zero schema drift |

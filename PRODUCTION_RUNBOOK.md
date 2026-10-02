@@ -66,9 +66,11 @@ Key properties (verified in rehearsal):
   - `POSTGRES_PASSWORD` — 32+ random chars (`openssl rand -base64 32`)
   - `APP_ENV=production` and `APP_DEBUG=false`
 
-  **These values are validated at startup (fail-closed):** default secrets or
-  `APP_DEBUG=true` with `APP_ENV=production` crash the API on boot. This is
-  intentional — a misconfigured production must not come up.
+  **These values are validated at startup (fail-closed):** default or
+  empty/whitespace secret keys, `APP_DEBUG=true`, or a `POSTGRES_PASSWORD`
+  that is empty, the development default, or shorter than 12 characters —
+  with `APP_ENV=production` — crash the API on boot. This is intentional:
+  a misconfigured production must not come up.
 
 - For the web app build: create `apps/web/.env.production.local` (git-ignored;
   this is the filename `apps/web/.env.production.example` instructs — Next.js

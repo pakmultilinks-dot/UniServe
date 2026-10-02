@@ -82,6 +82,24 @@ class TestSecretProductionGuard:
         settings = Settings(**_prod_kwargs())
         assert settings.APP_SECRET_KEY.startswith("prod-secret-")
 
+    @pytest.mark.parametrize("field", ["APP_SECRET_KEY", "JWT_SECRET_KEY"])
+    @pytest.mark.parametrize("bad_value", ["", "   "])
+    def test_empty_secret_rejected_in_production(
+        self, field: str, bad_value: str
+    ) -> None:
+        # Phase 31: empty/whitespace secrets were previously accepted (they
+        # are not in the defaults set) — a signing key of "" offers no
+        # protection. Production must refuse them at startup.
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(**_prod_kwargs(**{field: bad_value}))
+        assert "must not be empty" in str(exc_info.value)
+
+    def test_empty_secret_unchanged_in_development(self) -> None:
+        # Guard is production-only; development behaviour must not change.
+        settings = Settings(_env_file=None, APP_SECRET_KEY="")
+        assert settings.APP_ENV == "development"
+        assert settings.APP_SECRET_KEY == ""
+
 
 class TestDbPasswordProductionGuard:
     """Development/empty POSTGRES_PASSWORD must be rejected in production."""
@@ -105,6 +123,19 @@ class TestDbPasswordProductionGuard:
         settings = Settings(_env_file=None)
         assert settings.APP_ENV == "development"
         assert settings.POSTGRES_PASSWORD == "uniserve_dev_password"
+
+    @pytest.mark.parametrize("weak", ["p", "short123", "a" * 11])
+    def test_weak_password_rejected_in_production(self, weak: str) -> None:
+        # Phase 31: passwords below the 12-character minimum are weak by
+        # any standard; production must refuse them at startup.
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(**_prod_kwargs(POSTGRES_PASSWORD=weak))
+        assert "POSTGRES_PASSWORD must be set" in str(exc_info.value)
+
+    def test_minimum_length_password_allowed_in_production(self) -> None:
+        # Boundary: exactly 12 characters is accepted.
+        settings = Settings(**_prod_kwargs(POSTGRES_PASSWORD="x" * 12))
+        assert settings.POSTGRES_PASSWORD == "x" * 12
 
 
 class TestPaymentFailClosedConfigIntrospection:

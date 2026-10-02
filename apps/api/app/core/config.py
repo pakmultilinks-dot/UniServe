@@ -124,7 +124,12 @@ class Settings(BaseSettings):
     @field_validator("APP_SECRET_KEY", "JWT_SECRET_KEY")
     @classmethod
     def reject_default_secrets(cls, v: str, info: object) -> str:
-        """Reject default secret keys in production."""
+        """Reject default or empty secret keys in production.
+
+        Empty/whitespace values would otherwise be accepted (they are not in
+        the defaults set) and produce a signing key that offers no protection
+        whatsoever. Fail closed at startup, like the default-secret rule.
+        """
         if hasattr(info, "data") and info.data.get("APP_ENV") == "production":
             defaults = {
                 "change-me-in-production",
@@ -132,6 +137,12 @@ class Settings(BaseSettings):
             }
             if v in defaults:
                 raise ValueError(f"Secret key must be changed for production. Got: {v[:10]}...")
+            if not v or not v.strip():
+                raise ValueError(
+                    "Secret keys must not be empty when APP_ENV=production. "
+                    "Generate one with: "
+                    "python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+                )
         return v
 
     @model_validator(mode="after")
@@ -163,14 +174,15 @@ class Settings(BaseSettings):
         reject_default_secrets posture: misconfiguration must fail at startup,
         not degrade silently.
         """
-        if self.APP_ENV == "production" and self.POSTGRES_PASSWORD in (
-            "uniserve_dev_password",
-            "",
+        if self.APP_ENV == "production" and (
+            self.POSTGRES_PASSWORD in ("uniserve_dev_password", "")
+            or len(self.POSTGRES_PASSWORD) < 12
         ):
             raise ValueError(
                 "POSTGRES_PASSWORD must be set to a strong value when "
-                "APP_ENV=production (empty and the development default are "
-                "rejected). Generate one with: "
+                "APP_ENV=production (empty, the development default, and "
+                "passwords shorter than 12 characters are rejected). "
+                "Generate one with: "
                 "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
             )
         return self
