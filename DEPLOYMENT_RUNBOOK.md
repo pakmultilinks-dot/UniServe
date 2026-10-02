@@ -2,6 +2,11 @@
 
 > Step-by-step guide for deploying UniServe to a production server.
 > **Estimated time:** 30–60 minutes for first deployment.
+> **Status (Phase 34):** the repository is deployment-validated at release
+> candidate `70ae399`; no real deployment target exists yet — see
+> `DEPLOYMENT_BLOCKERS.md` for the exact operator inputs required before
+> executing this runbook, and `EVIDENCE_PRODUCTION_DEPLOYMENT.md` for what
+> was verified.
 
 ---
 
@@ -13,6 +18,7 @@
 | Domain | Two subdomains: `api.example.com`, `app.example.com` |
 | DNS | A records pointing both subdomains to your server IP |
 | SSH | Root or sudo access to the server |
+| Blockers | See `DEPLOYMENT_BLOCKERS.md` — every `example.com`/placeholder value in this runbook must be replaced with real operator-provided values |
 
 ## Step 1: Prepare Server
 
@@ -88,6 +94,13 @@ nano infrastructure/caddy/Caddyfile
 
 Replace `api.example.com` and `app.example.com` with your actual domains.
 
+> **Phase 33 requirement — do not regress.** The static blocks must keep
+> `try_files {path} {path}.html {path}/index.html /index.html`. Without
+> `{path}.html`, every deep link (`/login`, `/dashboard/...`) silently
+> serves the root shell and the client router bounces users to `/dashboard`.
+> Verify after any edit: `grep try_files infrastructure/caddy/Caddyfile`
+> must show all four tokens on the line.
+
 ## Step 6: Configure Web Build
 
 Copy the template and confirm the API URL matches your real domain:
@@ -139,6 +152,10 @@ docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
 # Verify migration status
 docker compose -f docker-compose.prod.yml run --rm api alembic current
 # Expected: 0009 (head)
+
+# Verify no pending metadata/migration drift
+docker compose -f docker-compose.prod.yml run --rm api alembic check
+# Expected: no new upgrade head (requires postgres to be running)
 ```
 
 ## Step 9: Start All Services
@@ -160,6 +177,11 @@ curl -s https://api.example.com/api/v1/health | python3 -m json.tool
 # Check readiness
 curl -s https://api.example.com/api/v1/health/ready | python3 -m json.tool
 # Expected: {"status": "ready"}
+
+> **Monitoring note (Phase 28A design):** `/api/v1/health/ready` always
+> returns HTTP 200, in both ready and degraded states. Assert on the JSON
+> `status` field (`"ready"` vs `"degraded"`), never on the HTTP code.
+> Degraded details appear in the same body (`database`, `schema` fields).
 
 # Check web app
 curl -sI https://app.example.com
@@ -211,8 +233,15 @@ As cafeteria manager:
 1. Register a student account (or use existing)
 2. Browse the cafeteria menu
 3. Add items to cart
-4. Place an order (cash or online)
+4. Place an order (cash or online — see payment note)
 5. Verify order appears in staff view
+
+> **Payment safety:** with no production payment provider configured,
+> `POST /api/v1/payments/initiate` fails closed with **HTTP 503**
+> (`Online payments are unavailable: no production payment provider is
+> configured`). Cash ordering is unaffected. Enabling online payments
+> requires an external provider contract and operator-supplied credentials
+> (`DEPLOYMENT_BLOCKERS.md` B10) — never configure guessed values.
 
 ## Step 15: Verify Staff Operations
 
@@ -242,6 +271,37 @@ chmod +x scripts/backup_database.sh
 # Add to crontab (daily at 2 AM)
 crontab -e
 # Add: 0 2 * * * /opt/uniserve/scripts/backup_database.sh /opt/uniserve/backups
+
+> **Notes:** `scripts/backup_database.sh` targets the default production
+> container name `uniserve_postgres` (as set by `docker-compose.prod.yml`).
+> Each run verifies the dump with `pg_restore --list` before copying it out;
+> verify manually anytime with `pg_restore --list <file> | head`.
+> Keep at least one backup off the server. Never delete the only backup.
+
+## Restore (Database)
+
+```bash
+# 1) Stop the API first so writes do not race the restore
+docker compose -f docker-compose.prod.yml stop api
+
+# 2) Restore (CONFIRM=yes is a required gate; the script verifies the dump
+#    with pg_restore --list BEFORE touching the database)
+CONFIRM=yes ./scripts/restore_database.sh backups/uniserve_<timestamp>.pgdump
+
+# 3) Restart and verify
+docker compose -f docker-compose.prod.yml up -d api
+curl -s https://api.example.com/api/v1/health/ready | python3 -m json.tool
+# Expected: {"status": "ready", "database": "connected", "schema": "present"}
+docker compose -f docker-compose.prod.yml exec postgres psql -U uniserve -d uniserve_prod \
+  -c "SELECT version_num FROM alembic_version;"
+# Expected: 0009
+```
+
+> **Prerequisite:** the target database must already exist **with its
+> `public` schema** — `pg_dump` does not emit `CREATE SCHEMA public` (true
+> for any database created by PostgreSQL/Compose). If restore fails with
+> `schema "public" does not exist`, create it first, then retry. A restore
+> REPLACES current contents — always snapshot first if the data matters.
 ```
 
 ## Step 18: Configure Restart Policy
@@ -272,6 +332,20 @@ docker compose -f docker-compose.prod.yml logs --tail=50 postgres
 docker compose -f docker-compose.prod.yml logs --tail=50 caddy
 ```
 
+Verify deep links by **hard-reloading** each route in a browser — each must
+render route-specific content, not the root shell:
+`/login`, `/register`, `/dashboard`, `/dashboard/orders`,
+`/dashboard/menu`, `/dashboard/inventory`, `/dashboard/admin/overview`,
+`/dashboard/admin/users`, `/dashboard/admin/refunds`,
+`/dashboard/admin/reports`, `/dashboard/profile`.
+
+Role smoke (mirrors the Phase 33 validated workflow): student
+login → menu → cart → cash order → order history; faculty across both
+cafeterias incl. guest ordering; cafeteria staff order operations +
+inventory; manager menu/inventory/refunds/staff/reports; university admin
+university-wide dashboard/users/cafeterias/reports/refunds. Cross-role and
+cross-cafeteria access must remain blocked.
+
 ## Step 20: Deployment Complete
 
 ✅ UniServe is now running in production.
@@ -283,6 +357,44 @@ docker compose -f docker-compose.prod.yml logs --tail=50 caddy
 - Configure email notifications for critical alerts
 
 ---
+
+## Update & Rollback
+
+**Application update (subsequent releases):**
+
+```bash
+git pull                                  # new commit on main
+docker compose -f docker-compose.prod.yml build api
+docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
+docker compose -f docker-compose.prod.yml up -d
+```
+
+**Rollback paths:**
+
+| Layer | Rollback |
+|---|---|
+| API image | `git checkout <previous-commit>` → `build api` → `up -d api` |
+| Web artifact | rebuild the static export from the previous commit (with `NEXT_PUBLIC_API_URL` set); Caddy serves `apps/web/out` automatically via the bind mount |
+| Caddy config | `git checkout <previous-commit> -- infrastructure/caddy/Caddyfile` → `restart caddy` — preserve the `try_files` deep-link line |
+| Database migrations | **Do not blindly downgrade.** Alembic downgrades are not guaranteed lossless. Preferred: restore the pre-deploy backup (see Restore), or roll forward with a fix migration |
+
+First deployment has no prior application backup — after the initial
+`alembic upgrade head`, note the applied head and take a first backup
+immediately after seeding.
+
+## Troubleshooting
+
+| Symptom | Diagnosis | Action |
+|---|---|---|
+| `/api/docs`, `/api/redoc`, `/api/openapi.json` → 404 | Expected in production (`APP_DEBUG=false` gates them — verified live in Phase 33) | None |
+| `POST /payments/initiate` → 503 | No production payment provider configured | Expected fail-closed; cash orders unaffected |
+| `/api/v1/health/ready` HTTP 200 but `status: degraded` | Database/schema issue (by design readiness never uses HTTP codes) | Read `database`/`schema` fields; `docker compose logs postgres` |
+| Web deep links bounce to `/dashboard` home | Caddy `try_files` lost `{path}.html` (regression of the Phase 33 fix) | Restore the documented `try_files` line (Step 5) and `restart caddy` |
+| One 401 on `/auth/me` after web hard reload | In-memory access token + silent refresh (first attempt before refresh completes) | Expected; repeated 401s → check CORS (B8) and auth logs |
+| `restore_database.sh`: `schema "public" does not exist` | Target database lacks the `public` schema | `CREATE SCHEMA public AUTHORIZATION <db-user>;` then retry |
+| `backup_database.sh`: `role ... does not exist` | Script targets the default container `uniserve_postgres` | Run from the production compose context (or adjust `CONTAINER_NAME`) |
+| Container `Up` but API unreachable | Workers crash-looped on settings validation (empty/weak default secrets) | `docker compose logs api`; regenerate secrets (`token_urlsafe(64)`), `up -d`. Container `Up` ≠ serving |
+| Errors in production logs | Startup/DB/auth/5xx/worker issues | `docker compose logs api postgres caddy`; `LOG_FORMAT=json` — grep `"level":"error"` |
 
 ## Appendix: Mobile App (EAS) — Not Part of Server Deployment
 
