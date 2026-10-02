@@ -368,6 +368,16 @@ export async function publishDailyMenu(cafeteriaId: string, dailyMenuId: string)
   );
 }
 
+export async function removeDailyMenuItem(
+  cafeteriaId: string,
+  dailyMenuId: string,
+  menuItemId: string,
+) {
+  return apiClient.delete<any>(
+    `/cafeterias/${cafeteriaId}/daily-menus/${dailyMenuId}/items/${menuItemId}`,
+  );
+}
+
 // Inventory
 export async function getInventory(cafeteriaId: string, lowOnly?: boolean) {
   const qs = lowOnly ? "?low_only=true" : "";

@@ -1138,6 +1138,53 @@ class TestCollection:
         )
         assert resp.status_code == 403
 
+    async def test_collect_unassigned_staff_forbidden(
+        self,
+        student_client: AsyncClient,
+        student_user,
+        db: AsyncSession,
+        staff_client,
+        staff_user,
+        manager_client,
+        manager_user,
+    ):
+        """Staff not assigned to the order's cafeteria cannot collect.
+
+        CafeteriaAssignment is enforced server-side at collect time —
+        a valid staff role alone is not enough (Phase 36: the web Collect
+        UI must rely on the backend for this decision, never on a
+        frontend-only check).
+        """
+        cafeteria, item, _ = await _setup_order_test_data(db)
+
+        # Manager assigned (so the order can be moved to ready);
+        # staff deliberately NOT assigned to this cafeteria.
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+        order_number = checkout_resp.json()["order_number"]
+
+        await manager_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
+        await manager_client.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "preparing"},
+        )
+        await manager_client.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "ready"},
+        )
+
+        resp = await staff_client.post(
+            "/api/v1/orders/collect",
+            json={"order_number": order_number},
+        )
+        assert resp.status_code == 403
+
 
 # ---------------------------------------------------------------------------
 # Inventory Reservation Tests

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { getCafeterias, getCafeteriaOrders, confirmOrder, prepareOrder, readyOrder, delayOrder, rejectOrder } from "@/lib/api";
+import { getCafeterias, getCafeteriaOrders, confirmOrder, prepareOrder, readyOrder, delayOrder, rejectOrder, collectOrder } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -38,6 +38,7 @@ export default function OrdersPage() {
   /* Inline modal state — replaces window.prompt */
   const [rejectModal, setRejectModal] = useState<{ orderId: string; reason: string } | null>(null);
   const [delayModal, setDelayModal] = useState<{ orderId: string; minutes: string } | null>(null);
+  const [collectModal, setCollectModal] = useState<{ orderId: string; orderNumber: number } | null>(null);
 
   const loadCafeterias = useCallback(async () => {
     try {
@@ -80,6 +81,26 @@ export default function OrdersPage() {
       await loadOrders();
     } catch (err: any) {
       toast(err?.message ?? "Action failed", "error");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Collect is terminal — backend is authoritative for collectability
+  // (ready state, cafeteria assignment, already-collected conflicts).
+  // Surface the server message and refresh on success AND error so the
+  // queue always reflects the real order state.
+  const handleCollect = async (orderId: string, orderNumber: number) => {
+    setActionLoading(orderId);
+    try {
+      await collectOrder({ order_number: orderNumber });
+      setCollectModal(null);
+      toast(`Order #${orderNumber} collected`, "success");
+      await loadOrders();
+    } catch (err: any) {
+      toast(err?.message ?? "Collect failed", "error");
+      setCollectModal(null);
+      await loadOrders();
     } finally {
       setActionLoading(null);
     }
@@ -247,6 +268,16 @@ export default function OrdersPage() {
                         Ready
                       </Button>
                     )}
+                    {order.status === "ready" && (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        loading={actionLoading === order.id}
+                        onClick={() => setCollectModal({ orderId: order.id, orderNumber: order.order_number })}
+                      >
+                        Collect
+                      </Button>
+                    )}
                     {order.status === "ready" && isManager && (
                       <Button
                         size="sm"
@@ -293,6 +324,34 @@ export default function OrdersPage() {
                 }}
               >
                 Confirm Reject
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Collect order modal ─── */}
+      {collectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setCollectModal(null)}>
+          <div
+            className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl shadow-xl w-full max-w-sm mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-[var(--text-primary)] mb-3">Collect Order</h3>
+            <p className="text-sm text-[var(--text-secondary)] mb-4">
+              Confirm that order{" "}
+              <span className="font-bold text-[var(--text-primary)]">#{collectModal.orderNumber}</span>{" "}
+              has been handed to the customer. The order will be marked as completed.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setCollectModal(null)}>Cancel</Button>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={actionLoading === collectModal.orderId}
+                onClick={() => handleCollect(collectModal.orderId, collectModal.orderNumber)}
+              >
+                Confirm Collect
               </Button>
             </div>
           </div>

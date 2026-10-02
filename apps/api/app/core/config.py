@@ -114,6 +114,23 @@ class Settings(BaseSettings):
     PAYMENT_WEBHOOK_SECRET: str = ""
     PAYMENT_CALLBACK_URL: str = ""
 
+    # ---- Email / SMTP (production OTP delivery) ----
+    # Standard SMTP transport for OTP emails (see app/core/email.py).
+    # Provider-neutral — no vendor SDK. Credentials come from the
+    # environment only; never commit them to source or tracked env files.
+    # In production, OTP delivery fails closed (emails report failure)
+    # when SMTP_HOST or SMTP_FROM_EMAIL is absent — the external SMTP
+    # account is a deployment prerequisite, not part of the application.
+    # SMTP_TLS_MODE: "starttls" (default, normally port 587) |
+    #   "ssl" (implicit TLS, normally port 465) |
+    #   "none" (plaintext — rejected in production by validation below).
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_TLS_MODE: Literal["starttls", "ssl", "none"] = "starttls"
+
     # ---- CORS ----
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8081"]
 
@@ -184,6 +201,23 @@ class Settings(BaseSettings):
                 "passwords shorter than 12 characters are rejected). "
                 "Generate one with: "
                 "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            )
+        return self
+
+    @model_validator(mode="after")
+    def reject_plaintext_smtp_in_production(self) -> "Settings":
+        """Fail closed if SMTP runs without TLS in production.
+
+        SMTP_TLS_MODE=none would transmit SMTP credentials and OTP codes
+        in plaintext. Mirrors the other production fail-closed
+        validators: misconfiguration must fail at startup, not degrade
+        silently.
+        """
+        if self.APP_ENV == "production" and self.SMTP_TLS_MODE == "none":
+            raise ValueError(
+                "SMTP_TLS_MODE must be 'starttls' or 'ssl' when "
+                "APP_ENV=production (plaintext SMTP would transmit "
+                "credentials and OTP codes in the clear)."
             )
         return self
 

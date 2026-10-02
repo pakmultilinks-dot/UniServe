@@ -287,3 +287,71 @@ class TestWebhookVerifiedEventId:
         # State remains correct: exactly one succeeded payment, no duplicates
         await db.refresh(payment)
         assert payment.status.value == "succeeded"
+
+
+# ---------------------------------------------------------------------------
+# Production webhook guard — test provider rejected in production
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestWebhookProductionGuard:
+    """Webhook traffic is blocked in production while the mock provider
+    is configured — mirroring the initiation guard (Phase 36).
+
+    Signature/idempotency behavior stays covered by
+    TestWebhookVerifiedEventId; this class proves the fail-closed
+    boundary itself.
+    """
+
+    async def test_webhook_blocked_in_production_with_test_provider(
+        self, student_client: AsyncClient, student_user, db: AsyncSession, monkeypatch
+    ):
+        """503 in production + mock provider; no event stored; payment untouched."""
+        cafeteria, item, _ = await _setup_test_data(db)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(
+            student_client, cafeteria.id, payment_method="online"
+        )
+        order_id = checkout_resp.json()["id"]
+        total_amount = checkout_resp.json()["total_amount"]
+
+        resp = await student_client.post(
+            f"/api/v1/payments/initiate/{order_id}",
+            json={"idempotency_key": "webhook_guard_key"},
+        )
+        assert resp.status_code == 201, resp.text
+
+        result = await db.execute(select(Payment).where(Payment.order_id == order_id))
+        payment = result.scalar_one()
+        status_before_webhook = payment.status.value  # "processing" after initiation
+
+        monkeypatch.setattr(settings, "APP_ENV", "production")
+
+        payload = json.dumps(
+            {
+                "event_id": "guarded_evt_001",
+                "event_type": "payment_success",
+                "payment_reference": payment.provider_reference,
+                "amount": total_amount,
+                "currency": "PKR",
+            }
+        ).encode()
+
+        r = await student_client.post(
+            "/api/v1/payments/webhook/test_provider",
+            content=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        assert r.status_code == 503, r.text
+        assert r.json()["code"] == "SERVICE_UNAVAILABLE"
+
+        # No webhook event recorded; payment state untouched — the guard
+        # rejects before any processing side effect.
+        stored = await db.execute(
+            select(WebhookEvent).where(WebhookEvent.provider_event_id == "guarded_evt_001")
+        )
+        assert stored.scalar_one_or_none() is None
+        await db.refresh(payment)
+        assert payment.status.value == status_before_webhook

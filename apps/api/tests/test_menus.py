@@ -298,6 +298,47 @@ async def test_get_todays_menu_none_published(manager_client: AsyncClient, db):
 
 
 # ===================================================================
+# Daily menus — RBAC (staff cannot write daily menus)
+# ===================================================================
+
+
+async def _get_staff_user(db: AsyncSession) -> User:
+    """Fetch the staff user from the DB (created by conftest fixture)."""
+    result = await db.execute(select(User).where(User.role == Role.CAFETERIA_STAFF))
+    return result.scalar_one()
+
+
+@pytest.mark.asyncio
+async def test_staff_cannot_create_or_publish_daily_menu(
+    staff_client: AsyncClient, db
+):
+    """Assigned staff still cannot write daily menus (server-side RBAC).
+
+    Daily-menu creation/publish is a cafeteria write-scope action
+    reserved for managers and admins — enforced by the backend, not by
+    frontend UI visibility (Phase 36: publish UI must remain
+    manager/admin only; staff access denied server-side).
+    """
+    caf = await create_test_cafeteria(db)
+    staff = await _get_staff_user(db)
+    await assign_user_to_cafeteria(db, staff.id, caf.id, role=Role.CAFETERIA_STAFF)
+
+    # Staff cannot create a daily menu draft — even when assigned
+    resp = await staff_client.post(
+        f"/api/v1/cafeterias/{caf.id}/daily-menus/",
+        json={"menu_date": date.today().isoformat()},
+    )
+    assert resp.status_code == 403
+
+    # Staff cannot publish an existing draft
+    menu = await create_test_daily_menu(db, cafeteria_id=caf.id)
+    resp = await staff_client.patch(
+        f"/api/v1/cafeterias/{caf.id}/daily-menus/{menu.id}/publish",
+    )
+    assert resp.status_code == 403
+
+
+# ===================================================================
 # Favorites
 # ===================================================================
 

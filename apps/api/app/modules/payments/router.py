@@ -122,6 +122,16 @@ async def payment_webhook(
 
     No authentication — security is handled via webhook signature verification.
     """
+    # Fail closed — mirrors the initiation endpoint above: while the only
+    # wired provider is the test provider, its signature check is a no-op,
+    # so a production webhook must never confirm a payment through it.
+    if settings.APP_ENV == "production" and isinstance(
+        _get_payment_provider(), TestPaymentProvider
+    ):
+        raise ServiceUnavailableError(
+            "Online payments are unavailable: no production payment provider is configured"
+        )
+
     payload = await request.body()
     headers = dict(request.headers)
 

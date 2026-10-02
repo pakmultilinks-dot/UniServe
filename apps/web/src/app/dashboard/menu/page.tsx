@@ -3,13 +3,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { getCafeterias, getMenuItems, updateMenuItem, createMenuItem } from "@/lib/api";
+import { getCafeterias, getMenuItems, updateMenuItem, createMenuItem, getDailyMenus, createDailyMenu, addDailyMenuItem, publishDailyMenu, removeDailyMenuItem } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
-import type { Cafeteria, MenuItem } from "@uniserve/shared-types";
+import type { Cafeteria, DailyMenu, MenuItem } from "@uniserve/shared-types";
 
 const CATEGORIES = ["all", "breakfast", "main_course", "side_dish", "dessert", "beverage", "snack", "salad", "soup"] as const;
 
@@ -36,6 +36,10 @@ export default function MenuPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editItem, setEditItem] = useState<MenuItem | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  /* Today's daily-menu workflow (manager/admin — backend write scope) */
+  const [dailyMenu, setDailyMenu] = useState<DailyMenu | null>(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [showAddDailyItem, setShowAddDailyItem] = useState(false);
   const { toast } = useToast();
 
   const loadCafeterias = useCallback(async () => {
@@ -65,6 +69,25 @@ export default function MenuPage() {
   useEffect(() => { loadCafeterias(); }, [loadCafeterias]);
   useEffect(() => { loadItems(); }, [loadItems]);
 
+  const todayISO = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  };
+
+  const loadDailyMenu = useCallback(async () => {
+    if (!selectedCafeteria) return;
+    try {
+      const data = await getDailyMenus(selectedCafeteria);
+      const today = todayISO();
+      const menu = (data.menus ?? []).find((m: DailyMenu) => m.menu_date === today) ?? null;
+      setDailyMenu(menu);
+    } catch {
+      setDailyMenu(null);
+    }
+  }, [selectedCafeteria]);
+
+  useEffect(() => { loadDailyMenu(); }, [loadDailyMenu]);
+
   const toggleAvailability = async (item: MenuItem) => {
     try {
       await updateMenuItem(selectedCafeteria, item.id, { is_available: !item.is_available });
@@ -82,6 +105,49 @@ export default function MenuPage() {
       toast("Status updated", "success");
     } catch (err: any) {
       toast(err?.message ?? "Failed", "error");
+    }
+  };
+
+  const handleCreateDailyMenu = async () => {
+    setDailyLoading(true);
+    try {
+      const menu = await createDailyMenu(selectedCafeteria, todayISO());
+      setDailyMenu(menu);
+      toast("Daily menu draft created", "success");
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to create daily menu", "error");
+    } finally {
+      setDailyLoading(false);
+    }
+  };
+
+  const handlePublishDailyMenu = async () => {
+    if (!dailyMenu) return;
+    setDailyLoading(true);
+    try {
+      const menu = await publishDailyMenu(selectedCafeteria, dailyMenu.id);
+      setDailyMenu(menu);
+      toast("Daily menu published", "success");
+    } catch (err: any) {
+      // e.g. "Cannot publish an empty menu" — reload to resync state
+      toast(err?.message ?? "Failed to publish daily menu", "error");
+      await loadDailyMenu();
+    } finally {
+      setDailyLoading(false);
+    }
+  };
+
+  const handleRemoveDailyItem = async (menuItemId: string) => {
+    if (!dailyMenu) return;
+    setDailyLoading(true);
+    try {
+      const menu = await removeDailyMenuItem(selectedCafeteria, dailyMenu.id, menuItemId);
+      setDailyMenu(menu);
+      toast("Item removed from daily menu", "success");
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to remove item", "error");
+    } finally {
+      setDailyLoading(false);
     }
   };
 
@@ -135,6 +201,77 @@ export default function MenuPage() {
           ))}
         </div>
       </div>
+
+      {/* ─── Today's daily menu (manager/admin; backend enforces write scope) ─── */}
+      {canEdit && (
+        <div className="mb-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 shadow-card">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--text-primary)]">Today&apos;s Daily Menu</h2>
+              <p className="text-xs text-[var(--text-muted)]">
+                {dailyMenu ? `Date: ${dailyMenu.menu_date}` : "No menu for today yet"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {dailyMenu && <StatusBadge status={dailyMenu.status} />}
+              {dailyMenu?.status === "draft" && (
+                <>
+                  <Button size="sm" variant="secondary" disabled={dailyLoading} onClick={() => setShowAddDailyItem(true)}>
+                    Add Item
+                  </Button>
+                  <Button size="sm" loading={dailyLoading} onClick={handlePublishDailyMenu}>
+                    Publish
+                  </Button>
+                </>
+              )}
+              {!dailyMenu && (
+                <Button size="sm" loading={dailyLoading} onClick={handleCreateDailyMenu}>
+                  Create Draft for Today
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {dailyMenu &&
+            (dailyMenu.items.length === 0 ? (
+              <p className="text-xs text-[var(--text-muted)]">
+                No items yet — add menu items from today&apos;s catalog before publishing.
+              </p>
+            ) : (
+              <div className="mb-2">
+                {dailyMenu.items.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-2 text-sm py-1.5 border-b border-[var(--border-default)] last:border-0"
+                  >
+                    <span className="text-xs text-[var(--text-muted)] w-6">#{entry.display_order}</span>
+                    <span className="text-[var(--text-primary)] flex-1 truncate">
+                      {entry.menu_item?.name ?? "Menu item"}
+                    </span>
+                    <span className="text-xs text-[var(--text-secondary)]">
+                      {formatPrice(entry.special_price ?? entry.menu_item?.price ?? 0)}
+                    </span>
+                    <StatusBadge status={entry.is_available_today ? "active" : "closed"} />
+                    {dailyMenu.status === "draft" && (
+                      <button
+                        onClick={() => handleRemoveDailyItem(entry.menu_item_id)}
+                        className="text-xs text-red-600 hover:text-red-500 font-medium"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+
+          {dailyMenu?.status === "published" && (
+            <p className="text-xs text-green-700 dark:text-green-400">
+              Published — students see this menu today.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Menu items grid */}
       {loading ? (
@@ -215,6 +352,18 @@ export default function MenuPage() {
           item={editItem}
           onClose={() => { setEditItem(null); setShowCreate(false); }}
           onSaved={() => { setEditItem(null); setShowCreate(false); loadItems(); }}
+        />
+      )}
+
+      {/* Add item to daily menu modal */}
+      {showAddDailyItem && dailyMenu && (
+        <DailyMenuItemModal
+          cafeteriaId={selectedCafeteria}
+          dailyMenuId={dailyMenu.id}
+          menuItems={items}
+          existingItemIds={dailyMenu.items.map((i) => i.menu_item_id)}
+          onClose={() => setShowAddDailyItem(false)}
+          onSaved={(menu) => { setDailyMenu(menu); setShowAddDailyItem(false); }}
         />
       )}
     </div>
@@ -335,6 +484,127 @@ function MenuItemModal({
             <Button type="submit" loading={saving}>{item ? "Save Changes" : "Create"}</Button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function DailyMenuItemModal({
+  cafeteriaId,
+  dailyMenuId,
+  menuItems,
+  existingItemIds,
+  onClose,
+  onSaved,
+}: {
+  cafeteriaId: string;
+  dailyMenuId: string;
+  menuItems: MenuItem[];
+  existingItemIds: string[];
+  onClose: () => void;
+  onSaved: (menu: DailyMenu) => void;
+}) {
+  // Addable = active catalog items not already on today's daily menu
+  const addable = menuItems.filter(
+    (m) => m.is_active !== false && !existingItemIds.includes(m.id),
+  );
+  const [form, setForm] = useState({
+    menu_item_id: addable[0]?.id ?? "",
+    specialPrice: 0,
+    displayOrder: 0,
+    isAvailableToday: true,
+  });
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.menu_item_id) return;
+    setSaving(true);
+    try {
+      // Matches DailyMenuAddItemRequest: special_price in paisa (>0),
+      // display_order >= 0, is_available_today bool
+      const menu = await addDailyMenuItem(cafeteriaId, dailyMenuId, {
+        menu_item_id: form.menu_item_id,
+        ...(form.specialPrice > 0 ? { special_price: form.specialPrice * 100 } : {}),
+        display_order: form.displayOrder,
+        is_available_today: form.isAvailableToday,
+      });
+      onSaved(menu);
+    } catch (err: any) {
+      toast(err?.message ?? "Failed to add item to daily menu", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl shadow-xl w-full max-w-md mx-4 p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Add Item to Daily Menu</h2>
+        {addable.length === 0 ? (
+          <p className="text-sm text-[var(--text-secondary)] mb-4">
+            No menu items available to add — create or activate items in the catalog first.
+          </p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Menu Item</label>
+              <select
+                value={form.menu_item_id}
+                onChange={(e) => setForm({ ...form, menu_item_id: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                required
+              >
+                {addable.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} — PKR {Math.round(m.price / 100)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  Special Price (PKR, optional)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.specialPrice}
+                  onChange={(e) => setForm({ ...form, specialPrice: Number(e.target.value) })}
+                  className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                  placeholder="Regular price"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Display Order</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.displayOrder}
+                  onChange={(e) => setForm({ ...form, displayOrder: Number(e.target.value) })}
+                  className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+              <input
+                type="checkbox"
+                checked={form.isAvailableToday}
+                onChange={(e) => setForm({ ...form, isAvailableToday: e.target.checked })}
+              />
+              Available today
+            </label>
+            <div className="flex gap-2 justify-end pt-2">
+              <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button type="submit" loading={saving} disabled={addable.length === 0}>Add to Daily Menu</Button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
