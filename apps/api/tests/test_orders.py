@@ -1511,3 +1511,147 @@ class TestUpdateStatusBusinessGates:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "preparing"
+
+
+# ===========================================================================
+# Phase 38: READY invariants via the generic status endpoint (BUG 3 fix)
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestReadyInvariant:
+    """ready_at / pickup_deadline must hold whichever path enters READY.
+
+    Phase 37 found the generic PUT /orders/{id}/status "ready" transition
+    reaching READY without ready_at / pickup_deadline (the no-show expiry
+    key), while the canonical PUT /orders/{id}/ready set both.
+    """
+
+    async def _order_in_preparing(
+        self,
+        student_client: AsyncClient,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """Checkout a cash order and move it to PREPARING via the generic path."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        checkout_resp = await _checkout(student_client, cafeteria.id)
+        order_id = checkout_resp.json()["id"]
+
+        await manager_client.post(f"/api/v1/orders/{order_id}/confirm", json={})
+        resp = await manager_client.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "preparing"},
+        )
+        assert resp.status_code == 200
+        return order_id
+
+    async def test_generic_status_ready_sets_ready_timestamps(
+        self,
+        student_client: AsyncClient,
+        student_user,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """Generic /status "ready" now carries the READY invariants."""
+        from app.modules.orders.models import Order
+
+        order_id = await self._order_in_preparing(
+            student_client, db, manager_client, manager_user
+        )
+
+        resp = await manager_client.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "ready"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ready"
+        assert data["ready_at"] is not None
+        assert data["pickup_deadline"] is not None
+
+        # Persisted state carries the same invariants (no-show expiry key)
+        result = await db.execute(select(Order).where(Order.id == order_id))
+        order = result.scalar_one()
+        await db.refresh(order)
+        assert order.ready_at is not None
+        assert order.pickup_deadline is not None
+        assert order.pickup_deadline >= order.ready_at
+
+    async def test_generic_status_ready_repeated_rejected_timestamps_unchanged(
+        self,
+        student_client: AsyncClient,
+        student_user,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """A repeated generic "ready" is rejected and does not reset timestamps."""
+        from app.modules.orders.models import Order
+
+        order_id = await self._order_in_preparing(
+            student_client, db, manager_client, manager_user
+        )
+
+        resp = await manager_client.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "ready"},
+        )
+        assert resp.status_code == 200
+
+        result = await db.execute(select(Order).where(Order.id == order_id))
+        order = result.scalar_one()
+        await db.refresh(order)
+        ready_at_before = order.ready_at
+        pickup_deadline_before = order.pickup_deadline
+        assert ready_at_before is not None
+        assert pickup_deadline_before is not None
+
+        # Repeated ready — invalid transition, rejected
+        resp = await manager_client.put(
+            f"/api/v1/orders/{order_id}/status",
+            json={"status": "ready"},
+        )
+        assert resp.status_code == 400
+
+        await db.refresh(order)
+        assert order.ready_at == ready_at_before
+        assert order.pickup_deadline == pickup_deadline_before
+
+    async def test_canonical_ready_endpoint_still_sets_timestamps(
+        self,
+        student_client: AsyncClient,
+        student_user,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """The canonical /ready endpoint remains correct (and rejects repeats)."""
+        order_id = await self._order_in_preparing(
+            student_client, db, manager_client, manager_user
+        )
+
+        resp = await manager_client.put(
+            f"/api/v1/orders/{order_id}/ready",
+            json={},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ready"
+        assert data["ready_at"] is not None
+        assert data["pickup_deadline"] is not None
+
+        # Repeated canonical ready is rejected (existing semantics preserved)
+        resp = await manager_client.put(
+            f"/api/v1/orders/{order_id}/ready",
+            json={},
+        )
+        assert resp.status_code == 400

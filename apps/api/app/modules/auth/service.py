@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditEventType, log_audit_event
 from app.core.config import settings
+from app.core.database import async_session_factory
 from app.core.email import get_email_provider
 from app.core.exceptions import (
     AccountLockedError,
@@ -302,6 +303,24 @@ class AuthService:
             "expires_in_seconds": settings.OTP_EXPIRE_MINUTES * 60,
         }
 
+    async def _persist_challenge_state(
+        self, challenge_id: str, values: dict[str, Any]
+    ) -> None:
+        """Persist OTP challenge state through an independent transaction.
+
+        Failed verification attempts raise, and ``get_db`` rolls back the
+        request session, so security-relevant challenge state (the failed-
+        attempt counter, challenge consumption) cannot rely on the request
+        transaction. It is applied here through a short-lived independent
+        session using a single atomic UPDATE, so it survives across
+        separate HTTP requests regardless of the request outcome.
+        """
+        async with async_session_factory() as independent_session:
+            await independent_session.execute(
+                update(OTPChallenge).where(OTPChallenge.id == challenge_id).values(**values)
+            )
+            await independent_session.commit()
+
     async def verify_otp(
         self,
         user_id: str,
@@ -343,12 +362,18 @@ class AuthService:
         # Check attempts
         if challenge.attempts >= challenge.max_attempts:
             challenge.is_used = True
+            await self._persist_challenge_state(challenge.id, {"is_used": True})
             raise OTPError("Maximum OTP attempts reached. Please request a new one.")
 
-        # Verify OTP
+        # Verify OTP. The failed-attempt increment must survive the request
+        # transaction: a failed verification raises, and get_db rolls the
+        # request session back, discarding a flush-only increment. Persist
+        # it through an independent committed transaction instead.
         challenge.attempts += 1
         if not verify_otp(otp, challenge.otp_hash):
-            await self.db.flush()
+            await self._persist_challenge_state(
+                challenge.id, {"attempts": OTPChallenge.attempts + 1}
+            )
             raise OTPError("Invalid OTP. Please try again.")
 
         # Mark as verified

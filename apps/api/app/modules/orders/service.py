@@ -439,6 +439,13 @@ class OrderService:
         if expected_next is None or expected_next.value != new_status:
             raise ValidationError(f"Invalid status transition: {order.status.value} → {new_status}")
 
+        # READY invariants (ready_at + pickup_deadline) must hold regardless of
+        # which first-party transition path is used. Delegate to mark_ready —
+        # the single source of truth for the PREPARING → READY transition — so
+        # the generic path can never produce a READY order without them.
+        if new_status == "ready":
+            return await self.mark_ready(order_id=order_id, actor_id=actor_id, notes=notes)
+
         # PENDING → PREPARING through this generic endpoint must satisfy the
         # same business gates as start_preparation (POST /prepare): the order
         # must be confirmed, and online orders must have a succeeded payment.

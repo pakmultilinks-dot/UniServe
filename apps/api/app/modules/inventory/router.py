@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import (
     AuthContext,
-    RequireCafeteriaScope,
     RequireCafeteriaWriteScope,
     verify_resource_cafeteria,
 )
@@ -67,11 +66,20 @@ async def create_inventory_item(
 @router.get("/", response_model=InventoryListResponse)
 async def list_inventory_items(
     cafeteria_id: str,
-    auth: AuthContext = Depends(RequireCafeteriaScope()),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(
+            Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF
+        )
+    ),
     db: AsyncSession = Depends(get_db),
     low_only: bool = False,
 ) -> InventoryListResponse:
-    """List inventory items for a cafeteria (scoped access)."""
+    """List inventory items for a cafeteria (staff/manager/admin only).
+
+    Inventory quantities are internal operational data: the read surface
+    uses the same role + cafeteria-assignment scope as the adjust endpoint
+    and the inventory reports module.
+    """
     service = InventoryService(db)
     items = await service.list_inventory_items(
         cafeteria_id=cafeteria_id,
@@ -125,10 +133,14 @@ async def adjust_inventory(
 @router.get("/low-stock", response_model=InventoryListResponse)
 async def get_low_stock_items(
     cafeteria_id: str,
-    auth: AuthContext = Depends(RequireCafeteriaScope()),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(
+            Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF
+        )
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> InventoryListResponse:
-    """Get inventory items below their low-stock threshold."""
+    """Get inventory items below their low-stock threshold (staff/manager/admin only)."""
     service = InventoryService(db)
     items = await service.get_low_stock_items(cafeteria_id)
     response_items = []

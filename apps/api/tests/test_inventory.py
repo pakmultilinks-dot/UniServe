@@ -292,3 +292,110 @@ async def test_adjust_inventory_sequential_accumulation(manager_client: AsyncCli
     final = result.scalar_one()
     await db.refresh(final)  # adjustments committed in a separate session
     assert final.quantity == 13  # 10 + 7 - 4
+
+
+# ===========================================================================
+# Phase 38: Inventory read authorization (BUG 2 hardening)
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestInventoryReadAuthorization:
+    """Inventory GET endpoints expose internal stock data to staff/manager/admin only.
+
+    Phase 37 found students/faculty receiving HTTP 200 with inventory
+    quantities from the GET endpoints (visibility scope instead of the
+    management scope used by writes and the inventory reports module).
+    """
+
+    async def _seed_inventory(self, db: AsyncSession, manager_user: User):
+        """Create a cafeteria with one inventory item; assign its manager."""
+        caf = await create_test_cafeteria(db)
+        await assign_user_to_cafeteria(db, manager_user.id, caf.id)
+        menu_item = await create_test_menu_item(db, cafeteria_id=caf.id)
+        inv = InventoryItem(
+            cafeteria_id=caf.id,
+            menu_item_id=menu_item.id,
+            quantity=42,
+            unit=InventoryUnit.PORTIONS,
+            low_threshold=10,
+        )
+        db.add(inv)
+        await db.flush()
+        return caf, inv
+
+    async def test_student_cannot_list_inventory(
+        self, student_client: AsyncClient, db, manager_user: User
+    ):
+        caf, _ = await self._seed_inventory(db, manager_user)
+        resp = await student_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/")
+        assert resp.status_code == 403
+        assert "quantity" not in resp.text
+
+    async def test_faculty_cannot_list_inventory(
+        self, faculty_client: AsyncClient, db, manager_user: User
+    ):
+        caf, _ = await self._seed_inventory(db, manager_user)
+        resp = await faculty_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/")
+        assert resp.status_code == 403
+        assert "quantity" not in resp.text
+
+    async def test_student_cannot_list_low_stock(
+        self, student_client: AsyncClient, db, manager_user: User
+    ):
+        caf, _ = await self._seed_inventory(db, manager_user)
+        resp = await student_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/low-stock")
+        assert resp.status_code == 403
+
+    async def test_staff_assigned_can_list_inventory(
+        self, staff_client: AsyncClient, db, staff_user: User, manager_user: User
+    ):
+        caf, inv = await self._seed_inventory(db, manager_user)
+        await assign_user_to_cafeteria(db, staff_user.id, caf.id, role=Role.CAFETERIA_STAFF)
+        await db.flush()
+
+        resp = await staff_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["quantity"] == 42
+
+        resp = await staff_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/low-stock")
+        assert resp.status_code == 200  # item is not low (42 > 10) — access is what matters
+
+    async def test_unassigned_staff_cannot_list_inventory(
+        self, staff_client: AsyncClient, db, manager_user: User
+    ):
+        """Cafeteria isolation: staff without an assignment are denied reads."""
+        caf, _ = await self._seed_inventory(db, manager_user)
+        # staff_user exists but is deliberately NOT assigned to this cafeteria
+        resp = await staff_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/")
+        assert resp.status_code == 403
+
+    async def test_manager_cannot_list_foreign_inventory(
+        self, manager_client: AsyncClient, db, manager_user: User
+    ):
+        """Cafeteria isolation: a manager cannot read another cafeteria's stock."""
+        caf, _ = await self._seed_inventory(db, manager_user)  # manager assigned here
+        other = await create_test_cafeteria(db, name="Other Canteen")
+        resp = await manager_client.get(f"/api/v1/cafeterias/{other.id}/inventory/")
+        assert resp.status_code == 403
+
+    async def test_menu_availability_remains_visible_to_students(
+        self, student_client: AsyncClient, db
+    ):
+        """Ordering surface keeps its intentional public availability signal.
+
+        MenuItem responses expose only the availability boolean — never
+        stock quantities — so customer ordering behavior is unaffected by
+        the inventory-read restriction.
+        """
+        caf = await create_test_cafeteria(db)
+        await create_test_menu_item(db, cafeteria_id=caf.id, is_available=True)
+
+        resp = await student_client.get(f"/api/v1/cafeterias/{caf.id}/menu-items/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["is_available"] is True
+        assert "quantity" not in data["items"][0]
