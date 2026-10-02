@@ -109,9 +109,12 @@ docker compose -f docker-compose.prod.yml ps   # api+postgres "healthy"; caddy "
 
 # 5. Build and export the web app on the host, then reload Caddy
 #    (create apps/web/.env.production.local first — see section 2)
-( cd apps/web && npm install && npm run build )   # emits apps/web/out (static export)
-#    NOTE: no package-lock.json is committed, so `npm ci` will fail — use
-#    `npm install`. Commit a lockfile if you need bit-reproducible builds.
+#    Dependency note (Phase 32): the root package-lock.json is committed and
+#    covers all npm workspaces. Install from the REPO ROOT with `npm ci
+#    --ignore-scripts` (plain `npm ci` fails: react-native-screens' install
+#    script expects dev-only tooling that is never installed for dependencies).
+npm ci --ignore-scripts
+( cd apps/web && npm run build )   # emits apps/web/out (static export)
 docker compose -f docker-compose.prod.yml restart caddy
 
 # 6. Run the post-deployment verification sequence (section 11)
@@ -267,7 +270,7 @@ PostgreSQL, and Caddy logs contained **no** secrets, tokens, or passwords.
 **Application rollback** (code only, no data change):
 
 - API: `git checkout <last-good-commit> && docker compose -f docker-compose.prod.yml build api && docker compose -f docker-compose.prod.yml up -d api`
-- Web: `git checkout <last-good-commit> && (cd apps/web && npm install && npm run build) && docker compose -f docker-compose.prod.yml restart caddy`
+- Web: `git checkout <last-good-commit> && npm ci --ignore-scripts && (cd apps/web && npm run build) && docker compose -f docker-compose.prod.yml restart caddy`
 - Environment: keep a copy of the previous `.env.production` before every
   edit (`cp .env.production .env.production.bak-<ts>`) and restore it the
   same way, then restart the api.

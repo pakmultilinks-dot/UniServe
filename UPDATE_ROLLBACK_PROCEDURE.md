@@ -59,11 +59,11 @@ docker compose -f docker-compose.prod.yml run --rm api alembic check
 
 ```bash
 # Rebuild static export on the server
-# (no package-lock.json in the repo — use npm install, NOT npm ci)
-cd apps/web
-npm install
-NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 npm run build
-cd ../..
+# (Phase 32: the root package-lock.json is committed — install from the repo
+# root with `npm ci --ignore-scripts`; plain `npm ci` fails on a dev-tooling
+# install script that no web-build package depends on.)
+npm ci --ignore-scripts
+( cd apps/web && NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 npm run build )
 
 # Restart Caddy to pick up new static files
 docker compose -f docker-compose.prod.yml restart caddy

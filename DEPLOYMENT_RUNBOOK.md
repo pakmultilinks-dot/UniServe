@@ -111,11 +111,13 @@ mkdir -p backups
 docker compose -f docker-compose.prod.yml build api
 
 # Build web static export (on the server)
-# NOTE: the repo has no package-lock.json — use npm install, NOT npm ci
-cd apps/web
-npm install
-NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 npm run build
-cd ../..
+# Dependency note (Phase 32): the root package-lock.json is committed and
+# covers all npm workspaces. Install from the REPO ROOT with `npm ci
+# --ignore-scripts` (plain `npm ci` fails: react-native-screens' install
+# script expects dev-only tooling that is never installed for dependencies;
+# no web-build package needs install scripts).
+npm ci --ignore-scripts
+( cd apps/web && NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 npm run build )
 
 # Verify static files were generated
 ls apps/web/out/index.html

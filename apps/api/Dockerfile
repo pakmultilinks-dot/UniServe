@@ -12,11 +12,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Python dependencies — install from pyproject.toml (base dependencies).
-# The app package is not present yet in this layer, so only dependencies
-# are resolved here; the layer stays cached across application code changes.
-COPY pyproject.toml README.md ./
-RUN pip install --no-cache-dir .
+# Python dependencies — install EXACTLY the committed lock (--no-deps: no
+# resolution, no silent transitive upgrades) and gate completeness with
+# pip check. Known-good tested pins; see requirements.lock.txt for the
+# regeneration procedure. The app package is not present yet in this layer,
+# so only dependencies are installed here; the layer stays cached across
+# application code changes.
+COPY pyproject.toml README.md requirements.lock.txt ./
+RUN pip install --no-cache-dir --no-deps -r requirements.lock.txt \
+    && pip check \
+    && pip install --no-cache-dir --no-deps . \
+    && pip check
 
 # Application code
 COPY . .

@@ -12,7 +12,6 @@ Covers the specific auth-flow gaps identified during the browser 401 audit:
 import asyncio
 from datetime import timedelta
 
-import jwt
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession

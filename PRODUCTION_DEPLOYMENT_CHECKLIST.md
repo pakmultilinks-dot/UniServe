@@ -30,8 +30,11 @@ Detailed procedures: `DEPLOYMENT_RUNBOOK.md` (first deployment, 20 steps) ·
       pointing both at the server IP.
 - [ ] `[OP]` Stop any dev compose stack on the server — prod and dev share
       container names (`uniserve_postgres` etc.).
-- [ ] `[REPO]` Remember: **no lockfile exists** — use `npm install`, never
-      `npm ci` (web build on the server).
+- [ ] `[REPO]` Dependency note (Phase 32): the root `package-lock.json` is
+      committed — install from the **repo root** with `npm ci --ignore-scripts`
+      (never `npm install`; plain `npm ci` fails on react-native-screens'
+      install script, which needs dev-only tooling — no web-build package
+      needs install scripts).
 
 ## 1. Server setup `[OP]`
 
@@ -87,7 +90,8 @@ Follow `DEPLOYMENT_RUNBOOK.md` Steps 1–2:
       (**build-time** — baked into the bundle; wrong value = web app calls
       the wrong host; the committed repo contains no web artifact —
       `apps/web/out` is gitignored and must be built here).
-- [ ] Web build: `( cd apps/web && npm install && npm run build )`
+- [ ] Web build: `( cd apps/web && npm run build )` — with `npm ci
+      --ignore-scripts` already run from the repo root (see section 0).
 - [ ] Confirm: `ls apps/web/out/index.html`
 
 ## 5. Database migration `[REPO]`
@@ -177,7 +181,7 @@ cd /opt/uniserve
 | Problem | Procedure |
 |---|---|
 | Application (code) rollback | `git checkout <last-good>` → rebuild api image → `up -d api` |
-| Static web rollback | `git checkout <last-good>` → `npm install && npm run build` → `restart caddy` |
+| Static web rollback | `git checkout <last-good>` → `npm ci --ignore-scripts` (repo root) → `npm run build` → `restart caddy` |
 | Database migration issue | **Forward-fix first** (new corrective migration). `alembic downgrade` only with a verified backup + stopped API, understanding the data loss. |
 | Database corruption/loss | Verified backup → controlled restore (§10) |
 | Environment/config error | Restore previous `.env.production` (keep `.bak-<ts>` copies) → restart api |
@@ -223,9 +227,12 @@ CONFIRM=yes ./scripts/restore_database.sh backups/uniserve_<ts>.pgdump
 | Backups | scripts ready | Install cron + off-machine copy (§8) | Storage | **No** |
 | Monitoring | not configured | Uptime checks + log alerts | Monitoring provider | **No** |
 
-Additional known limitations: Python/Node dependencies are unpinned (no
-lockfiles) — builds are not bit-reproducible; commit lockfiles in a future
-release-engineering phase.
+Additional known limitations: Python runtime dependencies are pinned to the
+exact tested versions via `apps/api/requirements.lock.txt` (installed with
+`--no-deps` + `pip check` in the API image) and JS dependencies via the
+committed root `package-lock.json` (`npm ci --ignore-scripts`). Remaining
+gaps are documented in `PHASE_32_DEPENDENCY_REPRODUCIBILITY.md` (base-image
+tooling, dev/test dependencies, and no byte-for-byte image claim).
 
 **JazzCash restriction:** do not implement, invent, or weaken anything
 around online payments. The production 503 fail-closed guard is intentional
