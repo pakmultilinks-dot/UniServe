@@ -14,6 +14,8 @@ Covers:
 - Edge cases (empty cart, wrong cafeteria, double cancel, etc.)
 """
 
+from datetime import UTC, date, datetime
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -1403,6 +1405,262 @@ class TestScheduledCancellationTimezone:
         service = OrderService(db)
         # Must NOT raise — collection time is future in cafeteria-local time.
         await service._check_scheduled_cancellation_deadline(order)
+
+
+# ===================================================================
+# Phase 41 — P1: API-created menu items are orderable after restock
+# ===================================================================
+
+
+class TestMenuItemInventoryGap:
+    """P1 regression: checkout must never see a missing inventory record.
+
+    Admin/manager menu-item creation auto-creates a zero-stock inventory
+    record; restocking via the supported adjust flow makes the item
+    orderable. Pre-fix, checkout failed with "No inventory record for
+    item ..." for any API-created item (Phase 40 acceptance P1).
+    """
+
+    async def test_api_created_item_checkout_after_restock(
+        self,
+        manager_client: AsyncClient,
+        manager_user,
+        student_client: AsyncClient,
+        student_user,
+        db: AsyncSession,
+    ):
+        caf = await create_test_cafeteria(
+            db, name="P1 Gap Cafeteria", operational_status=OperationalStatus.OPEN
+        )
+        await assign_user_to_cafeteria(
+            db, manager_user.id, caf.id, role=Role.CAFETERIA_MANAGER
+        )
+
+        resp = await manager_client.post(
+            f"/api/v1/cafeterias/{caf.id}/menu-items/",
+            json={
+                "name": "Gap Karahi",
+                "category": "main_course",
+                "price": 32000,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        item_id = resp.json()["id"]
+
+        # Auto-created record exists at zero stock
+        inv_list = await manager_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/")
+        rows = [r for r in inv_list.json()["items"] if r["menu_item_id"] == item_id]
+        assert len(rows) == 1
+        assert rows[0]["quantity"] == 0
+        inv_id = rows[0]["id"]
+
+        # Restock via the supported adjust flow
+        adj = await manager_client.post(
+            f"/api/v1/cafeterias/{caf.id}/inventory/adjust",
+            json={
+                "inventory_item_id": inv_id,
+                "adjustment_quantity": 40,
+                "reason": "P1 restock",
+            },
+        )
+        assert adj.status_code == 200, adj.text
+
+        # Publish today's menu (server date) including the new item
+        daily_menu = await create_test_daily_menu(
+            db, cafeteria_id=caf.id, status=DailyMenuStatus.PUBLISHED
+        )
+        from app.modules.menus.models import DailyMenuItem
+
+        db.add(
+            DailyMenuItem(
+                daily_menu_id=daily_menu.id, menu_item_id=item_id, is_available_today=True
+            )
+        )
+        await db.flush()
+
+        await _add_cart_item(student_client, caf.id, item_id, quantity=2)
+        checkout_resp = await _checkout(student_client, caf.id)
+        # Pre-fix this was 400 "No inventory record for item ..." (P1)
+        assert checkout_resp.status_code == 201, checkout_resp.text
+
+        inv_after = await manager_client.get(f"/api/v1/cafeterias/{caf.id}/inventory/")
+        row = next(r for r in inv_after.json()["items"] if r["menu_item_id"] == item_id)
+        assert row["quantity"] == 38  # 40 − 2 reserved at checkout
+
+
+# ===================================================================
+# Phase 41 — P2: order_date must be the cafeteria-local date
+# ===================================================================
+
+
+class _FrozenDateTime(datetime):
+    """datetime.now() pinned to a fixed UTC instant (no freezegun in deps)."""
+
+    _now_utc: datetime | None = None
+
+    @classmethod
+    def now(cls, tz=None):
+        assert cls._now_utc is not None, "test must set _now_utc before use"
+        return cls._now_utc if tz is None else cls._now_utc.astimezone(tz)
+
+
+class _FrozenDate(date):
+    """date.today() pinned to the frozen instant's UTC date."""
+
+    _frozen: date | None = None
+
+    @classmethod
+    def today(cls):
+        assert cls._frozen is not None, "test must set _frozen before use"
+        return cls._frozen
+
+
+class TestScheduledOrderDateLocalTimezone:
+    """Phase 41 (P2): order_date must be the cafeteria-local date.
+
+    The 30-min scheduled-cancellation deadline is timezone-aware (Phase 27)
+    but anchors on order.order_date. order_date was the naive server-UTC
+    date, so at the UTC/PKT boundary (00:00–05:00 PKT) a same-day PKT slot
+    (e.g. 05:00) was combined with the previous UTC day and judged already
+    past the deadline (Phase 40 acceptance, order #35).
+
+    Frozen instant: 2026-10-02 23:30 UTC = 2026-10-03 04:30 PKT — the UTC
+    date (Oct 2) differs from the cafeteria-local date (Oct 3).
+    """
+
+    FROZEN_UTC = datetime(2026, 10, 2, 23, 30, tzinfo=UTC)
+    LOCAL_DATE = "2026-10-03"
+
+    @staticmethod
+    def _freeze(monkeypatch, frozen_utc: datetime) -> None:
+        _FrozenDateTime._now_utc = frozen_utc
+        _FrozenDate._frozen = frozen_utc.date()
+        monkeypatch.setattr("app.modules.orders.service.datetime", _FrozenDateTime)
+        monkeypatch.setattr("app.modules.orders.service.date", _FrozenDate)
+
+    @staticmethod
+    async def _setup_boundary_data(db: AsyncSession):
+        """Cafeteria (Asia/Karachi) + item + published menu for the frozen server-UTC date."""
+        cafeteria = await create_test_cafeteria(
+            db, name="Boundary Cafeteria", operational_status=OperationalStatus.OPEN
+        )
+        item = await create_test_menu_item(
+            db,
+            cafeteria_id=cafeteria.id,
+            name="Boundary Biryani",
+            category=MenuCategory.MAIN_COURSE,
+            price=25000,
+            is_available=True,
+        )
+        daily_menu = await create_test_daily_menu(
+            db,
+            cafeteria_id=cafeteria.id,
+            # _validate_published_menu checks the (frozen) server-UTC date
+            menu_date=date(2026, 10, 2),
+            status=DailyMenuStatus.PUBLISHED,
+        )
+        from app.modules.menus.models import DailyMenuItem
+
+        db.add(
+            DailyMenuItem(
+                daily_menu_id=daily_menu.id,
+                menu_item_id=item.id,
+                is_available_today=True,
+            )
+        )
+        db.add(
+            InventoryItem(
+                cafeteria_id=cafeteria.id,
+                menu_item_id=item.id,
+                quantity=50,
+                unit=InventoryUnit.PORTIONS,
+            )
+        )
+        await db.flush()
+        return cafeteria, item
+
+    @staticmethod
+    async def _scheduled_checkout(client: AsyncClient, cafeteria_id: str):
+        return await client.post(
+            f"/api/v1/cafeterias/{cafeteria_id}/cart/checkout",
+            json={
+                "payment_method": "cash",
+                "order_type": "scheduled",
+                "scheduled_collection_time": "05:00",
+            },
+        )
+
+    async def test_immediate_order_date_is_cafeteria_local(
+        self, monkeypatch, student_client: AsyncClient, student_user, db: AsyncSession
+    ):
+        """At the UTC/PKT boundary an immediate order keeps the local date."""
+        self._freeze(monkeypatch, self.FROZEN_UTC)
+        cafeteria, item = await self._setup_boundary_data(db)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        resp = await _checkout(student_client, cafeteria.id, payment_method="cash")
+        assert resp.status_code == 201, resp.text
+        # Server-UTC date would be 2026-10-02 — cafeteria-local date is Oct 3
+        assert resp.json()["order_date"] == self.LOCAL_DATE
+
+    async def test_scheduled_order_date_and_cancel_at_boundary(
+        self, monkeypatch, student_client: AsyncClient, student_user, db: AsyncSession
+    ):
+        """Same-day PKT slot: local order_date + cancellation allowed at boundary.
+
+        Frozen 04:30 PKT, slot 05:00 PKT — deadline is 04:30 PKT (== now →
+        still allowed). Pre-fix, order_date was the UTC date (Oct 2) so the
+        deadline computed to 2026-10-01 23:30 UTC and cancel was rejected.
+        """
+        self._freeze(monkeypatch, self.FROZEN_UTC)
+        cafeteria, item = await self._setup_boundary_data(db)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        resp = await self._scheduled_checkout(student_client, cafeteria.id)
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["order_date"] == self.LOCAL_DATE
+
+        cancel = await student_client.post(
+            f"/api/v1/orders/{resp.json()['id']}/cancel",
+            json={"reason": "Boundary test"},
+        )
+        assert cancel.status_code == 200, cancel.text
+        assert cancel.json()["status"] == "cancelled"
+
+    async def test_scheduled_cancel_allowed_before_local_deadline(
+        self, monkeypatch, student_client: AsyncClient, student_user, db: AsyncSession
+    ):
+        """04:25 PKT → 05:00 PKT slot is before the 04:30 deadline: cancel allowed."""
+        self._freeze(monkeypatch, datetime(2026, 10, 2, 23, 25, tzinfo=UTC))
+        cafeteria, item = await self._setup_boundary_data(db)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        resp = await self._scheduled_checkout(student_client, cafeteria.id)
+        assert resp.status_code == 201, resp.text
+
+        cancel = await student_client.post(
+            f"/api/v1/orders/{resp.json()['id']}/cancel",
+            json={"reason": "Before deadline"},
+        )
+        assert cancel.status_code == 200, cancel.text
+
+    async def test_scheduled_cancel_rejected_after_local_deadline(
+        self, monkeypatch, student_client: AsyncClient, student_user, db: AsyncSession
+    ):
+        """04:35 PKT → past the 04:30 deadline for a 05:00 PKT slot: rejected."""
+        self._freeze(monkeypatch, datetime(2026, 10, 2, 23, 35, tzinfo=UTC))
+        cafeteria, item = await self._setup_boundary_data(db)
+
+        await _add_cart_item(student_client, cafeteria.id, item.id)
+        resp = await self._scheduled_checkout(student_client, cafeteria.id)
+        assert resp.status_code == 201, resp.text
+
+        cancel = await student_client.post(
+            f"/api/v1/orders/{resp.json()['id']}/cancel",
+            json={"reason": "Too late"},
+        )
+        assert cancel.status_code == 400
+        assert "deadline" in cancel.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

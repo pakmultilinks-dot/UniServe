@@ -18,7 +18,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
-import { getOrder, getOrderPayment } from "../../../src/services/data";
+import { getOrder, getOrderPayment, cancelOrder } from "../../../src/services/data";
+import { ApiClientError } from "../../../src/services/api";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
 import type { Order, OrderStatus, Payment } from "@uniserve/shared-types";
 
@@ -208,6 +209,33 @@ export default function OrderDetailScreen() {
     }
   }, [id]);
 
+  // ── Customer cancellation (P2 — Phase 40 acceptance) ──
+  // Backend rules are unchanged (pending-only, ownership, scheduled deadline
+  // enforced server-side) — this screen only exposes the existing endpoint.
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+
+  /** Two-step confirm → cancel → silent refresh (status flips to cancelled). */
+  const handleCancelOrder = useCallback(async () => {
+    if (!id) return;
+    setIsCancelling(true);
+    setCancelError("");
+    try {
+      await cancelOrder(id, "Cancelled by customer");
+      setConfirmCancel(false);
+      await refreshOrderQuietly();
+    } catch (err) {
+      // ApiClientError.message carries the backend detail (e.g. the scheduled
+      // cancellation deadline message) — surface it inline for the customer.
+      setCancelError(
+        err instanceof ApiClientError ? err.message : "Failed to cancel order",
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  }, [id, refreshOrderQuietly]);
+
   // Stop polling once the order reaches a terminal state.
   useEffect(() => {
     if (order && TERMINAL_ORDER_STATUSES.includes(order.status) && pollTimerRef.current) {
@@ -372,6 +400,75 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
+        {/* ── Cancel (pending only; server enforces ownership + scheduled deadline) ── */}
+        {order.status === "pending" && (
+          <View style={[styles.cancelCard, { backgroundColor: bg, borderColor: bc }]}>
+            {confirmCancel ? (
+              <>
+                <Text style={[styles.cancelTitle, { color: tc }]}>Cancel this order?</Text>
+                <View style={styles.cancelActions}>
+                  <Pressable
+                    style={[
+                      styles.cancelBtn,
+                      { backgroundColor: functionalColor(resolvedTheme, "error") },
+                    ]}
+                    onPress={handleCancelOrder}
+                    disabled={isCancelling}
+                  >
+                    {isCancelling ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.cancelBtnText}>Yes, cancel</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={[styles.cancelBtn, styles.cancelBtnKeep, { borderColor: bc }]}
+                    onPress={() => {
+                      setConfirmCancel(false);
+                      setCancelError("");
+                    }}
+                    disabled={isCancelling}
+                  >
+                    <Text style={[styles.cancelBtnText, { color: tc }]}>Keep order</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <Pressable
+                style={styles.cancelRow}
+                onPress={() => {
+                  setConfirmCancel(true);
+                  setCancelError("");
+                }}
+              >
+                <Ionicons
+                  name="close-circle-outline"
+                  size={18}
+                  color={functionalColor(resolvedTheme, "error")}
+                />
+                <Text
+                  style={[
+                    styles.cancelLabel,
+                    { color: functionalColor(resolvedTheme, "error") },
+                  ]}
+                >
+                  Cancel Order
+                </Text>
+              </Pressable>
+            )}
+            {cancelError !== "" && (
+              <Text
+                style={[
+                  styles.cancelError,
+                  { color: functionalColor(resolvedTheme, "error") },
+                ]}
+              >
+                {cancelError}
+              </Text>
+            )}
+          </View>
+        )}
+
         <View style={{ height: 32 }} />
       </ScrollView>
     </View>
@@ -504,4 +601,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   etaText: { fontSize: 14, fontWeight: "600" },
+
+  // Cancel order (pending only)
+  cancelCard: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 4,
+    gap: 8,
+  },
+  cancelRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 2 },
+  cancelLabel: { fontSize: 14, fontWeight: "600" },
+  cancelTitle: { fontSize: 15, fontWeight: "600" },
+  cancelActions: { flexDirection: "row", gap: 10 },
+  cancelBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnKeep: { borderWidth: 1, backgroundColor: "transparent" },
+  cancelBtnText: { fontSize: 14, fontWeight: "600", color: "#ffffff" },
+  cancelError: { fontSize: 13 },
 });

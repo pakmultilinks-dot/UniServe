@@ -424,3 +424,85 @@ async def test_search_menu_items_by_category(student_client: AsyncClient, db):
     response = await student_client.get("/api/v1/menu-search/?category=beverage")
     assert response.status_code == 200
     assert response.json()["total"] == 1
+
+
+# ===================================================================
+# Phase 41 — P1: menu item creation must produce an inventory record
+# ===================================================================
+
+
+@pytest.mark.asyncio
+async def test_create_menu_item_auto_creates_inventory(manager_client: AsyncClient, db):
+    """A menu item created via the API always gets exactly one inventory record.
+
+    Regression (Phase 40 acceptance P1): admin/manager-created items previously
+    had no inventory row, so checkout hard-failed with
+    "No inventory record for item ..." at the cash reservation step.
+    """
+    from app.modules.inventory.models import InventoryItem, InventoryUnit
+
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+
+    resp = await manager_client.post(
+        f"/api/v1/cafeterias/{caf.id}/menu-items/",
+        json={"name": "Auto Inv Item", "category": "snack", "price": 9000},
+    )
+    assert resp.status_code == 201, resp.text
+    item_id = resp.json()["id"]
+
+    result = await db.execute(
+        select(InventoryItem).where(
+            InventoryItem.menu_item_id == item_id,
+            InventoryItem.cafeteria_id == caf.id,
+        )
+    )
+    rows = list(result.scalars().all())
+    assert len(rows) == 1, "menu item creation must produce exactly one inventory record"
+    assert rows[0].quantity == 0
+    assert rows[0].unit == InventoryUnit.PORTIONS
+    assert rows[0].low_threshold == 10
+
+
+@pytest.mark.asyncio
+async def test_create_inventory_after_auto_create_upserts(manager_client: AsyncClient, db):
+    """Explicit POST /inventory/ after auto-create updates stock, never duplicates.
+
+    Duplicates would break checkout reservation (scalar_one_or_none → 500).
+    """
+    from app.modules.inventory.models import InventoryItem
+
+    caf = await create_test_cafeteria(db)
+    mgr = await _get_manager_user(db)
+    await assign_user_to_cafeteria(db, mgr.id, caf.id)
+
+    resp = await manager_client.post(
+        f"/api/v1/cafeterias/{caf.id}/menu-items/",
+        json={"name": "Upsert Item", "category": "snack", "price": 5000},
+    )
+    assert resp.status_code == 201, resp.text
+    item_id = resp.json()["id"]
+
+    inv_resp = await manager_client.post(
+        f"/api/v1/cafeterias/{caf.id}/inventory/",
+        json={
+            "menu_item_id": item_id,
+            "quantity": 60,
+            "unit": "portions",
+            "low_threshold": 5,
+        },
+    )
+    assert inv_resp.status_code == 201, inv_resp.text
+    assert inv_resp.json()["quantity"] == 60
+
+    result = await db.execute(
+        select(InventoryItem).where(
+            InventoryItem.menu_item_id == item_id,
+            InventoryItem.cafeteria_id == caf.id,
+        )
+    )
+    rows = list(result.scalars().all())
+    assert len(rows) == 1, "inventory POST must upsert, not duplicate"
+    assert rows[0].quantity == 60
+    assert rows[0].low_threshold == 5

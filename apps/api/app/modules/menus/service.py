@@ -12,6 +12,7 @@ from app.core.exceptions import (
     NotFoundException,
     ValidationError,
 )
+from app.modules.inventory.models import InventoryItem, InventoryUnit
 from app.modules.menus.models import (
     DailyMenu,
     DailyMenuItem,
@@ -63,6 +64,27 @@ class MenuService:
         )
         self.db.add(item)
         await self.db.flush()
+
+        # Every menu item needs an inventory record to be orderable ΓÇö the
+        # checkout reservation path hard-fails when one is missing (P1).
+        existing = await self.db.execute(
+            select(InventoryItem).where(
+                InventoryItem.menu_item_id == item.id,
+                InventoryItem.cafeteria_id == cafeteria_id,
+            )
+        )
+        if existing.scalar_one_or_none() is None:
+            self.db.add(
+                InventoryItem(
+                    cafeteria_id=cafeteria_id,
+                    menu_item_id=item.id,
+                    quantity=0,
+                    unit=InventoryUnit.PORTIONS,
+                    low_threshold=10,
+                )
+            )
+            await self.db.flush()
+
         logger.info("menu_item_created", item_id=item.id, cafeteria_id=cafeteria_id, name=name)
         return item
 

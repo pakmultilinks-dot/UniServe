@@ -175,6 +175,16 @@ export async function getOrder(orderId: string): Promise<Order> {
   return apiClient.get<Order>(`/orders/${orderId}`);
 }
 
+/**
+ * Cancel an order as the ordering user (P2 — Phase 40 acceptance).
+ * Backend rules (unchanged): order must be PENDING, owned by the caller, and
+ * for scheduled orders the 30-min-before-collection deadline is enforced
+ * server-side using the cafeteria-local timezone.
+ */
+export async function cancelOrder(orderId: string, reason?: string): Promise<Order> {
+  return apiClient.post<Order>(`/orders/${orderId}/cancel`, { reason });
+}
+
 // ---- Notifications ----
 
 interface NotificationListResponse {

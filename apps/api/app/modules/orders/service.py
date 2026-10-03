@@ -127,6 +127,18 @@ class OrderService:
         if parsed_order_type == OrderType.SCHEDULED:
             self._validate_scheduled_order_time(scheduled_collection_time, cafeteria)
 
+        # The cafeteria-local date is the product-correct "today": order_date
+        # anchors scheduled-time parsing and the cancellation deadline, both of
+        # which are cafeteria-local (P2 ΓÇö server UTC date made same-day PKT
+        # slots look already past the 30-minute deadline).
+        try:
+            from zoneinfo import ZoneInfo
+
+            caf_tz = ZoneInfo(cafeteria.timezone)
+        except (ValueError, KeyError):
+            caf_tz = UTC
+        local_order_date = datetime.now(caf_tz).date()
+
         # 4. Validate published menu for today
         await self._validate_published_menu(cafeteria_id)
 
@@ -170,7 +182,7 @@ class OrderService:
             status=OrderStatus.PENDING,
             total_amount=total_amount,
             currency="PKR",
-            order_date=date.today(),
+            order_date=local_order_date,
             scheduled_collection_time=scheduled_collection_time
             if parsed_order_type == OrderType.SCHEDULED
             else None,

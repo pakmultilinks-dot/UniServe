@@ -25,7 +25,33 @@ class InventoryService:
         unit: InventoryUnit,
         low_threshold: int = 10,
     ) -> InventoryItem:
-        """Create an inventory record for a menu item."""
+        """Create an inventory record for a menu item.
+
+        Upsert semantics: exactly one record per (menu_item_id, cafeteria_id) ΓÇö
+        menu-item creation now auto-creates a zero-stock record (P1 fix), so an
+        explicit POST (seed scripts) updates stock instead of duplicating rows
+        (duplicates would break checkout's scalar_one_or_none reservation).
+        """
+        result = await self.db.execute(
+            select(InventoryItem).where(
+                InventoryItem.menu_item_id == menu_item_id,
+                InventoryItem.cafeteria_id == cafeteria_id,
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing is not None:
+            existing.quantity = quantity
+            existing.unit = unit
+            existing.low_threshold = low_threshold
+            await self.db.flush()
+            logger.info(
+                "inventory_item_updated",
+                inventory_id=existing.id,
+                cafeteria_id=cafeteria_id,
+                menu_item_id=menu_item_id,
+            )
+            return existing
+
         item = InventoryItem(
             cafeteria_id=cafeteria_id,
             menu_item_id=menu_item_id,
