@@ -5,9 +5,10 @@
  * Headers shown for verify-email, forgot-password, reset-password.
  */
 import React from "react";
-import { Stack } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TouchableOpacity } from "react-native";
+import { useAuth } from "../../src/contexts/AuthContext";
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { textColor, bgColor, brandGreen } from "../../src/theme";
 
@@ -26,9 +27,26 @@ function BackButton({ onPress }: { onPress: () => void }) {
 
 export default function AuthLayout() {
   const { resolvedTheme } = useTheme();
+  const { isAuthenticated, isLoading } = useAuth();
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
   const brand = brandGreen(resolvedTheme);
+
+  // Authenticated users belong inside the app — route them to the tabs from
+  // any auth screen (login/register/session restore). Login previously
+  // succeeded but stayed on /login because the root navigator's declarative
+  // screen switch never navigates (Phase 42 P2-3).
+  //
+  // We target the explicitly-grouped href `/(app)/(tabs)` rather than `/`.
+  // The bare `/` is ambiguous: both (auth)/index (onboarding) and
+  // (app)/(tabs)/index (home) collapse to `/` because the groups are
+  // optional. During the login->app transition both groups are briefly
+  // mounted, so a bare `/` redirect bounces between the two index routes and
+  // the navigator loops ("Maximum update depth exceeded"). Naming the group
+  // removes the ambiguity. (Phase 43.)
+  if (!isLoading && isAuthenticated) {
+    return <Redirect href="/(app)/(tabs)" />;
+  }
 
   return (
     <Stack

@@ -144,6 +144,7 @@ class OrderService:
 
         # 5. Validate each cart item against current inventory and menu
         from app.modules.carts.service import CartService
+        from app.modules.menus.service import get_effective_unit_price
 
         cart_service = CartService(self.db)
         total_amount = 0
@@ -155,13 +156,22 @@ class OrderService:
             # Re-validate inventory
             await cart_service._validate_inventory(ci.menu_item_id, cafeteria_id, ci.quantity)
 
-            subtotal = ci.price_snapshot * ci.quantity
+            # Server-authoritative effective price at charge time (Phase 42
+            # P2-1): today's published-menu special price when set, else the
+            # menu item's base price. Refreshes the cart snapshot so the order
+            # item/total always match what the customer is charged.
+            unit_price = await get_effective_unit_price(
+                self.db, menu_item=mi, cafeteria_id=cafeteria_id
+            )
+            ci.price_snapshot = unit_price
+
+            subtotal = unit_price * ci.quantity
             total_amount += subtotal
             order_items_data.append(
                 {
                     "menu_item_id": ci.menu_item_id,
                     "item_name": mi.name,
-                    "unit_price": ci.price_snapshot,
+                    "unit_price": unit_price,
                     "quantity": ci.quantity,
                     "subtotal": subtotal,
                     "currency": ci.currency,
@@ -423,6 +433,32 @@ class OrderService:
     # Status transitions (manager/staff)
     # ===================================================================
 
+    async def _confirm_cash_payment_if_pending(self, order: Order) -> None:
+        """Confirm the cash payment ledger when an order completes (P2-2).
+
+        Cash is settled at handover, so the ledger must reflect completion:
+        - COMPLETED cash order with a PENDING payment → confirm to SUCCEEDED
+          (reporting sums SUCCEEDED payments; revenue showed Rs 0 otherwise).
+        - COMPLETED cash order with no payment row (scheduled cash orders
+          never create one at checkout) → create + confirm one for the
+          order total. Idempotent — already-confirmed/cancelled/refunded
+          payments are left untouched. Online orders are not affected.
+        """
+        if order.payment_method != PaymentMethod.CASH:
+            return
+
+        from app.modules.payments.models import Payment, PaymentStatus
+        from app.modules.payments.providers.test_provider import TestPaymentProvider
+        from app.modules.payments.service import PaymentService
+
+        result = await self.db.execute(select(Payment).where(Payment.order_id == order.id))
+        payment = result.scalar_one_or_none()
+        payment_svc = PaymentService(self.db, TestPaymentProvider())
+        if payment is None:
+            payment = await payment_svc.create_cash_payment(order, order.user_id)
+        if payment.status == PaymentStatus.PENDING:
+            await payment_svc.confirm_cash_payment(payment)
+
     async def update_status(
         self,
         *,
@@ -505,6 +541,11 @@ class OrderService:
         ):
             await self._reserve_inventory_for_order(order, actor_id)
 
+        # Cash orders settle at handover — the READY → COMPLETED transition
+        # completes the sale, so the cash ledger must follow (P2-2).
+        if new_status == "completed":
+            await self._confirm_cash_payment_if_pending(order)
+
         await self.db.flush()
         logger.info(
             "order_status_updated",
@@ -576,6 +617,12 @@ class OrderService:
             actor_id=collector_id,
         )
         self.db.add(event)
+
+        # Cash is received at handover — collection completes the sale, so
+        # the cash payment ledger must move to SUCCEEDED for reporting
+        # (Phase 42 P2-2: revenue showed Rs 0 for completed cash orders).
+        await self._confirm_cash_payment_if_pending(order)
+
         await self.db.flush()
         logger.info(
             "order_collected",
@@ -1175,12 +1222,12 @@ class OrderService:
             )
             inv = result.scalar_one_or_none()
             if inv is None:
-                raise ValidationError(f"No inventory record for item {ci.menu_item_id}")
+                # Clean user-facing error — never leak raw UUIDs (Phase 42 P1).
+                raise ValidationError("This item is currently unavailable")
 
             if inv.quantity < ci.quantity:
                 raise ValidationError(
-                    f"Insufficient inventory for {ci.menu_item_id}: "
-                    f"available={inv.quantity}, requested={ci.quantity}"
+                    f"Insufficient inventory: available={inv.quantity}, requested={ci.quantity}"
                 )
 
             inv.quantity -= ci.quantity
@@ -1212,11 +1259,11 @@ class OrderService:
             )
             inv = inv_result.scalar_one_or_none()
             if inv is None:
-                raise ValidationError(f"No inventory record for item {oi.menu_item_id}")
+                # Clean user-facing error — never leak raw UUIDs (Phase 42 P1).
+                raise ValidationError("This item is currently unavailable")
             if inv.quantity < oi.quantity:
                 raise ValidationError(
-                    f"Insufficient inventory for {oi.menu_item_id}: "
-                    f"available={inv.quantity}, requested={oi.quantity}"
+                    f"Insufficient inventory: available={inv.quantity}, requested={oi.quantity}"
                 )
             inv.quantity -= oi.quantity
 
@@ -1252,11 +1299,11 @@ class OrderService:
             )
             inv = inv_result.scalar_one_or_none()
             if inv is None:
-                raise ValidationError(f"No inventory record for item {oi.menu_item_id}")
+                # Clean user-facing error — never leak raw UUIDs (Phase 42 P1).
+                raise ValidationError("This item is currently unavailable")
             if inv.quantity < oi.quantity:
                 raise ValidationError(
-                    f"Insufficient inventory for {oi.menu_item_id}: "
-                    f"available={inv.quantity}, requested={oi.quantity}"
+                    f"Insufficient inventory: available={inv.quantity}, requested={oi.quantity}"
                 )
             inv.quantity -= oi.quantity
 

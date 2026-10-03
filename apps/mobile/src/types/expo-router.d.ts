@@ -69,4 +69,10 @@ declare module "expo-router" {
   export const Tabs: ComponentType<NavigatorProps> & {
     Screen: ComponentType<ScreenProps>;
   };
+
+  /**
+   * Redirects to the href as soon as the component is mounted
+   * (used by the Phase 43 auth/app route-group navigation guards).
+   */
+  export const Redirect: ComponentType<{ href: string }>;
 }

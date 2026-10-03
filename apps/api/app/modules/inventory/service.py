@@ -10,6 +10,52 @@ from app.modules.inventory.models import InventoryAdjustment, InventoryItem, Inv
 logger = structlog.get_logger(__name__)
 
 
+async def backfill_missing_inventory_records(db: AsyncSession) -> dict[str, int]:
+    """Create zero-stock inventory records for menu items missing one (P1).
+
+    Menu items created before the Phase 41 auto-inventory fix (or seeded
+    directly into the DB) have no ``inventory_items`` row, which made
+    checkout fail with a raw-UUID error. Mirrors ``MenuService.create_menu_item``:
+    quantity=0, unit=PORTIONS, low_threshold=10 — the item stays unavailable
+    until staff explicitly restock it.
+
+    Idempotent: only creates records where none exists; never touches
+    existing rows. Returns counts for logging/reporting.
+    """
+    from app.modules.menus.models import MenuItem
+
+    result = await db.execute(select(MenuItem))
+    menu_items = list(result.scalars().all())
+
+    created = 0
+    for mi in menu_items:
+        existing = await db.execute(
+            select(InventoryItem).where(
+                InventoryItem.menu_item_id == mi.id,
+                InventoryItem.cafeteria_id == mi.cafeteria_id,
+            )
+        )
+        if existing.scalar_one_or_none() is None:
+            db.add(
+                InventoryItem(
+                    cafeteria_id=mi.cafeteria_id,
+                    menu_item_id=mi.id,
+                    quantity=0,
+                    unit=InventoryUnit.PORTIONS,
+                    low_threshold=10,
+                )
+            )
+            created += 1
+
+    await db.flush()
+    logger.info(
+        "inventory_records_backfilled",
+        menu_items_scanned=len(menu_items),
+        records_created=created,
+    )
+    return {"menu_items_scanned": len(menu_items), "records_created": created}
+
+
 class InventoryService:
     """Service for inventory management."""
 

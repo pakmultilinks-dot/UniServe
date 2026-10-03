@@ -25,6 +25,40 @@ from app.modules.menus.models import (
 logger = structlog.get_logger(__name__)
 
 
+async def get_effective_unit_price(
+    db: AsyncSession,
+    *,
+    menu_item: MenuItem,
+    cafeteria_id: str,
+) -> int:
+    """Resolve the server-authoritative unit price for an item today.
+
+    The effective price is today's published daily-menu ``special_price``
+    when one is set for this item (and it is available today), otherwise
+    the menu item's base price. Cart/checkout previously ignored
+    ``special_price`` and always charged the base price (Phase 42 P2-1:
+    listed Rs 110 was charged Rs 120).
+
+    Date convention matches ``CartService._get_valid_menu_item`` and
+    ``OrderService._validate_published_menu`` (server-local ``date.today()``).
+    """
+    result = await db.execute(
+        select(DailyMenuItem)
+        .join(DailyMenu, DailyMenu.id == DailyMenuItem.daily_menu_id)
+        .where(
+            DailyMenu.cafeteria_id == cafeteria_id,
+            DailyMenu.menu_date == date.today(),
+            DailyMenu.status == DailyMenuStatus.PUBLISHED,
+            DailyMenuItem.menu_item_id == menu_item.id,
+            DailyMenuItem.is_available_today == True,  # noqa: E712
+        )
+    )
+    daily_item = result.scalars().first()
+    if daily_item is not None and daily_item.special_price is not None:
+        return daily_item.special_price
+    return menu_item.price
+
+
 class MenuService:
     """Service for menu items, daily menus, and favorites."""
 

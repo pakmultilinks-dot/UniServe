@@ -51,12 +51,16 @@ function RootNavigator() {
   return (
     <>
       <StatusBar style={resolvedTheme === "dark" ? "light" : "dark"} />
+      {/* Both route groups are always mounted. Which one is *reachable*
+          is governed by the Redirect guards in (auth)/_layout and
+          (app)/_layout — not by conditionally swapping <Stack.Screen>. A
+          conditional swap here changed the mounted navigator at the same
+          instant the auth-guard Redirect fired, so the two navigation
+          mechanisms fought and SceneView looped ("Maximum update depth
+          exceeded") during login (Phase 43). */}
       <Stack screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
-          <Stack.Screen name="(app)" />
-        ) : (
-          <Stack.Screen name="(auth)" />
-        )}
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(app)" />
       </Stack>
     </>
   );

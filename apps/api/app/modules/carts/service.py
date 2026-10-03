@@ -22,6 +22,7 @@ from app.core.exceptions import (
 )
 from app.modules.carts.models import Cart, CartItem, CartStatus
 from app.modules.menus.models import DailyMenuStatus, MenuItem
+from app.modules.menus.service import get_effective_unit_price
 
 logger = structlog.get_logger(__name__)
 
@@ -132,7 +133,9 @@ class CartService:
             cart_id=cart.id,
             menu_item_id=menu_item_id,
             quantity=quantity,
-            price_snapshot=menu_item.price,
+            price_snapshot=await get_effective_unit_price(
+                self.db, menu_item=menu_item, cafeteria_id=cafeteria_id
+            ),
             currency=menu_item.currency,
         )
         self.db.add(cart_item)
@@ -142,7 +145,7 @@ class CartService:
             cart_id=cart.id,
             menu_item_id=menu_item_id,
             quantity=quantity,
-            price=menu_item.price,
+            price=cart_item.price_snapshot,
         )
         return cart_item
 
@@ -335,7 +338,13 @@ class CartService:
             )
         )
         inv = result.scalar_one_or_none()
-        if inv is not None and inv.quantity < required_quantity:
+        if inv is None:
+            # A menu item with no inventory record is not orderable. Fail at
+            # add-to-cart with a clean user-facing error (no raw UUIDs — the
+            # checkout path previously leaked them, Phase 42 P1). The item
+            # stays unavailable until staff explicitly restocks it.
+            raise ValidationError("This item is currently unavailable")
+        if inv.quantity < required_quantity:
             raise ValidationError(
                 f"Insufficient inventory: available={inv.quantity}, requested={required_quantity}"
             )

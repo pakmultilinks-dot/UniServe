@@ -47,6 +47,66 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
+async def backfill_completed_cash_payments(db: AsyncSession) -> dict[str, int]:
+    """Backfill the cash payment ledger for completed cash orders (P2-2).
+
+    Before the Phase 43 fix, cash payments were created PENDING at checkout
+    and never confirmed, so reporting (which sums SUCCEEDED payments) showed
+    Rs 0 revenue. Completed cash orders now confirm their ledger at handover,
+    but historical rows predate that wiring. This backfills exactly those:
+
+    - COMPLETED cash order with a PENDING cash payment → confirm to SUCCEEDED
+    - COMPLETED cash order with no payment row (scheduled cash orders never
+      created one) → create + confirm one for the order total
+
+    Never touches non-cash orders, non-completed orders, or payments in any
+    other state. Idempotent — safe to re-run.
+    """
+    result = await db.execute(
+        select(Order).where(
+            Order.payment_method == PaymentMethod.CASH,
+            Order.status == OrderStatus.COMPLETED,
+        )
+    )
+    completed_cash_orders = list(result.scalars().all())
+
+    confirmed = 0
+    created = 0
+    for order in completed_cash_orders:
+        pay_result = await db.execute(select(Payment).where(Payment.order_id == order.id))
+        payment = pay_result.scalar_one_or_none()
+        if payment is None:
+            db.add(
+                Payment(
+                    id=str(uuid.uuid4()),
+                    order_id=order.id,
+                    user_id=order.user_id,
+                    amount=order.total_amount,
+                    currency=order.currency,
+                    status=PaymentStatus.SUCCEEDED,
+                    provider_name="cash",
+                    idempotency_key=f"cash_{order.id}",
+                )
+            )
+            created += 1
+        elif payment.status == PaymentStatus.PENDING:
+            payment.status = PaymentStatus.SUCCEEDED
+            confirmed += 1
+
+    await db.flush()
+    logger.info(
+        "cash_payment_ledger_backfilled",
+        completed_cash_orders=len(completed_cash_orders),
+        payments_confirmed=confirmed,
+        payments_created=created,
+    )
+    return {
+        "completed_cash_orders": len(completed_cash_orders),
+        "payments_confirmed": confirmed,
+        "payments_created": created,
+    }
+
+
 class PaymentService:
     """Service for payment operations."""
 

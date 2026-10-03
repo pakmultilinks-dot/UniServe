@@ -6,9 +6,10 @@
  * item detail, and order detail are pushed on top (hiding the tab bar).
  */
 import React from "react";
-import { Stack } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TouchableOpacity, Platform } from "react-native";
+import { useAuth } from "../../src/contexts/AuthContext";
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { bgColor, textColor, brandGreen } from "../../src/theme";
 
@@ -27,9 +28,16 @@ function BackButton({ onPress }: { onPress: () => void }) {
 
 export default function AppLayout() {
   const { resolvedTheme } = useTheme();
+  const { isAuthenticated, isLoading } = useAuth();
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
   const brand = brandGreen(resolvedTheme);
+
+  // Unauthenticated sessions are sent to the login screen — logout and
+  // token expiry both land here cleanly (Phase 42 P2-3 symmetric guard).
+  if (!isLoading && !isAuthenticated) {
+    return <Redirect href="/login" />;
+  }
 
   return (
     <Stack
