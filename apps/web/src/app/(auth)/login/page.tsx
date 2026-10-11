@@ -13,6 +13,7 @@ import { isWebDashboardRole } from "@/lib/roles";
 import { LguSeal } from "@/components/LguBrand";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { getApiErrorInfo } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,9 +42,9 @@ export default function LoginPage() {
       // Role-based redirect: students/faculty never enter /dashboard.
       router.push(isWebDashboardRole(loggedInUser.role) ? "/dashboard" : "/mobile-required");
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Login failed. Please try again.";
-      setError(message);
+      // Route through the shared sanitizer so backend internals never leak
+      // verbatim into the UI.
+      setError(getApiErrorInfo(err).message);
     } finally {
       setIsLoading(false);
     }

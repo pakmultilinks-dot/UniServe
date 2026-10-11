@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { LguSeal } from "@/components/LguBrand";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { classifyUniversityEmail } from "@/lib/universityEmail";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -44,6 +45,15 @@ export default function RegisterPage() {
     }
     if (form.password.length < 8) {
       setError("Password must be at least 8 characters");
+      return;
+    }
+    // Inline university-email check (same patterns the backend enforces at
+    // register time) so non-LGU addresses fail fast instead of after a
+    // server round-trip.
+    if (!classifyUniversityEmail(form.email)) {
+      setError(
+        "Please use your LGU university email (e.g. fa22-bse-001@lgu.edu.pk or name@student.lgu.edu.pk)."
+      );
       return;
     }
 

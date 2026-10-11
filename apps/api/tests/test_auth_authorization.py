@@ -246,9 +246,10 @@ class TestAccountDeletion:
         _, access_token, _ = await create_user_session(db, student_user)
         client.headers["Authorization"] = f"Bearer {access_token}"
 
-        resp = await client.delete(
+        resp = await client.request(
+            "DELETE",
             "/api/v1/users/me",
-            params={"password": "StrongPass1!"},
+            json={"password": "StrongPass1!"},
         )
         assert resp.status_code == 204
 
@@ -258,9 +259,10 @@ class TestAccountDeletion:
         _, access_token, _ = await create_user_session(db, student_user)
         client.headers["Authorization"] = f"Bearer {access_token}"
 
-        resp = await client.delete(
+        resp = await client.request(
+            "DELETE",
             "/api/v1/users/me",
-            params={"password": "WrongPass9!"},
+            json={"password": "WrongPass9!"},
         )
         assert resp.status_code == 403
 

@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { bgColor, textColor, colors } from "../../src/theme";
+import { LguSeal } from "../../src/components/LguSeal";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1629203849820-fdd70d49c38e?auto=format&fit=crop&w=1100&q=90";
@@ -24,6 +25,9 @@ export default function OnboardingScreen() {
       </View>
 
       <View style={styles.content}>
+        <View style={styles.sealRow}>
+          <LguSeal size="md" />
+        </View>
         <Text style={[styles.title, { color: text }]}>Campus Food{`\n`}Made Easy</Text>
         <Text style={[styles.subtitle, { color: muted }]}>
           Order meals, snacks, and drinks from your university in seconds.
@@ -70,6 +74,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 16,
+  },
+  sealRow: {
+    alignItems: "center",
+    marginBottom: 12,
   },
   title: {
     fontSize: 42,

@@ -13,6 +13,7 @@ from typing import Any
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -62,7 +63,22 @@ class CartService:
             status=CartStatus.ACTIVE,
         )
         self.db.add(cart)
-        await self.db.flush()
+        try:
+            # Savepoint (not a full rollback): a concurrent request may have
+            # created the cart first, violating the partial unique index. In
+            # that case return the winner's cart instead of surfacing a 500.
+            async with self.db.begin_nested():
+                await self.db.flush()
+        except IntegrityError:
+            result = await self.db.execute(
+                select(Cart).where(
+                    Cart.user_id == user_id,
+                    Cart.cafeteria_id == cafeteria_id,
+                    Cart.status == CartStatus.ACTIVE,
+                )
+            )
+            cart = result.scalar_one()
+            return cart
         logger.info("cart_created", cart_id=cart.id, user_id=user_id, cafeteria_id=cafeteria_id)
         return cart
 
@@ -156,10 +172,11 @@ class CartService:
         cart_item_id: str,
         quantity: int,
         user_id: str,
-    ) -> CartItem:
+    ) -> CartItem | None:
         """Update the quantity of a cart item.
 
-        If quantity becomes zero, removes the item.
+        If quantity becomes zero, removes the item and returns None (the
+        removal succeeded — callers should map this to 204, not 404).
         """
         cart = await self.get_cart(cart_id)
         if cart.user_id != user_id:
@@ -181,8 +198,7 @@ class CartService:
             await self.db.delete(cart_item)
             await self.db.flush()
             logger.info("cart_item_removed", cart_id=cart_id, cart_item_id=cart_item_id)
-            # Return a dummy — the item is deleted
-            raise NotFoundException("Cart Item", cart_item_id)
+            return None
 
         # Validate inventory for the new total
         await self._validate_inventory(cart_item.menu_item_id, cart.cafeteria_id, quantity)

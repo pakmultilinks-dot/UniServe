@@ -355,9 +355,12 @@ async def confirm_password_reset(
     )
     user = user_result.scalar_one_or_none()
     if not user:
-        from app.core.exceptions import ValidationError
-
-        raise ValidationError("Invalid email address")
+        # Anti-enumeration: the request endpoint always returns a generic
+        # message, so the confirm endpoint must not reveal whether the email
+        # exists either. Return the same generic shape without doing anything.
+        return AuthResponse(
+            message="If your email is registered and the code is valid, your password has been reset."
+        )
 
     service = AuthService(db)
     reset_result = await service.reset_password(

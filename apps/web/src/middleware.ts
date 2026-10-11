@@ -1,15 +1,22 @@
 /**
- * UniServe — Next.js Middleware
+ * UniServe — Next.js Middleware (DEVELOPMENT ONLY)
  *
- * Protects /dashboard routes: if the lightweight session flag cookie
- * is absent, redirect to /login. This cookie is set by the web token
+ * Protects /dashboard routes in `next dev`: if the lightweight session flag
+ * cookie is absent, redirect to /login. This cookie is set by the web token
  * provider when tokens are stored and cleared when they are removed.
  *
- * IMPORTANT: This cookie is NOT proof of authentication. It is a
- * routing hint — "this browser might have tokens." Real authentication
- * validation happens client-side in AuthContext via silent token refresh.
- * If the cookie is stale or forged, the client-side guard catches it
- * and redirects to /login.
+ * IMPORTANT — READ BEFORE RELYING ON THIS FILE:
+ * The production web app ships as a static export (`output: "export"` in
+ * next.config.js) served by Caddy. There is NO Next.js server runtime in
+ * production, so this middleware NEVER EXECUTES there. The real,
+ * always-on enforcement points are:
+ *   1. client-side `src/components/RoleGuard.tsx` (route-level UX guard), and
+ *   2. server-side RBAC in the FastAPI backend (authoritative — every
+ *      /dashboard page only renders data the API authorizes).
+ * This cookie is NOT proof of authentication. It is a routing hint —
+ * "this browser might have tokens." Real authentication validation happens
+ * client-side in AuthContext via silent token refresh. If the cookie is
+ * stale or forged, the client-side guard catches it and redirects to /login.
  */
 
 import { NextResponse } from "next/server";

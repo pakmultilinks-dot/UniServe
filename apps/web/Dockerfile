@@ -17,8 +17,10 @@ RUN if [ -f pnpm-lock.yaml ]; then npm install -g pnpm && pnpm install --frozen-
 # Copy source
 COPY . .
 
-# Build-time API URL — replaced at build time
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+# Build-time API URL — REQUIRED, no default. next.config.js fails the build
+# loudly when this is empty, so a production bundle can never silently
+# point at localhost. Pass: --build-arg NEXT_PUBLIC_API_URL=https://api.<yourdomain>/api/v1
+ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 # Build static export

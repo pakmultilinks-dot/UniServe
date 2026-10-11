@@ -122,7 +122,7 @@ class TestProcessExpiredPickupsSingleOrder:
         # Verify order state
         await db.refresh(order)
         assert order.uncollected_at is not None
-        assert order.status == OrderStatus.READY  # Status stays READY
+        assert order.status == OrderStatus.COMPLETED  # Terminal state, leaves READY queues
 
     @pytest.mark.asyncio
     async def test_no_show_record_created(self, db: AsyncSession):
@@ -504,7 +504,7 @@ class TestCollectionRaceSafety:
         # Try to collect — should fail
         from app.core.exceptions import ValidationError
 
-        with pytest.raises(ValidationError, match="already been marked as uncollected"):
+        with pytest.raises(ValidationError, match="marked as uncollected and cannot be collected"):
             await service.collect_order(
                 order_id=order.id,
                 collector_id=user.id,

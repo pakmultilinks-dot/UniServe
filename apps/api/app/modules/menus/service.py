@@ -1,5 +1,6 @@
 """Menus service — business logic for menu items, daily menus, and favorites."""
 
+import contextlib
 import os
 import uuid
 from datetime import UTC, date, datetime
@@ -9,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.database import escape_like
 from app.core.exceptions import (
     AlreadyExistsException,
     NotFoundException,
@@ -197,7 +199,7 @@ class MenuService:
         if is_available is not None:
             query = query.where(MenuItem.is_available == is_available)
         if search:
-            query = query.where(MenuItem.name.ilike(f"%{search}%"))
+            query = query.where(MenuItem.name.ilike(f"%{escape_like(search)}%", escape="\\"))
         query = query.order_by(MenuItem.category, MenuItem.name)
         result = await self.db.execute(query)
         return list(result.scalars().all())
@@ -338,9 +340,17 @@ class MenuService:
 
         old_url = item.image_url
         item.image_url = f"{MENU_IMAGE_URL_PREFIX}{filename}"
-        await self.db.flush()
-        # Old file is removed only when no other menu item references it.
-        await self._cleanup_orphan_image(old_url)
+        try:
+            await self.db.flush()
+            # Old file is removed only when no other menu item references it.
+            await self._cleanup_orphan_image(old_url)
+        except Exception:
+            # The DB write failed after the file was already on disk: remove
+            # the new file so it does not become an orphan with no DB
+            # reference, then re-raise.
+            with contextlib.suppress(OSError):
+                os.remove(path)
+            raise
 
         logger.info("menu_item_image_uploaded", item_id=item.id, file=filename)
         return item
@@ -757,8 +767,9 @@ class MenuService:
         if category is not None:
             query = query.where(MenuItem.category == category)
         if search:
+            pattern = f"%{escape_like(search)}%"
             query = query.where(
-                MenuItem.name.ilike(f"%{search}%") | MenuItem.description.ilike(f"%{search}%")
+                MenuItem.name.ilike(pattern, escape="\\") | MenuItem.description.ilike(pattern, escape="\\")
             )
         if is_available is not None:
             query = query.where(MenuItem.is_available == is_available)

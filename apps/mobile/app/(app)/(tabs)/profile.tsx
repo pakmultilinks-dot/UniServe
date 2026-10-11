@@ -64,7 +64,7 @@ function SectionRow({ icon, label, value, onPress, color, isLast, theme }: Secti
 
 export default function ProfileScreen() {
   const { user, logout, logoutAll } = useAuth();
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme, themePreference, setThemePreference } = useTheme();
   const theme = resolvedTheme as "light" | "dark";
 
   const brand = brandGreen(resolvedTheme);
@@ -285,6 +285,31 @@ export default function ProfileScreen() {
           theme={theme}
         />
         <SectionRow icon="school-outline" label="Category" value={user?.category ?? "—"} isLast theme={theme} />
+      </View>
+
+      {/* ── Appearance Section ── */}
+      <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
+        <Text style={[styles.sectionTitle, { color: tcMuted }]}>APPEARANCE</Text>
+        {(["system", "light", "dark"] as const).map((option, i, arr) => {
+          const selected = themePreference === option;
+          return (
+            <Pressable key={option} onPress={() => setThemePreference(option)}>
+              <View style={[styles.row, i < arr.length - 1 && { borderBottomColor: borderColor(theme, "subtle"), borderBottomWidth: StyleSheet.hairlineWidth }]}>
+                <Ionicons
+                  name={option === "system" ? "phone-portrait-outline" : option === "light" ? "sunny-outline" : "moon-outline"}
+                  size={20}
+                  color={tcMuted}
+                />
+                <Text style={[styles.rowLabel, { color: tc }]}>
+                  {option === "system" ? "System default" : option === "light" ? "Light" : "Dark"}
+                </Text>
+                <View style={styles.rowRight}>
+                  {selected && <Ionicons name="checkmark-circle" size={20} color={brand} />}
+                </View>
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* ── Security Section ── */}

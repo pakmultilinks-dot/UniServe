@@ -53,6 +53,12 @@ from app.modules.users.models import (
     UserSession,
 )
 
+# Timing-oracle mitigation for login: verifying a password with Argon2 is
+# deliberately slow, so an unknown email (no hash to check) would return
+# measurably faster than a known one, leaking email existence. Verifying
+# against this constant dummy hash on the unknown-user path equalizes timing.
+_DUMMY_PASSWORD_HASH = hash_password("uniserve-dummy-password-for-timing")
+
 
 def _ensure_aware(dt: datetime | None) -> datetime | None:
     """Ensure a datetime is timezone-aware (UTC). SQLite returns naive datetimes.
@@ -442,7 +448,7 @@ class AuthService:
         elif otp_purpose == OTPPurpose.PASSWORD_RESET:
             await log_audit_event(
                 session=self.db,
-                event_type=AuditEventType.PASSWORD_RESET_REQUESTED,
+                event_type=AuditEventType.PASSWORD_RESET_OTP_VERIFIED,
                 user_id=user.id,
                 description="OTP verified for password reset",
                 ip_address=ip_address,
@@ -474,6 +480,9 @@ class AuthService:
 
         # Always use generic message to prevent user enumeration
         if user is None:
+            # Run a dummy Argon2 verification so this path takes as long as
+            # a real password check (see _DUMMY_PASSWORD_HASH).
+            verify_password(password, _DUMMY_PASSWORD_HASH)
             raise AuthenticationError("Invalid email or password")
 
         # Check credential exists
@@ -925,15 +934,28 @@ class AuthService:
         credential.password_hash = hash_password(new_password)
         credential.password_changed_at = datetime.now(UTC)
 
+        # Revoke all sessions on password change, exactly like reset_password:
+        # a credential change must invalidate every existing session, or a
+        # stolen session survives the change.
+        await self.db.execute(
+            update(UserSession)
+            .where(
+                UserSession.user_id == user_id,
+                UserSession.is_active == True,
+            )
+            .values(is_active=False, revoked_at=datetime.now(UTC))
+        )
+
         await log_audit_event(
             session=self.db,
             event_type=AuditEventType.PASSWORD_CHANGED,
             user_id=user_id,
+            description="Password changed — all sessions revoked",
             ip_address=ip_address,
             user_agent=user_agent,
         )
 
-        return {"message": "Password changed successfully"}
+        return {"message": "Password changed successfully. Please log in again."}
 
     # ---- Session Management ----
 

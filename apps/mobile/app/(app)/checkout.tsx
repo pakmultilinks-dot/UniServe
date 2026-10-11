@@ -146,14 +146,21 @@ export default function CheckoutScreen() {
         {/* ── Collection Type ── */}
         <Text style={[styles.sectionTitle, { color: tc }]}>Collection</Text>
         <View style={styles.paymentOptions}>
-          {(["immediate", "scheduled"] as OrderType[]).map((type) => (
+          {(["immediate", "scheduled"] as OrderType[]).map((type) => {
+            // No computable slots (missing/malformed operating hours): the
+            // scheduled option would only lead to a dead-end error, so it is
+            // disabled with an explanation instead of being selectable.
+            const scheduledDisabled = type === "scheduled" && collectionSlots.length === 0;
+            return (
             <Pressable
               key={type}
+              disabled={scheduledDisabled}
               style={[
                 styles.paymentOption,
                 {
                   backgroundColor: bg,
                   borderColor: orderType === type ? brand : bc,
+                  opacity: scheduledDisabled ? 0.5 : 1,
                 },
               ]}
               onPress={() => {
@@ -171,12 +178,17 @@ export default function CheckoutScreen() {
                   {type === "immediate" ? "Collect as soon as ready" : "Schedule collection"}
                 </Text>
                 <Text style={[styles.paymentOptionSub, { color: tcMuted }]}>
-                  {type === "immediate" ? "The cafeteria will prepare it now" : "Choose a time during cafeteria hours"}
+                  {type === "immediate"
+                    ? "The cafeteria will prepare it now"
+                    : scheduledDisabled
+                      ? "Not available right now — cafeteria hours are not published"
+                      : "Choose a time during cafeteria hours"}
                 </Text>
               </View>
               {orderType === type && <Ionicons name="checkmark-circle" size={20} color={brand} />}
             </Pressable>
-          ))}
+            );
+          })}
         </View>
 
         {orderType === "scheduled" && (

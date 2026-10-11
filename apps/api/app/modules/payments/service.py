@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, NotFoundException, ValidationError
@@ -339,7 +340,16 @@ class PaymentService:
             idempotency_key=idempotency_key,
         )
         self.db.add(payment)
-        await self.db.flush()
+        try:
+            # Savepoint: a concurrent initiation with the same idempotency key
+            # may win the race — return the existing payment, not a 500.
+            async with self.db.begin_nested():
+                await self.db.flush()
+        except IntegrityError:
+            existing_retry = await self._get_payment_by_idempotency_key(idempotency_key)
+            if existing_retry is not None:
+                return existing_retry, None
+            raise
 
         # Create first attempt
         attempt = PaymentAttempt(

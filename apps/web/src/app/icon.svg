@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#8c6935"/>
+  <path d="M32 10L14 17v11c0 10.5 7.5 20.3 18 23.4C42.5 48.3 50 38.5 50 28V17L32 10z" fill="none" stroke="#c7a15b" stroke-width="2.5"/>
+  <path d="M22 26h20v3H22zM22 31h20v3H22zM22 36h13v3H22z" fill="#fbf4e4"/>
+  <text x="32" y="52" text-anchor="middle" fill="#ffffff" font-size="9" font-weight="700" font-family="Inter, system-ui, sans-serif" letter-spacing="1.5">LGU</text>
+</svg>

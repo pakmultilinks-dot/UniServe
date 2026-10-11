@@ -24,6 +24,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.exceptions import (
+    AccountSuspendedError,
     NotFoundException,
     ValidationError,
 )
@@ -62,6 +63,15 @@ class OrderService:
 
     async def _emit_notification(self, order: Order, event: OrderEvent) -> None:
         """Fire-and-forget: emit a notification for an order event."""
+        try:
+            # Flush first so event.id is populated: the notification dedup key
+            # is (source_event_type, source_event_id), and without the flush
+            # the id is still None, so the dedup guard never triggers and
+            # retries/double-emits create duplicates.
+            await self.db.flush()
+        except Exception:
+            logger.warning("order_notification_flush_failed", order_id=order.id)
+            return
         await emit_order_notification(
             self.db,
             order_id=order.id,
@@ -93,6 +103,17 @@ class OrderService:
         Server is authoritative: validates everything, calculates total
         server-side, creates order items from cart snapshots.
         """
+        # 0. Enforce no-show suspension: a suspended user cannot place new
+        # orders until the suspension expires (check_suspension also clears
+        # expired suspensions).
+        from app.modules.orders.noshow import check_suspension
+
+        if await check_suspension(db=self.db, user_id=user_id):
+            raise AccountSuspendedError(
+                "Your ordering is temporarily suspended due to repeated uncollected orders. "
+                "Please contact the cafeteria."
+            )
+
         # Return the original order when a retried checkout uses the same key.
         if idempotency_key:
             existing_result = await self.db.execute(
@@ -187,6 +208,14 @@ class OrderService:
         # 6. Allocate order number (atomic)
         order_number = await self._allocate_order_number()
 
+        # 6b. Order currency comes from the cart snapshot (menu items carry
+        # their own currency), not a hardcoded default. Mixed currencies in
+        # one cart are rejected — they cannot be totaled coherently.
+        currencies = {item_data["currency"] for item_data in order_items_data}
+        if len(currencies) > 1:
+            raise ValidationError("Cart contains items with mixed currencies")
+        order_currency = next(iter(currencies))
+
         # 7. Create order
         order = Order(
             order_number=order_number,
@@ -197,7 +226,7 @@ class OrderService:
             payment_method=PaymentMethod(payment_method),
             status=OrderStatus.PENDING,
             total_amount=total_amount,
-            currency="PKR",
+            currency=order_currency,
             order_date=local_order_date,
             scheduled_collection_time=scheduled_collection_time
             if parsed_order_type == OrderType.SCHEDULED
@@ -227,12 +256,12 @@ class OrderService:
             if PaymentMethod(payment_method) == PaymentMethod.CASH:
                 # Cash: reserve inventory immediately, create cash payment record
                 await self._reserve_inventory(order, cart.items, user_id)
-                from app.modules.payments.providers.test_provider import (
-                    TestPaymentProvider,
+                from app.modules.payments.providers.cash_provider import (
+                    CashPaymentProvider,
                 )
                 from app.modules.payments.service import PaymentService
 
-                payment_svc = PaymentService(self.db, TestPaymentProvider())
+                payment_svc = PaymentService(self.db, CashPaymentProvider())
                 await payment_svc.create_cash_payment(order, user_id)
             elif PaymentMethod(payment_method) == PaymentMethod.ONLINE:
                 # Online: inventory reserved after successful payment (Phase 5)
@@ -274,6 +303,31 @@ class OrderService:
                 selectinload(Order.events),
             )
         )
+        order = result.scalar_one_or_none()
+        if order is None:
+            raise NotFoundException("Order", order_id)
+        return order
+
+    async def _get_order_for_update(self, order_id: str) -> Order:
+        """Get an order by ID with a row-level lock for mutation.
+
+        Uses SELECT FOR UPDATE on PostgreSQL so two staff members cannot
+        concurrently pass the same status check (e.g. double preparation or
+        double inventory reservation). Skipped on SQLite (tests/dev), which
+        does not support it — mirroring collect_order's convention.
+        """
+        stmt = (
+            select(Order)
+            .where(Order.id == order_id)
+            .options(
+                selectinload(Order.items),
+                selectinload(Order.events),
+            )
+        )
+        dialect_name = self.db.bind.dialect.name if self.db.bind else ""
+        if dialect_name == "postgresql":
+            stmt = stmt.with_for_update()
+        result = await self.db.execute(stmt)
         order = result.scalar_one_or_none()
         if order is None:
             raise NotFoundException("Order", order_id)
@@ -476,12 +530,12 @@ class OrderService:
             return
 
         from app.modules.payments.models import Payment, PaymentStatus
-        from app.modules.payments.providers.test_provider import TestPaymentProvider
+        from app.modules.payments.providers.cash_provider import CashPaymentProvider
         from app.modules.payments.service import PaymentService
 
         result = await self.db.execute(select(Payment).where(Payment.order_id == order.id))
         payment = result.scalar_one_or_none()
-        payment_svc = PaymentService(self.db, TestPaymentProvider())
+        payment_svc = PaymentService(self.db, CashPaymentProvider())
         if payment is None:
             payment = await payment_svc.create_cash_payment(order, order.user_id)
         if payment.status == PaymentStatus.PENDING:
@@ -502,7 +556,7 @@ class OrderService:
         PREPARING → READY
         READY → COMPLETED
         """
-        order = await self.get_order(order_id)
+        order = await self._get_order_for_update(order_id)
         previous_status = order.status
 
         valid_transitions = {
@@ -610,6 +664,8 @@ class OrderService:
             raise ValidationError("Order does not belong to this cafeteria")
 
         if order.status == OrderStatus.COMPLETED:
+            if order.uncollected_at is not None:
+                raise ValidationError("Order was marked as uncollected and cannot be collected")
             raise ValidationError("Order has already been collected")
 
         if order.status == OrderStatus.CANCELLED:
@@ -693,7 +749,7 @@ class OrderService:
 
         Transitions: PENDING → PENDING (confirmed flag set).
         """
-        order = await self.get_order(order_id)
+        order = await self._get_order_for_update(order_id)
 
         if order.status != OrderStatus.PENDING:
             raise ValidationError(f"Cannot confirm order in {order.status.value} status")
@@ -728,7 +784,7 @@ class OrderService:
         Transitions: PENDING → CANCELLED.
         Releases inventory if reserved.
         """
-        order = await self.get_order(order_id)
+        order = await self._get_order_for_update(order_id)
 
         if order.status != OrderStatus.PENDING:
             raise ValidationError(f"Cannot reject order in {order.status.value} status")
@@ -786,7 +842,7 @@ class OrderService:
         Sets preparation_started_at, calculates and records ETA.
         Reserves inventory for scheduled orders.
         """
-        order = await self.get_order(order_id)
+        order = await self._get_order_for_update(order_id)
 
         if order.status != OrderStatus.PENDING:
             raise ValidationError(
@@ -877,7 +933,7 @@ class OrderService:
 
         from app.modules.cafeterias.models import Cafeteria
 
-        order = await self.get_order(order_id)
+        order = await self._get_order_for_update(order_id)
 
         if order.status != OrderStatus.PREPARING:
             raise ValidationError(f"Cannot mark ready: order is in {order.status.value} status")
@@ -907,7 +963,12 @@ class OrderService:
                 tz = ZoneInfo(cafeteria.timezone)
                 from datetime import date as dt_date
 
-                local_closing = datetime.combine(dt_date.today(), dt_time(hour, minute), tzinfo=tz)
+                # The cafeteria-local date is the product-correct "today": the
+                # closing time is cafeteria-local, so combining it with the
+                # server-local date is wrong near midnight (e.g. UTC server,
+                # PKT cafeteria). checkout() already uses this convention.
+                local_today = datetime.now(tz).date()
+                local_closing = datetime.combine(local_today, dt_time(hour, minute), tzinfo=tz)
                 utc_closing = local_closing.astimezone(UTC)
                 if utc_closing < deadline_30min:
                     pickup_deadline = utc_closing
@@ -990,20 +1051,32 @@ class OrderService:
         Transitions: READY → COMPLETED (marked uncollected).
         Records no-show event and may suspend user.
         Sets uncollected_at for idempotency.
+
+        Money handling (the terminal state is explicit):
+        - Cash orders: the PENDING cash ledger is voided (CANCELLED) — no cash
+          changed hands, and the stale-payment reconciler must NOT later mark
+          it SUCCEEDED under the completed-cash rule.
+        - Online orders with a SUCCEEDED payment: a refund request is created
+          for normal review (it is not auto-processed).
         """
-        order = await self.get_order(order_id)
+        order = await self._get_order_for_update(order_id)
+
+        # Idempotency: skip if already processed (checked before the status
+        # gate so a repeated call on a COMPLETED-uncollected order is a
+        # no-op rather than a ValidationError).
+        if order.uncollected_at is not None:
+            return order
 
         if order.status != OrderStatus.READY:
             raise ValidationError(
                 f"Cannot mark uncollected: order is in {order.status.value} status"
             )
 
-        # Idempotency: skip if already processed
-        if order.uncollected_at is not None:
-            return order
-
         now = datetime.now(UTC)
         order.uncollected_at = now
+        # Terminal state: the order leaves staff READY queues and is counted
+        # as completed-with-uncollected in reports.
+        order.status = OrderStatus.COMPLETED
 
         # Record no-show
         from app.modules.orders.noshow import record_no_show
@@ -1014,6 +1087,9 @@ class OrderService:
             order_id=order.id,
             cafeteria_id=order.cafeteria_id,
         )
+
+        # Settle money for the terminal state.
+        await self._settle_uncollected_payment(order)
 
         event = OrderEvent(
             order_id=order.id,
@@ -1030,6 +1106,59 @@ class OrderService:
             user_id=order.user_id,
         )
         return order
+
+    async def _settle_uncollected_payment(self, order: Order) -> None:
+        """Void or refund the payment of an uncollected order.
+
+        Called once from mark_uncollected (which is idempotent via
+        uncollected_at), so this never double-settles.
+        """
+        from app.modules.payments.models import Payment, PaymentStatus
+
+        result = await self.db.execute(
+            select(Payment).where(Payment.order_id == order.id)
+        )
+        payment = result.scalar_one_or_none()
+        if payment is None:
+            return
+
+        if (
+            order.payment_method == PaymentMethod.CASH
+            and payment.status == PaymentStatus.PENDING
+        ):
+            # No handover happened: void the bookkeeping ledger. This must
+            # happen here — not via the stale-payment reconciler, whose
+            # completed-cash rule would otherwise mark it SUCCEEDED.
+            payment.status = PaymentStatus.CANCELLED
+            logger.info(
+                "uncollected_cash_payment_voided",
+                order_id=order.id,
+                payment_id=payment.id,
+            )
+        elif (
+            order.payment_method == PaymentMethod.ONLINE
+            and payment.status == PaymentStatus.SUCCEEDED
+        ):
+            # Customer paid but never collected: raise a refund request for
+            # normal review. Idempotency key is deterministic; mark_uncollected
+            # itself is idempotent, so this runs at most once per order.
+            from app.modules.refunds.processors import create_refund_processor
+            from app.modules.refunds.service import RefundService
+
+            refund_svc = RefundService(self.db, create_refund_processor())
+            await refund_svc.create_refund(
+                order_id=order.id,
+                amount=payment.amount,
+                reason="other",
+                reason_note="Order uncollected after pickup deadline — auto-requested refund",
+                requested_by_user_id=order.user_id,
+                idempotency_key=f"uncollected_{order.id}",
+            )
+            logger.info(
+                "uncollected_online_refund_requested",
+                order_id=order.id,
+                payment_id=payment.id,
+            )
 
     # ===================================================================
     # Phase 6: Partial item cancellation
@@ -1067,7 +1196,10 @@ class OrderService:
         if order.inventory_reserved:
             await self._release_inventory_item(order, target_item, actor_id)
 
-        # Remove item
+        # Remove item. Capture the display name first: after delete()+flush()
+        # the ORM object may expire and attribute access can raise
+        # ObjectDeletedError depending on session configuration.
+        cancelled_item_name = target_item.item_name
         await self.db.delete(target_item)
         await self.db.flush()
 
@@ -1094,7 +1226,7 @@ class OrderService:
             order_id=order.id,
             event_type=event_type,
             actor_id=actor_id,
-            notes=f"Cancelled item: {target_item.item_name}. {reason or ''}",
+            notes=f"Cancelled item: {cancelled_item_name}. {reason or ''}",
         )
         self.db.add(event)
         await self._emit_notification(order, event)
@@ -1119,10 +1251,14 @@ class OrderService:
             return
 
         inv_result = await self.db.execute(
-            select(InventoryItem).where(
+            select(InventoryItem)
+            .where(
                 InventoryItem.menu_item_id == item.menu_item_id,
                 InventoryItem.cafeteria_id == order.cafeteria_id,
             )
+            # Row-level lock, matching the reservation paths: concurrent
+            # cancel + checkout must not drift inventory counts.
+            .with_for_update()
         )
         inv = inv_result.scalar_one_or_none()
         if inv is not None:
@@ -1341,10 +1477,13 @@ class OrderService:
 
         for oi in order_items:
             inv_result = await self.db.execute(
-                select(InventoryItem).where(
+                select(InventoryItem)
+                .where(
                     InventoryItem.menu_item_id == oi.menu_item_id,
                     InventoryItem.cafeteria_id == order.cafeteria_id,
                 )
+                # Row-level lock, matching the reservation paths.
+                .with_for_update()
             )
             inv = inv_result.scalar_one_or_none()
             if inv is not None:

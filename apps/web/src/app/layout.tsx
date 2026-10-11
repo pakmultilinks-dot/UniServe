@@ -5,7 +5,21 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "UniServe — LGU Cafeteria Platform",
-  description: "Order food from your Lahore Garrison University cafeteria",
+  description:
+    "Order ahead from Lahore Garrison University cafeterias. Browse daily menus, track your order live, and pick it up without waiting in line.",
+  openGraph: {
+    title: "UniServe — LGU Cafeteria Platform",
+    description:
+      "Skip the line. Order ahead from the Student and Faculty cafeterias at Lahore Garrison University.",
+    type: "website",
+    siteName: "UniServe",
+  },
+  twitter: {
+    card: "summary",
+    title: "UniServe — LGU Cafeteria Platform",
+    description:
+      "Skip the line. Order ahead from the Student and Faculty cafeterias at Lahore Garrison University.",
+  },
 };
 
 /**
@@ -22,6 +36,14 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth" suppressHydrationWarning>
       <head>
+        {/* Inter via <link>: the CSS @import in globals.css sits after the
+            Tailwind directives, where browsers may ignore it. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
         {/* Inline script to apply theme before paint — prevents flash */}
         <script
           dangerouslySetInnerHTML={{

@@ -28,7 +28,7 @@ function BackButton({ onPress }: { onPress: () => void }) {
 
 export default function AppLayout() {
   const { resolvedTheme } = useTheme();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isEmailVerified, user } = useAuth();
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
   const brand = brandGreen(resolvedTheme);
@@ -37,6 +37,18 @@ export default function AppLayout() {
   // token expiry both land here cleanly (Phase 42 P2-3 symmetric guard).
   if (!isLoading && !isAuthenticated) {
     return <Redirect href="/login" />;
+  }
+
+  // Defense in depth: an authenticated but unverified account must complete
+  // email verification before entering the app. (The backend also rejects
+  // unverified logins; this keeps the client from ever showing app content
+  // to an unverified session.)
+  if (!isLoading && isAuthenticated && !isEmailVerified && user) {
+    const params = new URLSearchParams({
+      user_id: user.id,
+      email: user.university_email,
+    });
+    return <Redirect href={`/verify-email?${params.toString()}`} />;
   }
 
   return (

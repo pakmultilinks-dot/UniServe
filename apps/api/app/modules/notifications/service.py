@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import NotFoundException, ValidationError
 from app.modules.notifications.models import (
@@ -645,6 +646,24 @@ class BroadcastService:
             idempotency_key=idempotency_key,
         )
         self.db.add(broadcast)
+        try:
+            # Savepoint: a concurrent broadcast with the same idempotency key
+            # may win the race — return the existing broadcast, not a 500.
+            # The broadcast id is an explicit UUID, so recipient rows below do
+            # not need the flush to have happened.
+            async with self.db.begin_nested():
+                await self.db.flush()
+        except IntegrityError:
+            existing_retry = (
+                await self.db.execute(
+                    select(AdminBroadcast).where(
+                        AdminBroadcast.idempotency_key == idempotency_key
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing_retry is not None:
+                return existing_retry, True
+            raise
 
         for user_id in recipient_ids:
             await self._notifications._create_notification(

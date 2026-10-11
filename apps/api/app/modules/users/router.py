@@ -10,7 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditEventType, log_audit_event
-from app.core.database import get_db
+from app.core.database import escape_like, get_db
 from app.core.deps import (
     AuthContext,
     RequireRole,
@@ -24,6 +24,7 @@ from app.core.exceptions import (
 )
 from app.core.security import generate_otp, hash_password
 from app.modules.auth.schemas import (
+    AccountDeletionRequest,
     AccountRecoveryRequest,
     AccountRecoveryResponse,
     ChangeUserRoleRequest,
@@ -134,13 +135,13 @@ async def list_users(
             raise ValidationError(f"Unknown status filter: {status}") from None
         query = query.where(User.status == status_value)
     if q and q.strip():
-        pattern = f"%{q.strip()}%"
+        pattern = f"%{escape_like(q.strip())}%"
         query = query.where(
             or_(
-                User.first_name.ilike(pattern),
-                User.last_name.ilike(pattern),
-                User.university_email.ilike(pattern),
-                User.university_id.ilike(pattern),
+                User.first_name.ilike(pattern, escape="\\"),
+                User.last_name.ilike(pattern, escape="\\"),
+                User.university_email.ilike(pattern, escape="\\"),
+                User.university_id.ilike(pattern, escape="\\"),
             )
         )
     if cafeteria_id == "none":
@@ -425,11 +426,16 @@ async def activate_user(
 @router.delete("/me", status_code=204)
 async def delete_own_account(
     request: Request,
-    password: str,
+    body: AccountDeletionRequest,
     auth: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Request account deletion (self-service)."""
+    """Request account deletion (self-service).
+
+    The password is read from the JSON body, never from the URL query
+    string: passwords in URLs land in server/proxy access logs and browser
+    history.
+    """
     ip, ua = _get_client_info(request)
 
     # Verify password
@@ -444,7 +450,7 @@ async def delete_own_account(
     credential = cred_result.scalar_one_or_none()
     if not credential or not credential.password_hash:
         raise AuthorizationError("Invalid password")
-    if not verify_password(password, credential.password_hash):
+    if not verify_password(body.password, credential.password_hash):
         raise AuthorizationError("Invalid password")
 
     # Soft delete
@@ -621,6 +627,21 @@ async def recover_account(
     else:
         credential.password_hash = new_hash
         credential.password_changed_at = datetime.now(UTC)
+
+    # A recovery issues a brand-new credential, so every existing session
+    # must die with the old one — same rule as password reset/change.
+    from sqlalchemy import update
+
+    from app.modules.users.models import UserSession
+
+    await db.execute(
+        update(UserSession)
+        .where(
+            UserSession.user_id == user_id,
+            UserSession.is_active == True,
+        )
+        .values(is_active=False, revoked_at=datetime.now(UTC))
+    )
 
     await log_audit_event(
         session=db,

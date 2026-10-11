@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.core.exceptions import AuthorizationError, NotFoundException, ValidationError
@@ -121,7 +122,16 @@ class RefundService:
             idempotency_key=idempotency_key,
         )
         self.db.add(refund)
-        await self.db.flush()
+        try:
+            # Savepoint: a concurrent request with the same idempotency key
+            # may win the race — return the existing refund, not a 500.
+            async with self.db.begin_nested():
+                await self.db.flush()
+        except IntegrityError:
+            existing_retry = await self._get_refund_by_idempotency_key(idempotency_key)
+            if existing_retry is not None:
+                return existing_retry
+            raise
 
         # Record refund requested event
         event = RefundEvent(

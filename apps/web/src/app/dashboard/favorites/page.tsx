@@ -1,22 +1,28 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { apiClient } from "@/lib/api";
+import { apiClient, getApiErrorInfo, type ApiErrorInfo } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadErrorState } from "@/components/ui/LoadErrorState";
+import { formatPricePKR } from "@/lib/format";
 
 export default function FavoritesPage() {
   const [favorites, setFavorites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   const loadFavorites = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await apiClient.get<any>("/favorites");
       const favs = Array.isArray(data) ? data : data.favorites ?? data.items ?? [];
       setFavorites(favs);
-    } catch {
-      setFavorites([]);
+    } catch (err) {
+      // Phase-46 error transparency: a failed load must render an error
+      // state, never masquerade as "no favorites yet".
+      setError(getApiErrorInfo(err));
     } finally {
       setLoading(false);
     }
@@ -37,6 +43,8 @@ export default function FavoritesPage() {
             <div key={i} className="h-40 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl skeleton" />
           ))}
         </div>
+      ) : error ? (
+        <LoadErrorState error={error} subject="favorites" onRetry={loadFavorites} />
       ) : favorites.length === 0 ? (
         <EmptyState
           title="No favorites yet"
@@ -59,7 +67,7 @@ export default function FavoritesPage() {
                 )}
                 <div className="flex items-center justify-between mt-3">
                   <span className="text-sm font-bold text-brand-700 dark:text-brand-400">
-                    PKR {Math.round((item.price ?? 0) / 100).toLocaleString()}
+                    {formatPricePKR(item.price)}
                   </span>
                   {item.category && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-muted)] capitalize">

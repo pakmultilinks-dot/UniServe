@@ -28,6 +28,7 @@ import { SecureStorage } from "../../src/services/secure-storage";
 import { Button } from "../../src/components/ui";
 import { PasswordInput, LguInput } from "../../src/components/ui/Input";
 import { colors, textColor, bgColor, borderColor, functionalColor } from "../../src/theme";
+import { LguSeal } from "../../src/components/LguSeal";
 import type { User } from "@uniserve/shared-types";
 
 export default function LoginScreen() {
@@ -124,6 +125,9 @@ export default function LoginScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
+        <View style={styles.brandHeader}>
+          <LguSeal size="md" />
+        </View>
         <Text style={[styles.wordmark, { color: tc }]}>Welcome Back!</Text>
         <Text style={[styles.subtitle, { color: tcMuted }]}>
           Sign in to order meals, snacks, and drinks on campus.
@@ -197,8 +201,8 @@ export default function LoginScreen() {
           ) : (
             <>
               <LguInput
-                label="LGU Student Email"
-                placeholder="student@lgu.edu.pk"
+                label="University Email"
+                placeholder="you@lgu.edu.pk"
                 value={email}
                 onChangeText={(text: string) => { setEmail(text); setError(""); }}
                 keyboardType="email-address"
@@ -275,6 +279,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 140,
     paddingBottom: 32,
+  },
+  brandHeader: {
+    alignItems: "center",
+    marginBottom: 16,
   },
   wordmark: {
     fontSize: 28,

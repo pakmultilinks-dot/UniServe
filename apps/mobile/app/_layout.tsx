@@ -21,7 +21,7 @@ import WebDashboardGate from "../src/components/WebDashboardGate";
 /**
  * Roles allowed in the mobile ordering app.
  * The mobile app is for students and faculty only — cafeteria staff and
- * university admins use the web dashboard (localhost:3000) instead.
+ * university admins use the web dashboard instead.
  */
 const MOBILE_ROLES = ["student", "faculty"];
 

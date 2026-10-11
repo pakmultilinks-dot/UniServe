@@ -491,9 +491,16 @@ export default function DashboardPage() {
                   </p>
                 </div>
                 <div className="ml-auto flex-shrink-0">
+                  {/* Status is text, not color alone (WCAG 1.4.1) */}
                   <span
-                    className={`w-2.5 h-2.5 rounded-full block ${caf.is_active ? "bg-green-500" : "bg-neutral-300"}`}
-                  />
+                    className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      caf.is_active
+                        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                        : "bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300"
+                    }`}
+                  >
+                    {caf.is_active ? "Open" : "Closed"}
+                  </span>
                 </div>
               </Link>
             ))}
