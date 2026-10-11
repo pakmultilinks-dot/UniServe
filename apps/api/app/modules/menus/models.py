@@ -21,6 +21,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -131,7 +132,17 @@ class DailyMenu(Base):
         Index("idx_daily_menu_cafeteria", "cafeteria_id"),
         Index("idx_daily_menu_date", "menu_date"),
         Index("idx_daily_menu_status", "status"),
-        UniqueConstraint("cafeteria_id", "menu_date", name="uq_daily_menu_cafeteria_date"),
+        # Phase 44 (WS4): one ACTIVE menu per cafeteria/date. ARCHIVED
+        # daily menus (unpublished) are excluded so a replacement draft
+        # can be created for the same date after unpublishing.
+        Index(
+            "uq_daily_menu_cafeteria_date_active",
+            "cafeteria_id",
+            "menu_date",
+            unique=True,
+            postgresql_where=text("status != 'archived'"),
+            sqlite_where=text("status != 'archived'"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

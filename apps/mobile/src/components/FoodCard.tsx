@@ -25,6 +25,12 @@ import type { MenuCategory } from "@uniserve/shared-types";
 interface FoodCardProps {
   name: string;
   description?: string;
+  /**
+   * Optional secondary context line (e.g. cafeteria name on Favorites).
+   * Rendered above the description; omitted where there is no per-card
+   * context to show (e.g. Home, where the cafeteria is in the header).
+   */
+  subtitle?: string;
   price: number; // paisa
   imageUri?: string | null;
   category?: MenuCategory | string;
@@ -36,6 +42,9 @@ interface FoodCardProps {
   onAdd?: () => void;
   onIncrement?: () => void;
   onDecrement?: () => void;
+  /** P3-5: favorite heart state. When onToggleFavorite is omitted, no heart renders. */
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
 function formatPrice(paisa: number): string {
@@ -45,6 +54,7 @@ function formatPrice(paisa: number): string {
 export default function FoodCard({
   name,
   description,
+  subtitle,
   price,
   imageUri,
   category,
@@ -56,6 +66,8 @@ export default function FoodCard({
   onAdd,
   onIncrement,
   onDecrement,
+  isFavorite = false,
+  onToggleFavorite,
 }: FoodCardProps) {
   const { resolvedTheme } = useTheme();
   const tc = (v: "primary" | "secondary" | "muted") => textColor(resolvedTheme, v);
@@ -79,6 +91,24 @@ export default function FoodCard({
           category={category as MenuCategory}
           style={styles.image}
         />
+        {/* P3-5: favorite heart (top-left so it never collides with the
+            quantity badge at top-right). Nested Pressable swallows its own
+            tap, so toggling a heart never opens the item detail screen. */}
+        {onToggleFavorite ? (
+          <Pressable
+            onPress={onToggleFavorite}
+            hitSlop={8}
+            style={styles.favBtn}
+            accessibilityRole="button"
+            accessibilityLabel={isFavorite ? "Remove from favorites" : "Add to favorites"}
+          >
+            <Ionicons
+              name={isFavorite ? "heart" : "heart-outline"}
+              size={16}
+              color={isFavorite ? "#b3412f" : "#5a4636"}
+            />
+          </Pressable>
+        ) : null}
         {quantity > 0 && (
           <View style={[styles.qtyBadge, { backgroundColor: brand }]}>
             <Text style={styles.qtyText}>{quantity}</Text>
@@ -88,6 +118,15 @@ export default function FoodCard({
 
       {/* Content */}
       <View style={styles.content}>
+        {subtitle ? (
+          <Text
+            style={[styles.subtitle, { color: tc("muted") }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {subtitle}
+          </Text>
+        ) : null}
         <Text
           style={[styles.name, { color: tc("primary") }]}
           numberOfLines={1}
@@ -190,6 +229,19 @@ const styles = StyleSheet.create({
     minWidth: 22,
     alignItems: "center",
   },
+  favBtn: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,253,248,0.92)",
+    borderWidth: 1,
+    borderColor: "#f0e7d7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   qtyText: {
     color: "#ffffff",
     fontSize: 12,
@@ -197,6 +249,12 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 11,
+  },
+  subtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    lineHeight: 14,
+    marginBottom: 2,
   },
   name: {
     fontSize: 14,

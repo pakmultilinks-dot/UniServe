@@ -22,6 +22,14 @@ class SalesSummary(BaseModel):
     total_orders: int = Field(description="Orders with at least one successful payment")
     total_refunded: int = Field(description="Refunded amount in paisa (succeeded refunds only)")
     net_revenue: int = Field(description="total_revenue - total_refunded")
+    online_payment_volume: int = Field(
+        default=0,
+        description="Succeeded payment volume (paisa) from orders paid ONLINE",
+    )
+    cash_payment_volume: int = Field(
+        default=0,
+        description="Succeeded payment volume (paisa) from orders paid CASH",
+    )
     currency: str = Field(default="PKR")
 
 
@@ -41,6 +49,12 @@ class CafeteriaSalesRow(BaseModel):
     revenue: int
     order_count: int
     refunded_amount: int
+    completed_orders: int = Field(
+        default=0, description="Orders in COMPLETED status for this cafeteria in range"
+    )
+    cancelled_orders: int = Field(
+        default=0, description="Orders in CANCELLED status for this cafeteria in range"
+    )
 
 
 class SalesReportResponse(BaseModel):

@@ -307,3 +307,77 @@ class AdminService:
             "uncollected_orders": int(uncollected_orders),
             "cafeteria_closure_cancellations": int(cafeteria_closure_cancellations),
         }
+    # -- Security Audit Events (Phase 55) -------------------------------
+
+    async def get_audit_events(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        event_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Paginated security audit events, newest first (University Admin).
+
+        Phase 55 — read side of the audit trail. The optional
+        ``event_type`` filter is validated against the AuditEventType
+        enum; ``total`` reflects the filtered set so pagination stays
+        honest. Actor names are resolved in one bulk query (no N+1).
+        """
+        from app.core.audit import AuditEventType, SecurityAuditEvent
+        from app.core.exceptions import ValidationError
+
+        filters = []
+        if event_type:
+            try:
+                event_enum = AuditEventType(event_type)
+            except ValueError:
+                raise ValidationError(f"Unknown audit event type: {event_type}") from None
+            filters.append(SecurityAuditEvent.event_type == event_enum)
+
+        count_q = select(func.count()).select_from(SecurityAuditEvent)
+        if filters:
+            count_q = count_q.where(*filters)
+        count_result = await self.db.execute(count_q)
+        total = int(count_result.scalar() or 0)
+
+        query = select(SecurityAuditEvent)
+        if filters:
+            query = query.where(*filters)
+        query = (
+            query.order_by(SecurityAuditEvent.created_at.desc())
+            .limit(max(1, min(limit, 200)))
+            .offset(max(0, offset))
+        )
+        result = await self.db.execute(query)
+        events = list(result.scalars().all())
+
+        # Resolve actor display names in one query (no N+1).
+        user_ids = {e.user_id for e in events if e.user_id}
+        names: dict[str, str] = {}
+        if user_ids:
+            users_q = select(User.id, User.first_name, User.last_name).where(
+                User.id.in_(user_ids)
+            )
+            users_result = await self.db.execute(users_q)
+            names = {
+                row[0]: f"{row[1]} {row[2]}".strip() for row in users_result.all()
+            }
+
+        return {
+            "events": [
+                {
+                    "id": e.id,
+                    "event_type": e.event_type.value
+                    if hasattr(e.event_type, "value")
+                    else str(e.event_type),
+                    "user_id": e.user_id,
+                    "user_name": names.get(e.user_id) if e.user_id else None,
+                    "description": e.description,
+                    "ip_address": e.ip_address,
+                    "user_agent": e.user_agent,
+                    "created_at": e.created_at,
+                }
+                for e in events
+            ],
+            "total": total,
+        }

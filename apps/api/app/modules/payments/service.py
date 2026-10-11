@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -104,6 +104,132 @@ async def backfill_completed_cash_payments(db: AsyncSession) -> dict[str, int]:
         "completed_cash_orders": len(completed_cash_orders),
         "payments_confirmed": confirmed,
         "payments_created": created,
+    }
+
+
+def _attach_reconciliation_note(payment: Payment, reason: str) -> None:
+    """Merge a reconciliation audit note into the payment metadata JSON."""
+    note = {
+        "reconciled_at": datetime.now(UTC).isoformat(),
+        "reason": reason,
+    }
+    existing: Any = None
+    if payment.provider_metadata_json:
+        try:
+            parsed = json.loads(payment.provider_metadata_json)
+            if isinstance(parsed, dict):
+                existing = parsed
+        except (json.JSONDecodeError, TypeError):
+            existing = None
+    if isinstance(existing, dict):
+        existing["reconciliation"] = note
+        payment.provider_metadata_json = json.dumps(existing)
+    else:
+        payload: dict[str, Any] = {"reconciliation": note}
+        if payment.provider_metadata_json:
+            payload["previous_metadata_unparseable"] = True
+        payment.provider_metadata_json = json.dumps(payload)
+
+
+async def reconcile_stale_payments(
+    db: AsyncSession,
+    *,
+    stale_after_hours: int = 24,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Reconcile stale non-terminal payment rows (Phase 60, Workstream E).
+
+    Closed-loop hygiene for payments stuck in PENDING/PROCESSING older
+    than ``stale_after_hours``. Classification follows **established**
+    business rules only — nothing is invented:
+
+    * **Order cancelled before payment completed** → payment status
+      ``CANCELLED`` (payment closed by business rule, not provider
+      failure — CANCELLED, not FAILED). Applies to cash AND online
+      rows; nothing can legitimately complete after the order is gone.
+
+    * **Completed cash order, PENDING ledger row** → ``SUCCEEDED``.
+      This is the sanctioned Phase-43 rule
+      (``backfill_completed_cash_payments``): cash money changes hands
+      at handover, which already happened if the order COMPLETED — the
+      stale PENDING row is bookkeeping residue, not unconfirmed money.
+
+    Deliberately untouched (documented sandbox permissiveness):
+
+    * PENDING/PROCESSING payments on non-terminal orders — the user
+      may be mid-payment right now; only provider events or explicit
+      business transitions should move them.
+    * COMPLETED **online** PROCESSING rows — await provider callback
+      or external provider-side reconciliation.
+    * All SUCCEEDED/FAILED/REFUNDED/REFUND_PENDING/PARTIALLY_REFUNDED
+      rows and all amounts/currency values — never altered.
+
+    Idempotent — re-running finds nothing left to reconcile. With
+    ``dry_run=True`` the same rows are classified but nothing is
+    mutated (counts then mean "would change"). Caller must commit;
+    this function only flushes when actually mutating.
+    """
+    cutoff = datetime.now(UTC) - timedelta(hours=stale_after_hours)
+
+    result = await db.execute(
+        select(Payment).where(
+            Payment.status.in_([PaymentStatus.PENDING, PaymentStatus.PROCESSING]),
+            Payment.created_at < cutoff,
+        )
+    )
+    stale_payments = list(result.scalars().all())
+
+    orders_by_id: dict[str, Order] = {}
+    order_ids = {p.order_id for p in stale_payments}
+    if order_ids:
+        orders_result = await db.execute(select(Order).where(Order.id.in_(order_ids)))
+        orders_by_id = {o.id: o for o in orders_result.scalars().all()}
+
+    order_cancelled = 0
+    cash_confirmed = 0
+    untouched = 0
+
+    for payment in stale_payments:
+        order = orders_by_id.get(payment.order_id)
+        if order is not None and order.status == OrderStatus.CANCELLED:
+            if not dry_run:
+                payment.status = PaymentStatus.CANCELLED
+                _attach_reconciliation_note(
+                    payment, "order_cancelled_before_payment_completed"
+                )
+            order_cancelled += 1
+        elif (
+            order is not None
+            and order.status == OrderStatus.COMPLETED
+            and payment.provider_name == "cash"
+            and payment.status == PaymentStatus.PENDING
+        ):
+            if not dry_run:
+                payment.status = PaymentStatus.SUCCEEDED
+                _attach_reconciliation_note(
+                    payment, "completed_cash_order_ledger_confirmation"
+                )
+            cash_confirmed += 1
+        else:
+            untouched += 1
+
+    if not dry_run:
+        await db.flush()
+    logger.info(
+        "stale_payments_reconciled",
+        stale_after_hours=stale_after_hours,
+        dry_run=dry_run,
+        scanned=len(stale_payments),
+        order_cancelled=order_cancelled,
+        cash_confirmed=cash_confirmed,
+        untouched=untouched,
+    )
+    return {
+        "scanned": len(stale_payments),
+        "order_cancelled_payments_closed": order_cancelled,
+        "completed_cash_payments_confirmed": cash_confirmed,
+        "untouched": untouched,
+        "dry_run": dry_run,
     }
 
 

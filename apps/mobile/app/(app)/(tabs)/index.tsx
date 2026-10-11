@@ -19,14 +19,15 @@ import {
   StyleSheet,
   RefreshControl,
   Pressable,
-  ActivityIndicator,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
+import { useFavorites } from "../../../src/contexts/FavoritesContext";
+import { useNotifications } from "../../../src/contexts/NotificationsContext";
 import { FoodCard } from "../../../src/components/ui";
 import { SearchBar } from "../../../src/components/ui";
 import { CategoryChips, type CategoryKey } from "../../../src/components/ui";
@@ -37,25 +38,9 @@ import { BottomSheet, BottomSheetRow } from "../../../src/components/ui/BottomSh
 import { SkeletonCard } from "../../../src/components/ui";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor, colors } from "../../../src/theme";
 import { getTodaysMenu, getCafeterias } from "../../../src/services/data";
-import type { MenuItem, MenuCategory, Cafeteria } from "@uniserve/shared-types";
+import type { MenuItem, Cafeteria } from "@uniserve/shared-types";
 
 // ── Helpers ──
-
-function formatPrice(paisa: number): string {
-  return `PKR ${Math.round(paisa / 100)}`;
-}
-
-/** Map MenuCategory to CategoryKey for the chips */
-const CATEGORY_MAP: Record<MenuCategory, CategoryKey> = {
-  breakfast: "breakfast",
-  main_course: "main_course",
-  side_dish: "side_dish",
-  dessert: "dessert",
-  beverage: "beverage",
-  snack: "snack",
-  salad: "salad",
-  soup: "soup",
-};
 
 const ALL_CATEGORIES: CategoryKey[] = [
   "all",
@@ -86,19 +71,31 @@ export default function HomeScreen() {
     selectedCafeteria,
     selectCafeteria,
     cart,
-    isCafeteriaLoading,
     cartItemCount,
     cartTotal,
     addToCart: cartAddToCart,
     updateQuantity: cartUpdateQuantity,
   } = useCart();
 
+  // P3-5: favorite hearts on the menu grid — backed by the server-side
+  // favorites API via FavoritesContext (optimistic toggle + reconcile).
+  const { isFavorite, toggleFavorite } = useFavorites();
+
+  // Notifications moved out of the tab bar into a header bell. The unread
+  // badge reads the shared NotificationsContext (single source of truth) and
+  // is refreshed whenever Home regains focus so the count stays current.
+  const { unreadCount, refreshUnreadCount } = useNotifications();
+  useFocusEffect(
+    useCallback(() => {
+      refreshUnreadCount();
+    }, [refreshUnreadCount]),
+  );
+
   const brand = brandGreen(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
   const tcSec = textColor(resolvedTheme, "secondary");
   const tcMuted = textColor(resolvedTheme, "muted");
   const bg = bgColor(resolvedTheme, "primary");
-  const bgSec = bgColor(resolvedTheme, "secondary");
   const bc = borderColor(resolvedTheme, "default");
 
   // State
@@ -127,8 +124,17 @@ export default function HomeScreen() {
   // Load cafeterias for bottom sheet
   useEffect(() => {
     getCafeterias()
-      .then(setCafeterias)
+      .then((data) => {
+        setCafeterias(data);
+        // First launch (or a previous auto-select that found nothing): surface
+        // the picker straight away so choosing a cafeteria is the first action,
+        // rather than leaving the user on an empty menu with no explanation.
+        if (data.length > 0 && !selectedCafeteria) {
+          setCafeteriaSheetVisible(true);
+        }
+      })
       .catch(() => setError("Failed to load cafeterias. Pull to retry."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load menu items
@@ -183,7 +189,17 @@ export default function HomeScreen() {
         setError("Failed to load cafeterias. Pull to retry.");
       }
     }
-    loadMenu();
+    // P3-15: reset isRefreshing here, in a finally on the fetch itself.
+    // Previously the reset lived only in the mount useEffect's finally,
+    // which runs when `loadMenu` identity changes — a pull-to-refresh with
+    // unchanged deps called loadMenu directly and left isRefreshing stuck
+    // true, so the RefreshControl spinner (rendered as a persistent
+    // "Refreshing..." banner on Expo web) never dismissed.
+    try {
+      await loadMenu();
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [loadMenu, cafeterias.length]);
 
   // Search: switch to "all" when searching
@@ -249,7 +265,7 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={[styles.greeting, { color: tc }]}>Uni Cafe Menu</Text>
-          {selectedCafeteria && (
+          {selectedCafeteria ? (
             <Pressable
               onPress={() => setCafeteriaSheetVisible(true)}
               style={styles.cafeteriaInline}
@@ -268,30 +284,64 @@ export default function HomeScreen() {
               <View style={[styles.statusDot, { backgroundColor: functionalColor(resolvedTheme, isCafeteriaOpen ? "success" : "error") }]} />
               <Ionicons name="chevron-down" size={14} color={tcMuted} />
             </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => setCafeteriaSheetVisible(true)}
+              style={styles.cafeteriaInline}
+              accessibilityLabel="No cafeteria chosen yet. Tap to choose one."
+              accessibilityRole="button"
+            >
+              <Ionicons name="location-outline" size={14} color={brand} />
+              <Text style={[styles.cafeteriaInlineName, { color: tcSec }]}>
+                Choose a cafeteria
+              </Text>
+              <Ionicons name="chevron-down" size={14} color={tcMuted} />
+            </Pressable>
           )}
         </View>
-        <Pressable style={styles.headerIcon} hitSlop={8}>
-          <Ionicons name="person-circle-outline" size={26} color={brand} />
+        <Pressable
+          style={styles.headerIcon}
+          hitSlop={8}
+          onPress={() => router.push("/(tabs)/notifications")}
+          accessibilityRole="button"
+          accessibilityLabel={
+            unreadCount > 0
+              ? `Notifications, ${unreadCount} unread`
+              : "Notifications"
+          }
+        >
+          <Ionicons name="notifications-outline" size={24} color={brand} />
+          {unreadCount > 0 && (
+            <View style={styles.bellBadge}>
+              <Text style={styles.bellBadgeText}>
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </Text>
+            </View>
+          )}
         </Pressable>
       </View>
 
-      {/* ── Zone 3: Search ── */}
-      <View style={{ marginTop: 12 }}>
-        <SearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search products..."
-        />
-      </View>
+      {/* ── Zone 3: Search (only once a cafeteria is chosen) ── */}
+      {selectedCafeteria && (
+        <View style={{ marginTop: 12 }}>
+          <SearchBar
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search products..."
+          />
+        </View>
+      )}
 
-      {/* ── Zone 4: Category Chips ── */}
-      <View style={{ marginTop: 8 }}>
-        <CategoryChips
-          categories={ALL_CATEGORIES}
-          selected={selectedCategory}
-          onSelect={handleCategoryPress}
-        />
-      </View>
+      {/* ── Zone 4: Category Chips (only once a cafeteria is chosen) ── */}
+      {selectedCafeteria && (
+        <View style={{ marginTop: 8 }}>
+          <CategoryChips
+            categories={ALL_CATEGORIES}
+            selected={selectedCategory}
+            onSelect={handleCategoryPress}
+          />
+        </View>
+      )}
 
       {/* ── Loading State ── */}
       {isLoading && (
@@ -363,6 +413,25 @@ export default function HomeScreen() {
         />
       )}
 
+      {/* ── First-launch / no-cafeteria call to action ── */}
+      {!isLoading && !selectedCafeteria && !error && (
+        <View style={styles.chooseCafeteriaCta}>
+          <Pressable
+            onPress={() => setCafeteriaSheetVisible(true)}
+            style={({ pressed }) => [
+              styles.chooseCafeteriaBtn,
+              { backgroundColor: brand },
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Choose a cafeteria"
+          >
+            <Ionicons name="restaurant-outline" size={18} color="#ffffff" />
+            <Text style={styles.chooseCafeteriaText}>Choose a cafeteria</Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* ── Zone 5: Food Grid ── */}
       {!isLoading && menuItems.length > 0 && (
         <ScrollView
@@ -394,6 +463,11 @@ export default function HomeScreen() {
                   isAvailable={item.is_available}
                   isBusy={busyItemId === item.id}
                   quantity={cartItemMap[item.id]?.quantity ?? 0}
+                  isFavorite={isFavorite(item.id)}
+                  onToggleFavorite={() => {
+                    // Optimistic UI lives in FavoritesContext; errors revert there.
+                    toggleFavorite(item.id).catch(() => {});
+                  }}
                   onPress={() => handleItemPress(item)}
                   onAdd={() => handleAddToCart(item.id)}
                   onIncrement={() => handleAddToCart(item.id)}
@@ -415,7 +489,7 @@ export default function HomeScreen() {
         <CartBar
           itemCount={cartItemCount}
           total={cartTotal}
-          onPress={() => router.push("/cart")}
+          onPress={() => router.push("/(tabs)/cart")}
         />
       )}
 
@@ -498,6 +572,43 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: "center",
     justifyContent: "center",
+  },
+  chooseCafeteriaCta: {
+    alignItems: "center",
+    marginTop: 20,
+    paddingHorizontal: 32,
+  },
+  chooseCafeteriaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 48,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    alignSelf: "stretch",
+  },
+  chooseCafeteriaText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  bellBadge: {
+    position: "absolute",
+    top: 4,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: colors.error,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bellBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "700",
   },
 
   // Loading

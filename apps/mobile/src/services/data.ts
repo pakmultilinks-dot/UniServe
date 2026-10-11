@@ -16,9 +16,12 @@ import type {
   CartAddItemRequest,
   CartUpdateQuantityRequest,
   CartCheckoutRequest,
-  MenuCategory,
+  FavoriteResponse,
+  MarkAllReadResponse,
+  MarkReadResponse,
   Order,
   Payment,
+  RefundReason,
 } from "@uniserve/shared-types";
 
 // ---- Cafeterias ----
@@ -28,39 +31,20 @@ interface CafeteriaListResponse {
   total: number;
 }
 
-/** Fetch all active cafeterias. For students, backend filters to student cafeterias. */
+/**
+ * Fetch cafeterias for the mobile ordering path.
+ *
+ * Phase 58 (Workstream A) — customer roles explicitly request active-only
+ * cafeterias (?is_active=true) so inactive cafeterias never enter
+ * operational customer selection, even if the backend default changed.
+ * For students, the backend additionally filters to student cafeterias.
+ */
 export async function getCafeterias(): Promise<Cafeteria[]> {
-  const data = await apiClient.get<CafeteriaListResponse>("/cafeterias");
+  const data = await apiClient.get<CafeteriaListResponse>("/cafeterias?is_active=true");
   return data.cafeterias ?? [];
 }
 
 // ---- Menu Items ----
-
-interface MenuItemListResponse {
-  items: MenuItem[];
-  total: number;
-}
-
-export interface MenuItemsParams {
-  category?: MenuCategory;
-  is_available?: boolean;
-  search?: string;
-}
-
-/** Fetch menu items for a specific cafeteria with optional filters. */
-export async function getMenuItems(
-  cafeteriaId: string,
-  params?: MenuItemsParams,
-): Promise<{ items: MenuItem[]; total: number }> {
-  const qp = new URLSearchParams();
-  if (params?.category) qp.append("category", params.category);
-  if (params?.is_available !== undefined) qp.append("is_available", String(params.is_available));
-  if (params?.search) qp.append("search", params.search);
-  const qs = qp.toString();
-  return apiClient.get<MenuItemListResponse>(
-    `/cafeterias/${cafeteriaId}/menu-items${qs ? `?${qs}` : ""}`,
-  );
-}
 
 /** Fetch a single menu item by ID. */
 export async function getMenuItem(
@@ -185,9 +169,106 @@ export async function cancelOrder(orderId: string, reason?: string): Promise<Ord
   return apiClient.post<Order>(`/orders/${orderId}/cancel`, { reason });
 }
 
+// ---- Phase 58 — Customer self-service (Workstream B + E2) ----
+
+/**
+ * Cancel ONE item from a pending order (Workstream E2).
+ * Backend: POST /orders/{id}/partial-cancel — OWNER-ONLY (a non-owner
+ * receives "Order not found"); the order must be PENDING; removing the final
+ * remaining item cancels the whole order; reserved inventory is released and
+ * the order total is recalculated server-side. Returns the updated order.
+ */
+export async function partialCancelItem(
+  orderId: string,
+  itemId: string,
+  reason?: string,
+): Promise<Order> {
+  return apiClient.post<Order>(`/orders/${orderId}/partial-cancel`, {
+    item_id: itemId,
+    reason: reason || null,
+  });
+}
+
+/** Refundable-amount snapshot (GET /refunds/refundable/{order_id}). */
+export interface RefundableAmount {
+  order_id: string;
+  paid_amount: number;
+  total_refunded: number;
+  refundable_amount: number;
+  currency: string;
+}
+
+/** Refund record as returned by the OWNER-facing refund endpoints.
+ * NOTE: the owner endpoint's response does NOT include the admin rejection
+ * reason (that field exists only on the admin refund detail) — rejected
+ * refunds are visible by status only. */
+export interface OrderRefund {
+  id: string;
+  order_id: string;
+  payment_id: string;
+  amount: number;
+  currency: string;
+  status: string; // pending | processing | succeeded | failed | rejected
+  reason: string;
+  reason_note?: string | null;
+  requested_by: string;
+  processed_by?: string | null;
+  provider_reference?: string | null;
+  created_at: string;
+  processed_at?: string | null;
+  updated_at: string;
+}
+
+/**
+ * Check the refundable amount for an order (Workstream B).
+ * Backend: GET /refunds/refundable/{order_id} — OWNER-ONLY. Requires a
+ * succeeded payment; all amounts are in paisa. The backend additionally
+ * enforces the refund deadline (default 72h) when a refund is requested.
+ */
+export async function getRefundableAmount(orderId: string): Promise<RefundableAmount> {
+  return apiClient.get<RefundableAmount>(`/refunds/refundable/${orderId}`);
+}
+
+/**
+ * Submit a refund request (Workstream B).
+ * Backend: POST /refunds?order_id=... — OWNER-ONLY; body
+ * {amount (paisa, >0), reason (backend RefundReason enum), reason_note?
+ * (≤500), idempotency_key (required)}. Idempotent: re-sending the same key
+ * returns the existing refund. On success the refund is PENDING and must be
+ * approved by an admin before the money is returned to the customer.
+ */
+export async function requestRefund(
+  orderId: string,
+  params: {
+    amount: number;
+    reason: RefundReason;
+    reason_note?: string;
+    idempotency_key: string;
+  },
+): Promise<OrderRefund> {
+  return apiClient.post<OrderRefund>(
+    `/refunds?order_id=${encodeURIComponent(orderId)}`,
+    {
+      amount: params.amount,
+      reason: params.reason,
+      reason_note: params.reason_note || null,
+      idempotency_key: params.idempotency_key,
+    },
+  );
+}
+
+/** List an order's refunds (Workstream B). Backend: GET /refunds/order/{id}
+ * — OWNER-ONLY. */
+export async function getOrderRefunds(orderId: string): Promise<OrderRefund[]> {
+  const data = await apiClient.get<{ refunds: OrderRefund[]; total: number }>(
+    `/refunds/order/${orderId}`,
+  );
+  return data.refunds ?? [];
+}
+
 // ---- Notifications ----
 
-interface NotificationListResponse {
+export interface NotificationListResponse {
   items: Notification[];
   total: number;
   unread_count: number;
@@ -213,18 +294,56 @@ export interface NotificationParams {
   limit?: number;
 }
 
-export async function getNotifications(params?: NotificationParams): Promise<Notification[]> {
+export async function getNotificationsPage(
+  params?: NotificationParams,
+): Promise<NotificationListResponse> {
   const queryParams = new URLSearchParams();
   if (params?.unread_only !== undefined) queryParams.append("unread_only", String(params.unread_only));
   if (params?.limit) queryParams.append("limit", String(params.limit));
   const qs = queryParams.toString();
-  const data = await apiClient.get<NotificationListResponse>(
+  return apiClient.get<NotificationListResponse>(
     `/notifications${qs ? `?${qs}` : ""}`,
   );
-  return data.items ?? [];
 }
 
 export async function getUnreadNotificationCount(): Promise<number> {
   const response = await apiClient.get<{ unread_count: number }>("/notifications/unread-count");
   return response.unread_count;
+}
+
+/** Mark one of the current user's notifications as read (Phase 53).
+ * The backend verifies ownership — a foreign notification id returns 404. */
+export async function markNotificationRead(
+  notificationId: string,
+): Promise<MarkReadResponse> {
+  return apiClient.patch<MarkReadResponse>(`/notifications/${notificationId}/read`);
+}
+
+/** Mark all of the current user's unread notifications as read (Phase 53).
+ * Server-side UPDATE is scoped to auth.user.id — no cross-user writes. */
+export async function markAllNotificationsRead(): Promise<MarkAllReadResponse> {
+  return apiClient.patch<MarkAllReadResponse>("/notifications/read-all");
+}
+
+// ---- Favorites ----
+
+interface FavoriteListResponse {
+  favorites: FavoriteResponse[];
+  total: number;
+}
+
+/** List the current user's favorite menu items (user-scoped server-side). */
+export async function getFavorites(): Promise<FavoriteResponse[]> {
+  const data = await apiClient.get<FavoriteListResponse>("/favorites");
+  return data.favorites ?? [];
+}
+
+/** Add a menu item to the current user's favorites. */
+export async function addFavorite(menuItemId: string): Promise<FavoriteResponse> {
+  return apiClient.post<FavoriteResponse>("/favorites", { menu_item_id: menuItemId });
+}
+
+/** Remove a menu item from the current user's favorites. */
+export async function removeFavorite(menuItemId: string): Promise<void> {
+  await apiClient.delete<void>(`/favorites/${menuItemId}`);
 }

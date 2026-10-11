@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.modules.users.models import AccountStatus, Role, UserCategory
 
@@ -183,6 +183,30 @@ class PasswordChangeRequest(BaseModel):
         return v
 
 
+# ---- Profile Update (Phase 55) ----
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Update the authenticated user's own profile name fields.
+
+    Phase 55 — self-service profile editing. Strictly self-scoped:
+    first/last name only; email, university ID, role, and status are
+    immutable through this endpoint.
+    """
+
+    first_name: str = Field(..., min_length=1, max_length=255)
+    last_name: str = Field(..., min_length=1, max_length=255)
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def strip_and_validate_name(cls, v: str) -> str:
+        """Trim whitespace; reject empty/whitespace-only names."""
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("Name must not be empty")
+        return stripped
+
+
 # ---- Session/Token ----
 
 
@@ -225,8 +249,26 @@ class UserSummary(BaseModel):
     status: AccountStatus
     email_verified: bool
     created_at: datetime
+    # Phase 47 — cafeteria assignment surfaced for admin member/staff
+    # management. Optional so every existing response shape stays valid;
+    # populated only by the admin users endpoints (from the authoritative
+    # CafeteriaAssignment relationship), null elsewhere.
+    cafeteria_id: str | None = None
+    cafeteria_name: str | None = None
+    updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class UserListResponse(BaseModel):
+    """Paginated user list (Phase 55).
+
+    Returned by GET /users/ when limit/offset pagination is requested;
+    omitting both params preserves the original bare-list response.
+    """
+
+    users: list[UserSummary]
+    total: int
 
 
 class AuthResponse(BaseModel):
@@ -248,16 +290,14 @@ class CreateUserByAdminRequest(BaseModel):
     role: Role
     cafeteria_id: str | None = None  # Required for staff/manager roles
 
-    @field_validator("cafeteria_id")
-    @classmethod
-    def validate_cafeteria_required(cls, v, info):
+    @model_validator(mode="after")
+    def validate_cafeteria_required(self):
         if (
-            "role" in info.data
-            and info.data["role"] in (Role.CAFETERIA_STAFF, Role.CAFETERIA_MANAGER)
-            and v is None
+            self.role in (Role.CAFETERIA_STAFF, Role.CAFETERIA_MANAGER)
+            and self.cafeteria_id is None
         ):
             raise ValueError("cafeteria_id is required for staff and manager roles")
-        return v
+        return self
 
 
 class ChangeUserRoleRequest(BaseModel):
@@ -265,6 +305,15 @@ class ChangeUserRoleRequest(BaseModel):
 
     role: Role
     cafeteria_id: str | None = None  # Required for staff/manager roles
+
+    @model_validator(mode="after")
+    def validate_cafeteria_required(self):
+        if (
+            self.role in (Role.CAFETERIA_STAFF, Role.CAFETERIA_MANAGER)
+            and self.cafeteria_id is None
+        ):
+            raise ValueError("cafeteria_id is required for staff and manager roles")
+        return self
 
 
 class SuspendUserRequest(BaseModel):
@@ -322,3 +371,14 @@ class CreateUserResponse(BaseModel):
     temporary_password: str
 
     model_config = {"from_attributes": True}
+
+
+class AccountRecoveryResponse(BaseModel):
+    """Response for admin account recovery (Phase 55).
+
+    ``temporary_password`` is returned exactly once so the admin can
+    hand it to the user through a secure channel; it is never logged.
+    """
+
+    message: str
+    temporary_password: str

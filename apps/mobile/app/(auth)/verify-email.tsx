@@ -145,7 +145,12 @@ export default function VerifyEmailScreen() {
           <Text style={[styles.subtitle, { color: tcSec }]}>
             We sent a 6-digit verification code to
           </Text>
-          <Text style={[styles.email, { color: brand }]}>{email}</Text>
+          {/* Guard the email line: an empty `email` param otherwise renders a
+              stray empty <Text> node (React Native "Text strings must be
+              rendered within a <Text>" dev warning). */}
+          {email ? (
+            <Text style={[styles.email, { color: brand }]}>{email}</Text>
+          ) : null}
         </View>
 
         {/* OTP Input */}

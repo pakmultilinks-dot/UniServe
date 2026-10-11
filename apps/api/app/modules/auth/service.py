@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditEventType, log_audit_event
@@ -321,6 +321,53 @@ class AuthService:
             )
             await independent_session.commit()
 
+    async def _persist_credential_state(
+        self, user_id: str, values: dict[str, Any]
+    ) -> None:
+        """Persist user-credential security state through an independent transaction.
+
+        Same rationale as ``_persist_challenge_state`` (Phase 38): a failed
+        password/PIN login raises, and ``get_db`` rolls the request session
+        back, discarding a flush-only increment of the failed-attempt counter
+        and any lockout timestamp. The brute-force lockout control would
+        therefore be unreachable in the production runtime. These counters are
+        applied here through a short-lived independent session using a single
+        atomic UPDATE, so they survive across separate HTTP requests
+        regardless of the request outcome.
+        """
+        async with async_session_factory() as independent_session:
+            await independent_session.execute(
+                update(UserCredential).where(UserCredential.user_id == user_id).values(**values)
+            )
+            await independent_session.commit()
+
+    async def _persist_audit_event(
+        self,
+        event_type: AuditEventType,
+        user_id: str | None,
+        description: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        """Persist a security audit event through an independent transaction.
+
+        Failed-login / failed-PIN audit events are written on a path that
+        raises, so the request-session write is rolled back and the event is
+        lost (confirmed: no ``login_failed`` rows survive in production). The
+        event is re-emitted here on an independent committed session so the
+        security audit trail reflects real failed-authentication activity.
+        """
+        async with async_session_factory() as independent_session:
+            await log_audit_event(
+                session=independent_session,
+                event_type=event_type,
+                user_id=user_id,
+                description=description,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            await independent_session.commit()
+
     async def verify_otp(
         self,
         user_id: str,
@@ -442,10 +489,11 @@ class AuthService:
         if credential.password_locked_until and _utcnow() < _ensure_aware_nn(
             credential.password_locked_until
         ):
-            await log_audit_event(
-                session=self.db,
-                event_type=AuditEventType.LOGIN_FAILED,
-                user_id=user.id,
+            # Persist the audit event independently: this branch raises, so a
+            # request-session write would be rolled back and lost (Phase 63).
+            await self._persist_audit_event(
+                AuditEventType.LOGIN_FAILED,
+                user.id,
                 description="Login blocked — account temporarily locked",
                 ip_address=ip_address,
                 user_agent=user_agent,
@@ -463,38 +511,49 @@ class AuthService:
 
         # Verify password
         if not verify_password(password, credential.password_hash):
-            # Track failed attempt
-            credential.password_failed_attempts += 1
+            # Track failed attempt. The increment (and any lockout timestamp)
+            # must survive the request rollback: get_db rolls the request
+            # session back when this branch raises, so a flush-only update
+            # would be discarded and the LOGIN_MAX_ATTEMPTS lockout would
+            # never engage in the production runtime. Persist it through an
+            # independent committed transaction (Phase 63).
+            new_attempts = credential.password_failed_attempts + 1
+            locked_until: datetime | None = None
+            persist_values: dict[str, Any] = {
+                "password_failed_attempts": new_attempts
+            }
 
             # Lock account if max attempts exceeded
-            if credential.password_failed_attempts >= settings.LOGIN_MAX_ATTEMPTS:
-                credential.password_locked_until = datetime.now(UTC) + timedelta(
+            if new_attempts >= settings.LOGIN_MAX_ATTEMPTS:
+                locked_until = datetime.now(UTC) + timedelta(
                     minutes=settings.LOGIN_LOCKOUT_MINUTES
                 )
-                await log_audit_event(
-                    session=self.db,
-                    event_type=AuditEventType.LOGIN_FAILED,
-                    user_id=user.id,
-                    description=f"Account locked after {credential.password_failed_attempts} failed attempts",
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                )
+                persist_values["password_locked_until"] = locked_until
                 logger.warning(
                     "Account locked due to failed login attempts",
                     user_id=user.id,
-                    attempts=credential.password_failed_attempts,
+                    attempts=new_attempts,
                 )
 
-            # Log failed attempt
-            await log_audit_event(
-                session=self.db,
-                event_type=AuditEventType.LOGIN_FAILED,
-                user_id=user.id,
+            await self._persist_credential_state(user.id, persist_values)
+
+            # Persist the audit trail independently as well (same rollback
+            # rationale) so failed-authentication activity is recorded.
+            if locked_until is not None:
+                await self._persist_audit_event(
+                    AuditEventType.LOGIN_FAILED,
+                    user.id,
+                    description=f"Account locked after {new_attempts} failed attempts",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            await self._persist_audit_event(
+                AuditEventType.LOGIN_FAILED,
+                user.id,
                 description="Invalid password",
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
-            await self.db.flush()
             raise AuthenticationError("Invalid email or password")
 
         # Reset failed attempts on successful login
@@ -573,30 +632,40 @@ class AuthService:
 
         # Verify PIN
         if not verify_pin(pin, credential.pin_hash):
-            credential.pin_failed_attempts += 1
+            # Persist the failed-attempt counter (and any lockout) through an
+            # independent committed transaction: this branch raises, and
+            # get_db rolls the request session back, so a flush-only update
+            # would be discarded and the PIN_MAX_FAILED_ATTEMPTS lockout
+            # would never engage (Phase 63 — same defect class as the
+            # password-login path, fixed for OTP in Phase 38).
+            new_pin_attempts = credential.pin_failed_attempts + 1
+            pin_persist_values: dict[str, Any] = {
+                "pin_failed_attempts": new_pin_attempts
+            }
 
             # Check if should lock
-            if credential.pin_failed_attempts >= settings.PIN_MAX_FAILED_ATTEMPTS:
-                credential.pin_locked_until = datetime.now(UTC) + timedelta(
+            if new_pin_attempts >= settings.PIN_MAX_FAILED_ATTEMPTS:
+                pin_persist_values["pin_locked_until"] = datetime.now(UTC) + timedelta(
                     minutes=settings.PIN_LOCKOUT_MINUTES
-                )
-                await log_audit_event(
-                    session=self.db,
-                    event_type=AuditEventType.PIN_LOCKED,
-                    user_id=user.id,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
                 )
                 logger.warning(
                     "PIN locked due to failed attempts",
                     user_id=user.id,
-                    attempts=credential.pin_failed_attempts,
+                    attempts=new_pin_attempts,
                 )
 
-            await log_audit_event(
-                session=self.db,
-                event_type=AuditEventType.PIN_LOGIN_FAILED,
-                user_id=user.id,
+            await self._persist_credential_state(user.id, pin_persist_values)
+
+            if new_pin_attempts >= settings.PIN_MAX_FAILED_ATTEMPTS:
+                await self._persist_audit_event(
+                    AuditEventType.PIN_LOCKED,
+                    user.id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            await self._persist_audit_event(
+                AuditEventType.PIN_LOGIN_FAILED,
+                user.id,
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
@@ -1066,3 +1135,118 @@ class AuthService:
             }
             for s in sessions
         ]
+
+    # ---- Profile Update (Phase 55) ----
+
+    async def update_profile(
+        self,
+        *,
+        user_id: str,
+        first_name: str,
+        last_name: str,
+    ) -> User:
+        """Update the authenticated user's own profile name fields.
+
+        Phase 55 — self-service profile editing. Strictly self-scoped:
+        only first_name and last_name may change; email, university ID,
+        role, status, and credentials are intentionally not editable
+        here. No audit event is written by design (confirmed Phase 55
+        decision — no new PostgreSQL enum value was added), and no
+        sensitive values are logged.
+        """
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise ValidationError("User not found")
+
+        user.first_name = first_name
+        user.last_name = last_name
+        await self.db.flush()
+        await self.db.refresh(user)
+        return user
+
+
+# ---------------------------------------------------------------------------
+# Session maintenance — Phase 60 (Workstream D)
+# ---------------------------------------------------------------------------
+
+
+async def reap_sessions(
+    db: AsyncSession,
+    *,
+    revoked_grace_days: int = 7,
+    inactive_grace_days: int = 1,
+    protect_session_id: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Delete session rows that can no longer authenticate anything.
+
+    Why: ``user_sessions`` has no automatic expiry (see the model
+    docstring — users manage their own sessions), so rows accumulate
+    forever. This function removes only rows that are **behaviorally
+    dead** — it never changes token semantics and never touches
+    sessions that could still refresh:
+
+    * **Revoked residue** — ``revoked_at`` set more than
+      ``revoked_grace_days`` ago. A revoked session already fails
+      refresh (``refresh_tokens`` requires ``is_active``), so the row
+      is pure audit residue after the grace window. The grace window
+      exists so recently-revoked rows stay queryable for support
+      ("logged out 2 hours ago" must still be visible).
+
+    * **Dormant active residue** — ``is_active`` but
+      ``last_activity_at`` older than
+      ``JWT_REFRESH_TOKEN_EXPIRE_DAYS + inactive_grace_days``. The
+      refresh JWT for such a session has definitively expired (its
+      ``exp`` is bounded by ``JWT_REFRESH_TOKEN_EXPIRE_DAYS``), so a
+      refresh attempt can only fail — the row is unusable residue.
+      ``inactive_grace_days`` provides a buffer beyond the hard JWT
+      lifetime.
+
+    ``protect_session_id`` excludes one session from deletion (useful
+    for scheduled runs that must never reap the operator's own current
+    session). With ``dry_run=True`` only counts matching rows are
+    returned — nothing is deleted (same predicates, zero drift between
+    preview and apply). The caller must commit; this function only
+    flushes.
+    """
+    now = datetime.now(UTC)
+    revoked_cutoff = now - timedelta(days=revoked_grace_days)
+    inactive_cutoff = now - timedelta(
+        days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS + inactive_grace_days
+    )
+
+    revoked_filters: list[Any] = [
+        UserSession.revoked_at.is_not(None),
+        UserSession.revoked_at < revoked_cutoff,
+    ]
+    stale_active_filters: list[Any] = [
+        UserSession.is_active == True,  # noqa: E712 — boolean column
+        UserSession.last_activity_at < inactive_cutoff,
+        UserSession.revoked_at.is_(None),
+    ]
+    if protect_session_id is not None:
+        revoked_filters.append(UserSession.id != protect_session_id)
+        stale_active_filters.append(UserSession.id != protect_session_id)
+
+    if dry_run:
+        revoked_deleted = (
+            await db.execute(select(func.count()).where(*revoked_filters))
+        ).scalar_one()
+        stale_deleted = (
+            await db.execute(select(func.count()).where(*stale_active_filters))
+        ).scalar_one()
+    else:
+        revoked_result = await db.execute(delete(UserSession).where(*revoked_filters))
+        stale_result = await db.execute(
+            delete(UserSession).where(*stale_active_filters)
+        )
+        revoked_deleted = revoked_result.rowcount or 0
+        stale_deleted = stale_result.rowcount or 0
+
+    return {
+        "revoked_deleted": revoked_deleted,
+        "stale_active_deleted": stale_deleted,
+        "total_deleted": revoked_deleted + stale_deleted,
+        "dry_run": dry_run,
+    }

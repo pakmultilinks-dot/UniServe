@@ -26,7 +26,8 @@ from app.modules.notifications.service import emit_refund_notification
 from app.modules.orders.models import Order
 from app.modules.payments.models import Payment, PaymentStatus
 from app.modules.refunds.models import Refund, RefundEvent, RefundReason, RefundStatus
-from app.modules.users.models import CafeteriaAssignment, Role
+from app.modules.refunds.processors.base import RefundProcessingResult
+from app.modules.users.models import CafeteriaAssignment, Role, User
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -203,15 +204,30 @@ class RefundService:
         # Load payment for provider reference
         payment = await self._get_payment(refund.payment_id)
 
-        # Call processor
-        result = await self.processor.create_refund(
-            refund_id=refund.id,
-            payment_provider_reference=payment.provider_reference or "",
-            amount=refund.amount,
-            currency=refund.currency,
-            idempotency_key=refund.idempotency_key,
-            reason=refund.reason.value,
-        )
+        # Cash ("pay at counter") payments were never captured by an online
+        # provider, so there is no provider reference to refund against.
+        # They are settled manually by staff handing cash back — record the
+        # refund as succeeded with a manual reference instead of routing it
+        # through the provider processor (Phase 8 D7).
+        # Scope is strictly cash: an ONLINE payment missing its provider
+        # reference is a data anomaly and must still fail closed in the
+        # processor (never fabricate success).
+        if payment.provider_name == "cash":
+            result = RefundProcessingResult(
+                success=True,
+                provider_reference=f"manual_cash_{refund.id[:12]}",
+                provider_metadata={"settlement": "manual", "method": payment.provider_name or "cash"},
+            )
+        else:
+            # Call processor
+            result = await self.processor.create_refund(
+                refund_id=refund.id,
+                payment_provider_reference=payment.provider_reference or "",
+                amount=refund.amount,
+                currency=refund.currency,
+                idempotency_key=refund.idempotency_key,
+                reason=refund.reason.value,
+            )
 
         if result.success:
             refund.status = RefundStatus.SUCCEEDED
@@ -292,12 +308,197 @@ class RefundService:
         return refund
 
     # ===================================================================
+    # Reject refund (admin/manager action) — Phase 51
+    # ===================================================================
+
+    async def reject_refund(
+        self,
+        *,
+        refund_id: str,
+        rejected_by_user_id: str,
+        rejected_by_role: Role,
+        rejection_reason: str,
+    ) -> Refund:
+        """Reject a pending refund with a persisted reason.
+
+        Authorization mirrors process_refund:
+        - UNIVERSITY_ADMIN can reject any refund
+        - CAFETERIA_MANAGER can reject refunds for their assigned cafeteria
+        - Others are denied
+
+        State rules: only PENDING refunds can be rejected. Rejected refunds
+        are terminal for this workflow — they can no longer be processed
+        or rejected again. No money movement occurs on rejection.
+        """
+        refund = await self._get_refund(refund_id)
+
+        reason = (rejection_reason or "").strip()
+        if len(reason) < 10:
+            raise ValidationError(
+                "Rejection reason must be at least 10 characters long"
+            )
+
+        if refund.status != RefundStatus.PENDING:
+            raise ValidationError(
+                f"Cannot reject refund in {refund.status.value} status"
+            )
+
+        # Load order for cafeteria scope check
+        order = await self._get_order(refund.order_id)
+
+        # Authorization check (same policy as process_refund)
+        if rejected_by_role == Role.UNIVERSITY_ADMIN:
+            pass  # Admin can reject any refund
+        elif rejected_by_role == Role.CAFETERIA_MANAGER:
+            await self._verify_cafeteria_assignment(
+                rejected_by_user_id, order.cafeteria_id
+            )
+        else:
+            raise AuthorizationError("You do not have permission to reject refunds")
+
+        refund.status = RefundStatus.REJECTED
+        refund.rejection_reason = reason
+        refund.processed_by = rejected_by_user_id
+        refund.processed_at = datetime.now(UTC)
+
+        event = RefundEvent(
+            refund_id=refund.id,
+            event_type="refund_rejected",
+            actor_id=rejected_by_user_id,
+            notes=f"Reason: {reason}",
+        )
+        self.db.add(event)
+
+        # Existing notification integration (refund event → in-app notification)
+        await emit_refund_notification(
+            self.db,
+            refund_id=refund.id,
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            event_type="refund_rejected",
+            source_event_id=event.id,
+            cafeteria_id=order.cafeteria_id,
+        )
+
+        await self.db.flush()
+        logger.info(
+            "refund_rejected",
+            refund_id=refund.id,
+            rejected_by=rejected_by_user_id,
+        )
+        return refund
+
+    # ===================================================================
     # Retrieval
     # ===================================================================
 
     async def get_refund(self, refund_id: str) -> Refund:
         """Get a refund by ID."""
         return await self._get_refund(refund_id)
+
+    async def build_admin_response(self, refund: Refund) -> Any:
+        """Build the enriched admin refund view (student/order/payment context)."""
+        from app.modules.cafeterias.models import Cafeteria
+        from app.modules.refunds.schemas import (
+            RefundAdminResponse,
+            RefundOrderContext,
+            RefundPaymentContext,
+            RefundStudentContext,
+        )
+
+        user = await self._get_user(refund.user_id)
+        order = await self._get_order(refund.order_id)
+        payment = await self._get_payment(refund.payment_id)
+
+        cafeteria_name: str | None = None
+        if order.cafeteria_id:
+            result = await self.db.execute(
+                select(Cafeteria).where(Cafeteria.id == order.cafeteria_id)
+            )
+            cafeteria = result.scalar_one_or_none()
+            cafeteria_name = cafeteria.name if cafeteria else None
+
+        return RefundAdminResponse(
+            id=refund.id,
+            order_id=refund.order_id,
+            payment_id=refund.payment_id,
+            user_id=refund.user_id,
+            amount=refund.amount,
+            currency=refund.currency,
+            status=refund.status.value,
+            reason=refund.reason.value,
+            reason_note=refund.reason_note,
+            rejection_reason=refund.rejection_reason,
+            requested_by=refund.requested_by,
+            processed_by=refund.processed_by,
+            provider_reference=refund.provider_reference,
+            created_at=refund.created_at,
+            processed_at=refund.processed_at,
+            updated_at=refund.updated_at,
+            student=RefundStudentContext(
+                id=user.id,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                university_email=user.university_email,
+                university_id=user.university_id,
+                role=user.role.value,
+            ),
+            order=RefundOrderContext(
+                id=order.id,
+                order_number=order.order_number,
+                status=order.status.value,
+                payment_method=order.payment_method.value,
+                total_amount=order.total_amount,
+                currency=order.currency,
+                order_date=order.order_date,
+                cafeteria_id=order.cafeteria_id,
+                cafeteria_name=cafeteria_name,
+                created_at=order.created_at,
+            ),
+            payment=RefundPaymentContext(
+                id=payment.id,
+                status=payment.status.value,
+                provider_name=payment.provider_name,
+                provider_reference=payment.provider_reference,
+                amount=payment.amount,
+                currency=payment.currency,
+            ),
+        )
+
+    async def list_admin_refunds(
+        self,
+        *,
+        cafeteria_id: str | None = None,
+        status: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Any], int]:
+        """List refunds with admin context and a real total count."""
+        base = select(Refund)
+        if cafeteria_id:
+            base = base.join(Order, Refund.order_id == Order.id).where(
+                Order.cafeteria_id == cafeteria_id
+            )
+        if status:
+            base = base.where(Refund.status == status)
+
+        count_result = await self.db.execute(
+            select(func.count()).select_from(base.subquery())
+        )
+        total = count_result.scalar() or 0
+
+        result = await self.db.execute(
+            base.order_by(Refund.created_at.desc()).limit(limit).offset(offset)
+        )
+        refunds = list(result.scalars().all())
+        enriched = [await self.build_admin_response(r) for r in refunds]
+        return enriched, total
+
+    async def get_admin_refund(self, refund_id: str) -> Any:
+        """Get one refund with full admin context (404 if missing)."""
+        refund = await self._get_refund(refund_id)
+        return await self.build_admin_response(refund)
 
     async def get_order_refunds(self, order_id: str) -> list[Refund]:
         """Get all refunds for an order."""
@@ -352,6 +553,13 @@ class RefundService:
     # ===================================================================
     # Private helpers
     # ===================================================================
+
+    async def _get_user(self, user_id: str) -> User:
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise NotFoundException("User", user_id)
+        return user
 
     async def _get_order(self, order_id: str) -> Order:
         result = await self.db.execute(select(Order).where(Order.id == order_id))

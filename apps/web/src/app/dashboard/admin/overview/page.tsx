@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { getAdministrationOverview, getCafeterias } from "@/lib/api";
+import { getAdministrationOverview, getCafeterias, getApiErrorInfo } from "@/lib/api";
+import type { ApiErrorInfo } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LoadErrorState } from "@/components/ui/LoadErrorState";
 import type { Cafeteria } from "@uniserve/shared-types";
 
 interface OverviewData {
@@ -15,7 +17,8 @@ interface OverviewData {
   orders_by_status: Record<string, number>;
   total_revenue: number;
   active_cafeterias: number;
-  pending_refunds: number;
+  // Phase 55 — honest label: refunds pending/processing beyond 7 days.
+  overdue_refunds: number;
   total_menu_items: number;
 }
 
@@ -27,6 +30,11 @@ export default function AdminOverviewPage() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [loading, setLoading] = useState(true);
+  /* Phase 46 — explicit request-failure states (see LoadErrorState). A
+     failed request must never masquerade as missing data. */
+  const [loadError, setLoadError] = useState<ApiErrorInfo | null>(null);
+  const [cafeteriasError, setCafeteriasError] = useState<ApiErrorInfo | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (user && !isAdmin) {
@@ -34,14 +42,22 @@ export default function AdminOverviewPage() {
       return;
     }
     if (!isAdmin) return;
-    Promise.all([
-      getAdministrationOverview().catch(() => null),
-      getCafeterias().catch(() => []),
-    ]).then(([overviewData, cafData]) => {
-      setOverview(overviewData);
-      setCafeterias(cafData);
-    }).finally(() => setLoading(false));
-  }, [user, isAdmin, router]);
+    // Phase 46 — each request owns its failure state; no more
+    // catch(() => null / []) that silently fabricates missing data.
+    getAdministrationOverview()
+      .then((data) => {
+        setOverview(data);
+        setLoadError(null);
+      })
+      .catch((err) => setLoadError(getApiErrorInfo(err)))
+      .finally(() => setLoading(false));
+    getCafeterias()
+      .then((data) => {
+        setCafeterias(data);
+        setCafeteriasError(null);
+      })
+      .catch((err) => setCafeteriasError(getApiErrorInfo(err)));
+  }, [user, isAdmin, router, reloadKey]);
 
   // getAdministrationOverview (lib/api.ts) already converts paisa -> rupees
   // in exactly one layer; do not divide by 100 again here.
@@ -62,6 +78,12 @@ export default function AdminOverviewPage() {
             <div key={i} className="h-24 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl skeleton" />
           ))}
         </div>
+      ) : loadError ? (
+        <LoadErrorState
+          error={loadError}
+          subject="administration overview"
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
       ) : overview ? (
         <>
           {/* Summary cards */}
@@ -101,6 +123,19 @@ export default function AdminOverviewPage() {
 
           {/* Cafeteria cards */}
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Cafeterias</h3>
+          {cafeteriasError ? (
+            <LoadErrorState
+              compact
+              error={cafeteriasError}
+              subject="cafeterias"
+              onRetry={() => setReloadKey((k) => k + 1)}
+              className="border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10 rounded-xl"
+            />
+          ) : cafeterias.length === 0 ? (
+            <p className="text-sm text-[var(--text-muted)] mb-6">
+              No cafeterias to display.
+            </p>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             {cafeterias.map((c) => (
               <div key={c.id} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 shadow-card">
@@ -114,16 +149,22 @@ export default function AdminOverviewPage() {
               </div>
             ))}
           </div>
+          )}
 
-          {/* Pending refunds alert */}
-          {overview.pending_refunds > 0 && (
+          {/* Phase 55 — overdue refunds alert (honest wording: the count is
+              refunds pending/processing for more than 7 days, not all
+              pending refunds) */}
+          {overview.overdue_refunds > 0 && (
             <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 flex items-center gap-3">
               <svg className="w-6 h-6 text-orange-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
               </svg>
               <div>
                 <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
-                  {overview.pending_refunds} pending refund{overview.pending_refunds !== 1 ? "s" : ""} requiring review
+                  {overview.overdue_refunds} overdue refund{overview.overdue_refunds !== 1 ? "s" : ""}
+                </p>
+                <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+                  Refunds pending or processing for more than 7 days that need review.
                 </p>
                 <button
                   onClick={() => router.push("/dashboard/admin/refunds")}

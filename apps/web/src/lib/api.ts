@@ -9,6 +9,7 @@
 
 import {
   ApiClient,
+  ApiClientError,
   type TokenProvider,
   type TokenPair,
   type LoginRequest,
@@ -22,6 +23,18 @@ import {
   type PasswordResetRequest,
   type PasswordResetConfirm,
   type SessionListResponse,
+  type AdminCreateUserRequest,
+  type AdminCreateUserResponse,
+  type AdminChangeRoleRequest,
+  type AdminSuspendRequest,
+  type SalesReportResponse,
+  type SalesDailyResponse,
+  type SalesByCafeteriaResponse,
+  type OrderSummaryResponse,
+  type OrderVolumeResponse,
+  type CancellationRateResponse,
+  type CafeteriaPopularItemsResponse,
+  type CafeteriaPerformanceResponse,
 } from "@uniserve/shared-types";
 
 // ---- Web Token Storage ----
@@ -128,6 +141,22 @@ export async function getCurrentUser(): Promise<User> {
   return apiClient.get<User>("/auth/me");
 }
 
+/** P3-3 — return the cafeteria IDs the current staff/manager user is
+ * assigned to (empty for admin / students / faculty). Used to default
+ * cafeteria selectors to the user's actual assignment. */
+export async function getMyCafeterias(): Promise<string[]> {
+  try {
+    const response = await apiClient.get<{ cafeteria_ids: string[] }>(
+      "/auth/me/cafeterias",
+    );
+    return response.cafeteria_ids ?? [];
+  } catch {
+    // Older deployments or unexpected errors — fall back to no assignment
+    // info so pages behave exactly as before (first cafeteria selected).
+    return [];
+  }
+}
+
 export async function logout(): Promise<void> {
   try {
     await apiClient.post("/auth/logout");
@@ -183,18 +212,123 @@ export async function getSessions(): Promise<SessionListResponse> {
   return apiClient.get<SessionListResponse>("/auth/sessions");
 }
 
+// ---- Phase 55 — Admin Self-Service & Settings Foundation ----
+
+export interface AuditEvent {
+  id: number;
+  event_type: string;
+  user_id: string | null;
+  user_name: string | null;
+  description: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface AuditEventListResponse {
+  events: AuditEvent[];
+  total: number;
+}
+
+export interface UserListResponse {
+  users: User[];
+  total: number;
+}
+
+export interface AccountRecoveryResponse {
+  message: string;
+  temporary_password: string;
+}
+
+/** Sign out of ALL sessions, including the current one. The server
+ * revokes every refresh token; local state is always cleared so the
+ * client cannot keep using a revoked access token after the refresh. */
+export async function logoutAll(): Promise<{ message: string }> {
+  try {
+    return await apiClient.post<{ message: string }>("/auth/logout-all");
+  } finally {
+    webTokenProvider.clearTokens();
+  }
+}
+
+/** Change the authenticated user's password (current_password required). */
+export async function changePassword(data: {
+  current_password: string;
+  new_password: string;
+}): Promise<{ message: string }> {
+  return apiClient.post<{ message: string }>("/auth/password/change", data);
+}
+
+/** P55 — profile self-update (first_name/last_name only, self-scoped).
+ * Returns the updated user; no sensitive values are echoed. */
+export async function updateProfile(data: {
+  first_name?: string;
+  last_name?: string;
+}): Promise<User> {
+  return apiClient.patch<User>("/auth/me", data);
+}
+
+/** P55 — admin audit log (University Admin only, newest first). */
+export async function getAuditEvents(params?: {
+  limit?: number;
+  offset?: number;
+  event_type?: string;
+}): Promise<AuditEventListResponse> {
+  const query = new URLSearchParams();
+  if (params?.limit != null) query.set("limit", String(params.limit));
+  if (params?.offset != null) query.set("offset", String(params.offset));
+  if (params?.event_type) query.set("event_type", params.event_type);
+  const qs = query.toString();
+  return apiClient.get<AuditEventListResponse>(
+    `/administration/audit-events${qs ? `?${qs}` : ""}`,
+  );
+}
+
+/** P55 — admin account recovery: resets the credential to a one-time
+ * temporary password, clears lockout counters, reactivates suspended
+ * accounts. `university_id` is an identity confirmation required by the
+ * API; the temporary password is returned exactly once. */
+export async function recoverUser(
+  userId: string,
+  data: { university_id: string; reason?: string },
+): Promise<AccountRecoveryResponse> {
+  return apiClient.post<AccountRecoveryResponse>(
+    `/users/${userId}/recover`,
+    data,
+  );
+}
+
 // Re-export shared types for convenience
-export { ApiClientError } from "@uniserve/shared-types";
+export { ApiClientError };
 
 // ---- Dashboard Data API Functions ----
 
-export async function getCafeterias(): Promise<
-  import("@uniserve/shared-types").Cafeteria[]
-> {
+// Phase 56 — optional is_active filter. Backend GET /cafeterias accepts
+// ?is_active=true|false; omitting the param preserves the historical
+// "all cafeterias" behaviour (admin management + historical reports).
+// Operational selectors (menu, inventory, orders, staff, home ordering,
+// broadcast targeting) call this with { isActive: true }.
+export async function getCafeterias(options?: {
+  isActive?: boolean;
+}): Promise<import("@uniserve/shared-types").Cafeteria[]> {
+  const qs =
+    options?.isActive !== undefined
+      ? `?is_active=${String(options.isActive)}`
+      : "";
   const response = await apiClient.get<
     { cafeterias: import("@uniserve/shared-types").Cafeteria[] }
-  >("/cafeterias");
+  >(`/cafeterias${qs}`);
   return response.cafeterias ?? [];
+}
+
+/** 48A — create a cafeteria (University Admin only, enforced by the API). */
+export async function createCafeteria(
+  data: import("@uniserve/shared-types").CafeteriaCreate,
+): Promise<import("@uniserve/shared-types").Cafeteria> {
+  return apiClient.post<import("@uniserve/shared-types").Cafeteria>(
+    "/cafeterias/",
+    data,
+  );
 }
 
 export async function getOrders(params?: {
@@ -239,11 +373,20 @@ export async function getUnreadNotificationCount(): Promise<
 // Orders — Staff/Manager queue
 export async function getCafeteriaOrders(
   cafeteriaId: string,
-  params?: { status?: string; order_date?: string },
+  params?: {
+    status?: string;
+    order_date?: string;
+    // Phase 54 — queue pagination (backend GET /orders/cafeteria/{id});
+    // omit both to preserve the original unpaginated behaviour.
+    limit?: number;
+    offset?: number;
+  },
 ) {
   const query = new URLSearchParams();
   if (params?.status) query.set("status", params.status);
   if (params?.order_date) query.set("order_date", params.order_date);
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.offset !== undefined) query.set("offset", String(params.offset));
   const qs = query.toString();
   return apiClient.get<{ orders: any[]; total: number }>(
     `/orders/cafeteria/${cafeteriaId}${qs ? `?${qs}` : ""}`,
@@ -277,8 +420,43 @@ export async function delayOrder(
   });
 }
 
-export async function managerCancelOrder(orderId: string, reason: string) {
-  return apiClient.post<any>(`/orders/${orderId}/manager-cancel`, { reason });
+// Phase 54 — Manager Cancel Order (backend: POST /orders/{id}/manager-cancel).
+// Backend RBAC: cafeteria_manager only, assigned cafeteria only; eligible
+// statuses pending/preparing; the cancellation reason is OPTIONAL server-side
+// (OrderCancelRequest.reason: str | None) — no reason field is collected.
+export async function managerCancelOrder(orderId: string, reason?: string) {
+  return apiClient.post<any>(`/orders/${orderId}/manager-cancel`, {
+    reason: reason ?? null,
+  });
+}
+
+// ── Phase 58 (Workstream E) ──────────────────────────────────────────────
+
+// Close Day — manager-only sudden cafeteria close (backend:
+// POST /orders/cafeteria/{id}/close). Backend RBAC: cafeteria_manager only,
+// assigned cafeteria only; cancels PENDING + PREPARING orders, releases
+// their inventory reservations, and sets the cafeteria operational_status
+// to CLOSED. Returns the list of cancelled orders (OrderListResponse:
+// { orders, total }) — an empty list means nothing was open to cancel.
+export async function closeCafeteriaDay(
+  cafeteriaId: string,
+  notes?: string,
+): Promise<{ orders: Array<{ id: string; order_number: string }>; total: number }> {
+  return apiClient.post(`/orders/cafeteria/${cafeteriaId}/close`, {
+    notes: notes || null,
+  });
+}
+
+// Computed ETA — backend: GET /orders/{id}/eta (owner, admin, or assigned
+// cafeteria manager/staff; server-side authorization is enforced — a
+// non-owner non-assigned caller receives "Order not found"). eta_minutes is
+// computed by the backend from live cafeteria preparation times.
+export async function getOrderEta(orderId: string): Promise<{
+  order_id: string;
+  eta_minutes: number;
+  pickup_deadline?: string | null;
+}> {
+  return apiClient.get(`/orders/${orderId}/eta`);
 }
 
 export async function rejectOrder(
@@ -330,6 +508,15 @@ export async function updateMenuItem(
   );
 }
 
+/** Phase 56 — soft-delete a menu item (admin-only on the backend).
+ * The item flips to inactive/unavailable; historical daily menus, order
+ * snapshots and reports are unaffected. */
+export async function deleteMenuItem(cafeteriaId: string, itemId: string) {
+  return apiClient.delete<any>(
+    `/cafeterias/${cafeteriaId}/menu-items/${itemId}`,
+  );
+}
+
 // Daily menus
 export async function getDailyMenus(cafeteriaId: string, status?: string) {
   const qs = status ? `?status=${status}` : "";
@@ -338,16 +525,24 @@ export async function getDailyMenus(cafeteriaId: string, status?: string) {
   );
 }
 
-export async function getTodayMenu(cafeteriaId: string) {
-  return apiClient.get<any>(
-    `/cafeterias/${cafeteriaId}/daily-menus/today`,
-  );
-}
-
 export async function createDailyMenu(cafeteriaId: string, menuDate: string) {
   return apiClient.post<any>(
     `/cafeterias/${cafeteriaId}/daily-menus/`,
     { menu_date: menuDate },
+  );
+}
+
+/** Phase 56 — copy a previous day's menu into a new draft.
+ * Backend creates a NEW draft on the target date carrying over junction
+ * metadata; an occupied target date produces an explicit 409 conflict —
+ * copying never silently overwrites. Inactive menu items are skipped. */
+export async function copyDailyMenu(
+  cafeteriaId: string,
+  data: { source_date: string; target_date: string },
+) {
+  return apiClient.post<any>(
+    `/cafeterias/${cafeteriaId}/daily-menus/copy`,
+    data,
   );
 }
 
@@ -365,6 +560,18 @@ export async function addDailyMenuItem(
 export async function publishDailyMenu(cafeteriaId: string, dailyMenuId: string) {
   return apiClient.patch<any>(
     `/cafeterias/${cafeteriaId}/daily-menus/${dailyMenuId}/publish`,
+  );
+}
+
+/** WS4 — unpublish today's published daily menu (archives it, removes it
+ * from customer lookups, preserves items). A replacement draft can then be
+ * created for the same date. Manager/admin write scope on the backend. */
+export async function unpublishDailyMenu(
+  cafeteriaId: string,
+  dailyMenuId: string,
+) {
+  return apiClient.patch<any>(
+    `/cafeterias/${cafeteriaId}/daily-menus/${dailyMenuId}/unpublish`,
   );
 }
 
@@ -396,36 +603,90 @@ export async function adjustInventory(
   );
 }
 
-// Users (Admin)
-export async function getUsers(params?: { role?: string; status?: string }) {
+/** Phase 56 — create an inventory record for a menu item (manager/admin
+ * write scope on the backend). Upsert semantics server-side: exactly one
+ * record per (menu_item, cafeteria). */
+export async function createInventoryItem(
+  cafeteriaId: string,
+  data: {
+    menu_item_id: string;
+    quantity: number;
+    unit: string;
+    low_threshold: number;
+  },
+) {
+  return apiClient.post<any>(
+    `/cafeterias/${cafeteriaId}/inventory/`,
+    data,
+  );
+}
+
+// Users (Admin) — Phase 47: typed wrappers for member & staff management.
+// Backend responses include cafeteria_id/cafeteria_name on admin endpoints.
+export async function getUsers(params?: { role?: string; status?: string }): Promise<User[]> {
   const query = new URLSearchParams();
   if (params?.role) query.set("role", params.role);
   if (params?.status) query.set("status", params.status);
   const qs = query.toString();
-  return apiClient.get<any[]>(`/users${qs ? `?${qs}` : ""}`);
+  return apiClient.get<User[]>(`/users${qs ? `?${qs}` : ""}`);
 }
 
-export async function getUserDetail(userId: string) {
-  return apiClient.get<any>(`/users/${userId}`);
+/** P55 — paginated users list (University Admin). Uses the backend's
+ * limit/offset capability and always receives the { users, total }
+ * envelope; `getUsers` above keeps the bare-list shape for existing
+ * callers. */
+export async function getUsersPaginated(params?: {
+  role?: string;
+  status?: string;
+  q?: string;
+  cafeteria_id?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<UserListResponse> {
+  const query = new URLSearchParams();
+  if (params?.role) query.set("role", params.role);
+  if (params?.status) query.set("status", params.status);
+  if (params?.q) query.set("q", params.q);
+  if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
+  if (params?.limit != null) query.set("limit", String(params.limit));
+  if (params?.offset != null) query.set("offset", String(params.offset));
+  const qs = query.toString();
+  return apiClient.get<UserListResponse>(`/users${qs ? `?${qs}` : ""}`);
 }
 
-export async function suspendUser(userId: string, reason: string) {
-  return apiClient.post<any>(`/users/${userId}/suspend`, { reason });
+export async function getUserDetail(userId: string): Promise<User> {
+  return apiClient.get<User>(`/users/${userId}`);
 }
 
-export async function activateUser(userId: string) {
-  return apiClient.post<any>(`/users/${userId}/activate`);
+/** Admin creates a member/staff account. Returns the one-time password. */
+export async function createUser(
+  data: AdminCreateUserRequest,
+): Promise<AdminCreateUserResponse> {
+  return apiClient.post<AdminCreateUserResponse>("/users/", data);
+}
+
+export async function suspendUser(
+  userId: string,
+  reason: string,
+): Promise<User> {
+  return apiClient.post<User>(`/users/${userId}/suspend`, {
+    reason,
+  } satisfies AdminSuspendRequest);
+}
+
+export async function activateUser(userId: string): Promise<User> {
+  return apiClient.post<User>(`/users/${userId}/activate`);
 }
 
 export async function changeUserRole(
   userId: string,
-  role: string,
+  role: User["role"],
   cafeteriaId?: string,
-) {
-  return apiClient.put<any>(`/users/${userId}/role`, {
+): Promise<User> {
+  return apiClient.put<User>(`/users/${userId}/role`, {
     role,
     cafeteria_id: cafeteriaId,
-  });
+  } satisfies AdminChangeRoleRequest);
 }
 
 // Administration overview
@@ -458,83 +719,207 @@ export async function getAdministrationOverview(params?: {
     },
     total_revenue: (raw.financial?.total_revenue ?? 0) / 100, // paisa -> rupees
     active_cafeterias: raw.cafeterias?.active ?? 0,
-    pending_refunds: raw.exceptions?.overdue_refunds ?? 0,
+    // Phase 55 (design decision A) — the backend value is the honest
+    // "overdue_refunds" count (pending/processing refunds older than 7
+    // days). Renamed from the previous misleading "pending_refunds".
+    overdue_refunds: raw.exceptions?.overdue_refunds ?? 0,
     total_menu_items: raw.menu_items ?? 0,
   };
 }
 
-// Reports
-export async function getSalesReport(params?: {
+// Reports — Phase 49: typed wrappers on the existing /reports endpoints.
+// All money values are in paisa unless noted. Error handling flows through
+// ApiClient (ApiClientError with status); wrappers do not swallow errors.
+
+export interface ReportRangeParams {
   start_date?: string;
   end_date?: string;
   cafeteria_id?: string;
-}) {
+}
+
+/** Flat sales-summary shape consumed by the reports dashboard (money in paisa). */
+export interface SalesReportSummary {
+  total_orders: number;
+  total_revenue: number;
+  net_revenue: number;
+  total_refunded: number;
+  online_payment_volume: number;
+  cash_payment_volume: number;
+}
+
+function reportQuery(params?: ReportRangeParams): string {
   const query = new URLSearchParams();
   if (params?.start_date) query.set("start_date", params.start_date);
   if (params?.end_date) query.set("end_date", params.end_date);
   if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
   const qs = query.toString();
-  const raw = await apiClient.get<any>(`/reports/sales${qs ? `?${qs}` : ""}`);
+  return qs ? `?${qs}` : "";
+}
+
+export async function getSalesReport(
+  params?: ReportRangeParams,
+): Promise<SalesReportSummary> {
+  const raw = await apiClient.get<SalesReportResponse>(`/reports/sales${reportQuery(params)}`);
   // Backend returns SalesReportResponse { summary: {...}, currency } with all
   // money in paisa. Unwrap the summary here so callers receive a flat shape.
-  // Fields with no source in this endpoint (peak hour, popular items, daily
-  // and cafeteria breakdowns) are intentionally not fabricated — they exist
-  // only on separate dedicated report endpoints.
-  const summary = raw?.summary ?? {};
+  const summary = raw?.summary;
   return {
-    total_orders: summary.total_orders ?? 0,
-    total_revenue: summary.total_revenue ?? 0,
-    net_revenue: summary.net_revenue ?? 0,
-    total_refunded: summary.total_refunded ?? 0,
+    total_orders: summary?.total_orders ?? 0,
+    total_revenue: summary?.total_revenue ?? 0,
+    net_revenue: summary?.net_revenue ?? 0,
+    total_refunded: summary?.total_refunded ?? 0,
+    online_payment_volume: summary?.online_payment_volume ?? 0,
+    cash_payment_volume: summary?.cash_payment_volume ?? 0,
   };
 }
 
-export async function getDailySalesReport(params?: {
-  start_date?: string;
-  end_date?: string;
-  cafeteria_id?: string;
-}) {
+export async function getDailySalesReport(
+  params?: ReportRangeParams,
+): Promise<SalesDailyResponse> {
+  return apiClient.get<SalesDailyResponse>(`/reports/sales/daily${reportQuery(params)}`);
+}
+
+export async function getSalesByCafeteriaReport(
+  params?: { start_date?: string; end_date?: string },
+): Promise<SalesByCafeteriaResponse> {
+  return apiClient.get<SalesByCafeteriaResponse>(
+    `/reports/sales/by-cafeteria${reportQuery(params)}`,
+  );
+}
+
+export async function getOrderSummaryReport(
+  params?: ReportRangeParams,
+): Promise<OrderSummaryResponse> {
+  return apiClient.get<OrderSummaryResponse>(
+    `/reports/orders/summary${reportQuery(params)}`,
+  );
+}
+
+export async function getOrderVolumeReport(
+  params?: ReportRangeParams,
+): Promise<OrderVolumeResponse> {
+  return apiClient.get<OrderVolumeResponse>(
+    `/reports/orders/volume${reportQuery(params)}`,
+  );
+}
+
+export async function getCancellationRateReport(
+  params?: ReportRangeParams,
+): Promise<CancellationRateResponse> {
+  return apiClient.get<CancellationRateResponse>(
+    `/reports/orders/cancellation-rate${reportQuery(params)}`,
+  );
+}
+
+export async function getPopularItemsReport(
+  cafeteriaId: string,
+  params?: { start_date?: string; end_date?: string; limit?: number },
+): Promise<CafeteriaPopularItemsResponse> {
   const query = new URLSearchParams();
   if (params?.start_date) query.set("start_date", params.start_date);
   if (params?.end_date) query.set("end_date", params.end_date);
-  if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
+  if (params?.limit) query.set("limit", String(params.limit));
   const qs = query.toString();
-  return apiClient.get<any>(`/reports/sales/daily${qs ? `?${qs}` : ""}`);
+  return apiClient.get<CafeteriaPopularItemsResponse>(
+    `/reports/cafeteria/${cafeteriaId}/popular-items${qs ? `?${qs}` : ""}`,
+  );
 }
 
-export async function getOrderSummaryReport(params?: {
-  start_date?: string;
-  end_date?: string;
-  cafeteria_id?: string;
-}) {
-  const query = new URLSearchParams();
-  if (params?.start_date) query.set("start_date", params.start_date);
-  if (params?.end_date) query.set("end_date", params.end_date);
-  if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
-  const qs = query.toString();
-  return apiClient.get<any>(`/reports/orders/summary${qs ? `?${qs}` : ""}`);
+export async function getCafeteriaPerformanceReport(
+  cafeteriaId: string,
+  params?: { start_date?: string; end_date?: string },
+): Promise<CafeteriaPerformanceResponse> {
+  return apiClient.get<CafeteriaPerformanceResponse>(
+    `/reports/cafeteria/${cafeteriaId}/performance${reportQuery(params)}`,
+  );
 }
 
-// Refunds (Admin)
+// ── Phase 58 (Workstream C) — previously unwired report endpoints ──
+// All four are cafeteria-scoped (backend requires cafeteria_id + assignment
+// check; admin passes automatically). Response shapes are the backend's
+// authoritative shared types — no reinterpretation.
+
+/** Current stock snapshot for one cafeteria (no date range on the backend). */
+export async function getInventoryStockLevelsReport(
+  cafeteriaId: string,
+): Promise<import("@uniserve/shared-types").InventoryStockLevelsResponse> {
+  return apiClient.get<import("@uniserve/shared-types").InventoryStockLevelsResponse>(
+    `/reports/cafeteria/${cafeteriaId}/inventory/stock-levels`,
+  );
+}
+
+/** Items currently low or out of stock for one cafeteria (no date range). */
+export async function getInventoryLowStockReport(
+  cafeteriaId: string,
+): Promise<import("@uniserve/shared-types").InventoryLowStockResponse> {
+  return apiClient.get<import("@uniserve/shared-types").InventoryLowStockResponse>(
+    `/reports/cafeteria/${cafeteriaId}/inventory/low-stock`,
+  );
+}
+
+/** Inventory adjustment activity — restock vs usage over a date range. */
+export async function getInventoryTurnoverReport(
+  cafeteriaId: string,
+  params?: { start_date?: string; end_date?: string },
+): Promise<import("@uniserve/shared-types").InventoryTurnoverResponse> {
+  return apiClient.get<import("@uniserve/shared-types").InventoryTurnoverResponse>(
+    `/reports/cafeteria/${cafeteriaId}/inventory/turnover${reportQuery(params)}`,
+  );
+}
+
+/** Peak-hour order volume by hour of day (created_at) for one cafeteria. */
+export async function getCafeteriaPeakHoursReport(
+  cafeteriaId: string,
+  params?: { start_date?: string; end_date?: string },
+): Promise<import("@uniserve/shared-types").CafeteriaPeakHoursResponse> {
+  return apiClient.get<import("@uniserve/shared-types").CafeteriaPeakHoursResponse>(
+    `/reports/cafeteria/${cafeteriaId}/peak-hours${reportQuery(params)}`,
+  );
+}
+
+// Refunds (Admin) — Phase 51: enriched admin list/detail + rejection workflow
 export async function getAllRefunds(params?: {
   cafeteria_id?: string;
   status?: string;
   limit?: number;
   offset?: number;
-}) {
+}): Promise<import("@uniserve/shared-types").RefundAdminListResponse> {
   const query = new URLSearchParams();
   if (params?.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
   if (params?.status) query.set("status", params.status);
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.offset) query.set("offset", String(params.offset));
   const qs = query.toString();
-  return apiClient.get<{ refunds: any[]; total: number }>(
+  return apiClient.get<import("@uniserve/shared-types").RefundAdminListResponse>(
     `/refunds/admin/all${qs ? `?${qs}` : ""}`,
+  );
+}
+
+/** Phase 51 — enriched admin detail (student/order/payment context). */
+export async function getAdminRefund(
+  refundId: string,
+): Promise<import("@uniserve/shared-types").RefundAdminResponse> {
+  return apiClient.get<import("@uniserve/shared-types").RefundAdminResponse>(
+    `/refunds/admin/${refundId}`,
   );
 }
 
 export async function processRefund(refundId: string) {
   return apiClient.post<any>(`/refunds/${refundId}/process`);
+}
+
+/**
+ * Phase 51 — reject a pending refund with a persisted admin reason.
+ * Rejection records the decision; it performs no money movement.
+ */
+export async function rejectRefund(
+  refundId: string,
+  data: import("@uniserve/shared-types").RefundRejectRequest,
+): Promise<import("@uniserve/shared-types").RefundAdminResponse> {
+  return apiClient.post<import("@uniserve/shared-types").RefundAdminResponse>(
+    `/refunds/${refundId}/reject`,
+    data,
+  );
 }
 
 // Notifications
@@ -544,6 +929,41 @@ export async function markNotificationRead(notificationId: string) {
 
 export async function markAllNotificationsRead() {
   return apiClient.patch<any>("/notifications/read-all");
+}
+
+// Phase 50 — Admin broadcast (University Admin only; backend RBAC enforced)
+export async function broadcastNotification(
+  data: import("@uniserve/shared-types").BroadcastCreateRequest,
+): Promise<import("@uniserve/shared-types").BroadcastResponse> {
+  return apiClient.post<import("@uniserve/shared-types").BroadcastResponse>(
+    "/notifications/broadcast",
+    data,
+  );
+}
+
+export async function getBroadcastAudienceCount(params: {
+  audience: import("@uniserve/shared-types").BroadcastAudience;
+  cafeteria_id?: string;
+}): Promise<import("@uniserve/shared-types").BroadcastAudienceCountResponse> {
+  const query = new URLSearchParams();
+  query.set("audience", params.audience);
+  if (params.cafeteria_id) query.set("cafeteria_id", params.cafeteria_id);
+  return apiClient.get<import("@uniserve/shared-types").BroadcastAudienceCountResponse>(
+    `/notifications/broadcasts/audience-count?${query.toString()}`,
+  );
+}
+
+export async function getAdminBroadcasts(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<import("@uniserve/shared-types").BroadcastListResponse> {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.offset) query.set("offset", String(params.offset));
+  const qs = query.toString();
+  return apiClient.get<import("@uniserve/shared-types").BroadcastListResponse>(
+    `/notifications/broadcasts${qs ? `?${qs}` : ""}`,
+  );
 }
 
 // Cafeteria status
@@ -561,4 +981,133 @@ export async function updateCafeteria(
   data: any,
 ) {
   return apiClient.put<any>(`/cafeterias/${cafeteriaId}`, data);
+}
+
+// ---- Menu item images (Phase 48) ----
+// Raw-binary upload: the backend endpoint expects image bytes with an
+// image/* Content-Type (no multipart — python-multipart is not shipped).
+
+/** 48B — upload/replace a menu item's image; returns the updated MenuItem. */
+export async function uploadMenuItemImage(
+  cafeteriaId: string,
+  menuItemId: string,
+  file: File,
+): Promise<import("@uniserve/shared-types").MenuItem> {
+  return apiClient.uploadBinary<
+    import("@uniserve/shared-types").MenuItem
+  >(
+    "POST",
+    `/cafeterias/${cafeteriaId}/menu-items/${menuItemId}/image`,
+    file,
+    file.type || "application/octet-stream",
+  );
+}
+
+/** 48B — remove a menu item's image; the item stays fully usable. */
+export async function removeMenuItemImage(
+  cafeteriaId: string,
+  menuItemId: string,
+): Promise<import("@uniserve/shared-types").MenuItem> {
+  return apiClient.delete<import("@uniserve/shared-types").MenuItem>(
+    `/cafeterias/${cafeteriaId}/menu-items/${menuItemId}/image`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// API error transparency (Phase 46)
+// ---------------------------------------------------------------------------
+// The shared ApiClient (packages/shared-types) throws structured
+// ApiClientError values for every failure. These helpers turn any thrown
+// value into a safe, user-facing description so pages can render an explicit
+// error state (components/ui/LoadErrorState) instead of silently presenting a
+// failed request as an empty dataset.
+//
+// Status conventions preserved from ApiClientError:
+//   401 session expired (after a failed refresh)  -> auth
+//   403 permission denied (RBAC / assignment)     -> permission
+//   408 request timeout                           -> timeout
+//   0   network failure (fetch rejected)          -> network
+//   5xx backend error                             -> server (generic message)
+//   4xx other backend rejection (validation,
+//         not-found, conflict, ...)               -> client (backend detail)
+
+export type ApiErrorKind =
+  | "auth"
+  | "permission"
+  | "network"
+  | "timeout"
+  | "server"
+  | "client"
+  | "unknown";
+
+export interface ApiErrorInfo {
+  kind: ApiErrorKind;
+  /** Safe, user-facing message. Never contains backend internals. */
+  message: string;
+  /** Original HTTP status (0 = network failure, -1 = unknown). */
+  status: number;
+  /** True when re-running the same request is meaningful. */
+  retryable: boolean;
+}
+
+export function getApiErrorInfo(err: unknown): ApiErrorInfo {
+  if (err instanceof ApiClientError) {
+    if (err.status === 401) {
+      return {
+        kind: "auth",
+        message: "Your session has expired. Please log in again.",
+        status: 401,
+        retryable: true,
+      };
+    }
+    if (err.status === 403) {
+      return {
+        kind: "permission",
+        message:
+          err.message || "You do not have permission to access this data.",
+        status: 403,
+        retryable: false,
+      };
+    }
+    if (err.status === 408) {
+      return {
+        kind: "timeout",
+        message: "The request timed out. Please try again.",
+        status: 408,
+        retryable: true,
+      };
+    }
+    if (err.status === 0) {
+      return {
+        kind: "network",
+        message:
+          "Unable to reach the server. Check your connection and try again.",
+        status: 0,
+        retryable: true,
+      };
+    }
+    if (err.status >= 500) {
+      // Generic on purpose — backend error bodies are not rendered to users.
+      return {
+        kind: "server",
+        message: "The server encountered a problem. Please try again.",
+        status: err.status,
+        retryable: true,
+      };
+    }
+    // Remaining 4xx: the backend detail is a safe, actionable message
+    // (validation errors, not-found, conflict, ...).
+    return {
+      kind: "client",
+      message: err.message || "The request could not be completed.",
+      status: err.status,
+      retryable: false,
+    };
+  }
+  return {
+    kind: "unknown",
+    message: "Something went wrong. Please try again.",
+    status: -1,
+    retryable: true,
+  };
 }

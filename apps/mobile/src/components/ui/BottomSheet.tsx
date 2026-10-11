@@ -14,6 +14,7 @@ import {
   Text,
   StyleSheet,
   Modal,
+  ScrollView,
   TouchableWithoutFeedback,
   Dimensions,
   Animated,
@@ -131,8 +132,19 @@ export function BottomSheet({
             </View>
           )}
 
-          {/* Content */}
-          <View style={styles.content}>{children}</View>
+          {/* Content — scrollable so rows past maxHeight stay reachable
+              instead of being clipped by the sheet's fixed cap. The cap and
+              the horizontal padding both live on `styles.content`: a
+              ScrollView applies its own padding once, so repeating
+              paddingHorizontal on contentContainerStyle would inset the
+              sheet body twice. */}
+          <ScrollView
+            style={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {children}
+          </ScrollView>
         </Animated.View>
       </View>
     </Modal>
@@ -189,7 +201,13 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    // RN 0.86 removed StyleSheet.absoluteFillObject — inline its exact
+    // historical definition to preserve identical layout semantics.
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     backgroundColor: "rgba(0,0,0,0.4)",
   },
   sheet: {

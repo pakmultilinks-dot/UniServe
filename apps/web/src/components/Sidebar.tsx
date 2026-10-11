@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { isWebDashboardRole } from "@/lib/roles";
-import { LguBrand, LguSeal } from "@/components/LguBrand";
+import { LguBrand } from "@/components/LguBrand";
 import { Avatar } from "@/components/ui/Avatar";
 import type { UserRole } from "@uniserve/shared-types";
 
@@ -70,6 +70,12 @@ const navItems: NavItem[] = [
 /* Manager/Staff extra nav */
 const managerNavItems: NavItem[] = [
   {
+    // P3-12 — the menu page is role-differentiated: staff get a read-only
+    // view of today's published menu, while managers get the publishing
+    // console (create draft → publish → unpublish). The nav label is
+    // overridden per role in getNavForRole. Backend write scope for
+    // publish/unpublish: RequireCafeteriaWriteScope(UNIVERSITY_ADMIN,
+    // CAFETERIA_MANAGER).
     label: "Menu",
     href: "/dashboard/menu",
     icon: (
@@ -89,10 +95,52 @@ const managerNavItems: NavItem[] = [
     ),
     roles: ["cafeteria_manager", "cafeteria_staff"],
   },
+  {
+    // P3-12 — manager-only entry: sales reporting scoped to the manager's
+    // assigned cafeteria (GET /reports/sales — _REPORT_ROLES includes
+    // CAFETERIA_MANAGER; backend enforces cafeteria scoping via
+    // _resolve_cafeteria_scope). Staff have no reporting surface, so this
+    // entry is manager-only and differentiates the manager console.
+    label: "Reports",
+    href: "/dashboard/admin/reports",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+    roles: ["cafeteria_manager"],
+  },
 ];
 
 /* Admin extra nav */
 const adminNavItems: NavItem[] = [
+  {
+    // P3-13 — Menu management is reachable from the admin nav (it was
+    // previously direct-URL-only). Admin has full write scope on daily
+    // menus and the cafeteria catalog.
+    label: "Menu",
+    href: "/dashboard/menu",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+      </svg>
+    ),
+    roles: ["university_admin"],
+  },
+  {
+    // Phase 58 (Workstream D) — the inventory console is now reachable from
+    // the admin nav (previously direct-URL-only; the page already admits
+    // university_admin in its role gate, and the backend inventory
+    // endpoints include admin in their write scope).
+    label: "Inventory",
+    href: "/dashboard/inventory",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+      </svg>
+    ),
+    roles: ["university_admin"],
+  },
   {
     label: "Staff",
     href: "/dashboard/staff",
@@ -103,6 +151,19 @@ const adminNavItems: NavItem[] = [
     ),
     // GET /users is university-admin only; managers cannot list users, so the
     // Staff Management page is admin-only.
+    roles: ["university_admin"],
+  },
+  {
+    // Phase 50 — Admin broadcast center: compose + send in-app announcements
+    // to a supported audience (backend: POST /notifications/broadcast,
+    // RequireRole(UNIVERSITY_ADMIN)).
+    label: "Broadcasts",
+    href: "/dashboard/admin/broadcasts",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46" />
+      </svg>
+    ),
     roles: ["university_admin"],
   },
   {
@@ -146,6 +207,17 @@ const adminNavItems: NavItem[] = [
     roles: ["university_admin"],
   },
   {
+    // Phase 55 — dedicated admin audit-log surface (security visibility).
+    label: "Audit Log",
+    href: "/dashboard/admin/audit",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+    roles: ["university_admin"],
+  },
+  {
     label: "Settings",
     href: "/dashboard/admin/settings",
     icon: (
@@ -173,6 +245,17 @@ function getNavForRole(role: UserRole | undefined): NavItem[] {
     items = [...items, ...adminNavItems];
   }
 
+  // P3-12 — the menu console is role-differentiated: staff see a read-only
+  // "Menu" (today's published menu), managers get the "Daily Menu"
+  // publishing console (create draft → publish → unpublish — a
+  // manager/admin-only write capability). Reflect that in the nav label so
+  // the manager console is meaningfully distinct from the staff console.
+  if (role === "cafeteria_manager") {
+    items = items.map((n) =>
+      n.href === "/dashboard/menu" ? { ...n, label: "Daily Menu" } : n,
+    );
+  }
+
   return items;
 }
 
@@ -183,7 +266,7 @@ interface SidebarProps {
   onToggle?: () => void;
 }
 
-export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed = false }: SidebarProps) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);

@@ -12,16 +12,26 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
-import { getOrder, getOrderPayment, cancelOrder } from "../../../src/services/data";
+import {
+  getOrder,
+  getOrderPayment,
+  cancelOrder,
+  partialCancelItem,
+  getRefundableAmount,
+  requestRefund,
+  getOrderRefunds,
+} from "../../../src/services/data";
+import type { OrderRefund, RefundableAmount } from "../../../src/services/data";
 import { ApiClientError } from "../../../src/services/api";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
-import type { Order, OrderStatus, Payment } from "@uniserve/shared-types";
+import type { Order, OrderStatus, Payment, RefundReason } from "@uniserve/shared-types";
 
 // ── Helpers ──
 
@@ -52,6 +62,29 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; icon: keyof typeof Ion
 
 const STATUS_ORDER: OrderStatus[] = ["pending", "preparing", "ready", "completed"];
 
+// ── Refunds (Phase 58, Workstream B) ──
+// Backend RefundReason enum is authoritative; free text in the reason field
+// is rejected server-side with a 400.
+const REFUND_REASONS: { value: RefundReason; label: string }[] = [
+  { value: "order_cancelled", label: "Order was cancelled" },
+  { value: "item_unavailable", label: "Item was unavailable" },
+  { value: "payment_error", label: "Payment error" },
+  { value: "duplicate_payment", label: "Duplicate payment" },
+  { value: "cafeteria_closed", label: "Cafeteria was closed" },
+  { value: "other", label: "Other" },
+];
+
+const REFUND_STATUS_CONFIG: Record<
+  string,
+  { label: string; colorKey: "success" | "warning" | "error" | "info" }
+> = {
+  pending: { label: "Pending review", colorKey: "warning" },
+  processing: { label: "Processing", colorKey: "info" },
+  succeeded: { label: "Approved — returned", colorKey: "success" },
+  failed: { label: "Failed", colorKey: "error" },
+  rejected: { label: "Rejected", colorKey: "error" },
+};
+
 // ── Real-time polling (Phase 22) ──
 // REST polling on the existing authenticated endpoints — the same mechanism the
 // web dashboard uses (30 s on the order list). Interval is 15 s here because
@@ -65,9 +98,18 @@ const TERMINAL_ORDER_STATUSES: readonly OrderStatus[] = ["completed", "cancelled
 interface TimelineProps {
   currentStatus: OrderStatus;
   theme: "light" | "dark";
+  /** Staff rejection reason/note, surfaced so a cancelled order never shows a
+   *  vague "cancelled" with no explanation (fixes contradictory notifications). */
+  rejectionReason?: string | null;
+  rejectionNote?: string | null;
 }
 
-function OrderStatusTimeline({ currentStatus, theme }: TimelineProps) {
+function OrderStatusTimeline({
+  currentStatus,
+  theme,
+  rejectionReason,
+  rejectionNote,
+}: TimelineProps) {
   const brand = brandGreen(theme);
   const tc = textColor(theme, "primary");
   const tcMuted = textColor(theme, "muted");
@@ -76,7 +118,6 @@ function OrderStatusTimeline({ currentStatus, theme }: TimelineProps) {
 
   const currentIdx = STATUS_ORDER.indexOf(currentStatus as any);
   const isCancelled = currentStatus === "cancelled";
-  const isCompleted = currentStatus === "completed";
 
   return (
     <View style={[styles.timelineCard, { backgroundColor: bg, borderColor: bc }]}>
@@ -84,7 +125,6 @@ function OrderStatusTimeline({ currentStatus, theme }: TimelineProps) {
         const config = STATUS_CONFIG[status];
         const isActive = idx === currentIdx;
         const isPast = !isCancelled && idx < currentIdx;
-        const isFuture = !isCancelled && idx > currentIdx;
 
         return (
           <View key={status} style={styles.timelineStep}>
@@ -137,9 +177,21 @@ function OrderStatusTimeline({ currentStatus, theme }: TimelineProps) {
       {isCancelled && (
         <View style={[styles.cancelledBanner, { borderColor: functionalColor(theme, "error") + "30" }]}>
           <Ionicons name="close-circle" size={16} color={functionalColor(theme, "error")} />
-          <Text style={[styles.cancelledText, { color: functionalColor(theme, "error") }]}>
-            This order was cancelled
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cancelledText, { color: functionalColor(theme, "error") }]}>
+              This order was cancelled
+            </Text>
+            {rejectionReason ? (
+              <Text style={[styles.cancelledReason, { color: tcMuted }]}>
+                Reason: {rejectionReason}
+              </Text>
+            ) : null}
+            {rejectionNote ? (
+              <Text style={[styles.cancelledReason, { color: tcMuted }]}>
+                {rejectionNote}
+              </Text>
+            ) : null}
+          </View>
         </View>
       )}
     </View>
@@ -236,6 +288,168 @@ export default function OrderDetailScreen() {
     }
   }, [id, refreshOrderQuietly]);
 
+  // ── Phase 58 (Workstream B) — refund request self-service ──
+  // Owner-only backend endpoints: GET /refunds/refundable/{id},
+  // POST /refunds?order_id=... (idempotent), GET /refunds/order/{id}.
+  // The refundable check requires a SUCCEEDED payment; the 72h deadline and
+  // all other eligibility rules are enforced server-side and surfaced verbatim.
+  const [refundInfo, setRefundInfo] = useState<{
+    refundable: RefundableAmount;
+    refunds: OrderRefund[];
+  } | null>(null);
+  const [refundFormOpen, setRefundFormOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState<RefundReason | "">("");
+  const [refundNote, setRefundNote] = useState("");
+  const [refundAmount, setRefundAmount] = useState(""); // PKR, up to 2 decimals
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+  const [refundError, setRefundError] = useState("");
+  const [refundSuccess, setRefundSuccess] = useState("");
+  const [refundCheckError, setRefundCheckError] = useState("");
+
+  /** Load refundability + refund history for terminal orders (silent). */
+  const loadRefundInfo = useCallback(async () => {
+    if (!id || !order) return;
+    if (order.status !== "completed" && order.status !== "cancelled") {
+      setRefundInfo(null);
+      return;
+    }
+    try {
+      const [refundable, refunds] = await Promise.all([
+        getRefundableAmount(id),
+        getOrderRefunds(id),
+      ]);
+      setRefundInfo({ refundable, refunds });
+      setRefundCheckError("");
+    } catch (err) {
+      setRefundInfo(null);
+      setRefundCheckError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Refund eligibility unavailable",
+      );
+    }
+  }, [id, order?.status]);
+
+  useEffect(() => {
+    void loadRefundInfo();
+  }, [loadRefundInfo]);
+
+  /** Open the refund form (re-checking eligibility when not loaded yet). */
+  const openRefundForm = useCallback(() => {
+    setRefundError("");
+    setRefundSuccess("");
+    if (refundInfo) {
+      if (refundInfo.refundable.refundable_amount <= 0) {
+        setRefundCheckError("This order has no refundable amount left.");
+        return;
+      }
+      setRefundCheckError("");
+      setRefundAmount((refundInfo.refundable.refundable_amount / 100).toFixed(2));
+      setRefundFormOpen(true);
+      return;
+    }
+    // Eligibility not loaded yet — fetch now; backend errors surface verbatim.
+    void (async () => {
+      if (!id) return;
+      try {
+        const [refundable, refunds] = await Promise.all([
+          getRefundableAmount(id),
+          getOrderRefunds(id),
+        ]);
+        setRefundInfo({ refundable, refunds });
+        if (refundable.refundable_amount <= 0) {
+          setRefundCheckError("This order has no refundable amount left.");
+        } else {
+          setRefundCheckError("");
+          setRefundAmount((refundable.refundable_amount / 100).toFixed(2));
+          setRefundFormOpen(true);
+        }
+      } catch (err) {
+        setRefundCheckError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Unable to check refund eligibility",
+        );
+      }
+    })();
+  }, [id, refundInfo]);
+
+  /** Submit the refund request — backend is authoritative for eligibility. */
+  const handleSubmitRefund = useCallback(async () => {
+    if (!id || !refundReason) return;
+    const rupees = Number(refundAmount);
+    const paisa = Math.round(rupees * 100);
+    const maxPaisa = refundInfo?.refundable.refundable_amount ?? 0;
+    if (!Number.isFinite(rupees) || rupees <= 0 || paisa <= 0) {
+      setRefundError("Enter an amount greater than zero.");
+      return;
+    }
+    if (maxPaisa > 0 && paisa > maxPaisa) {
+      setRefundError(
+        `Amount exceeds the refundable maximum (${formatPrice(maxPaisa)}).`,
+      );
+      return;
+    }
+    setRefundSubmitting(true);
+    setRefundError("");
+    try {
+      await requestRefund(id, {
+        amount: paisa,
+        reason: refundReason,
+        reason_note: refundNote.trim() || undefined,
+        // Stable per-order key: retrying the same request is idempotent
+        // server-side and can never create a duplicate refund.
+        idempotency_key: `refund-req-${id}`,
+      });
+      setRefundFormOpen(false);
+      setRefundReason("");
+      setRefundNote("");
+      setRefundSuccess(
+        "Refund request submitted for review. The money will be returned to your account after admin approval.",
+      );
+      await loadRefundInfo();
+    } catch (err) {
+      // Backend messages (no succeeded payment, past the refund deadline,
+      // already refunded, etc.) are surfaced verbatim.
+      setRefundError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to submit refund request",
+      );
+    } finally {
+      setRefundSubmitting(false);
+    }
+  }, [id, refundReason, refundNote, refundAmount, refundInfo, loadRefundInfo]);
+
+  // ── Phase 58 (Workstream E2) — per-item cancel for PENDING orders ──
+  // Backend: POST /orders/{id}/partial-cancel — owner-only, pending-only;
+  // removing the final remaining item cancels the whole order; the total is
+  // recalculated and inventory released server-side. Errors surface inline.
+  const [cancelItemTarget, setCancelItemTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [isCancellingItem, setIsCancellingItem] = useState(false);
+  const [cancelItemError, setCancelItemError] = useState("");
+
+  const handleCancelItem = useCallback(async () => {
+    if (!id || !cancelItemTarget) return;
+    setIsCancellingItem(true);
+    setCancelItemError("");
+    try {
+      await partialCancelItem(id, cancelItemTarget.id, "Item cancelled by customer");
+      setCancelItemTarget(null);
+      await refreshOrderQuietly();
+      await loadRefundInfo(); // order totals/refundability may have changed
+    } catch (err) {
+      setCancelItemError(
+        err instanceof ApiClientError ? err.message : "Failed to cancel item",
+      );
+    } finally {
+      setIsCancellingItem(false);
+    }
+  }, [id, cancelItemTarget, refreshOrderQuietly, loadRefundInfo]);
+
   // Stop polling once the order reaches a terminal state.
   useEffect(() => {
     if (order && TERMINAL_ORDER_STATUSES.includes(order.status) && pollTimerRef.current) {
@@ -286,6 +500,8 @@ export default function OrderDetailScreen() {
     );
   }
 
+  const isTerminal = order.status === "completed" || order.status === "cancelled";
+
   return (
     <View style={[styles.screen, { backgroundColor: bgSec }]}>
       <ScrollView
@@ -309,6 +525,8 @@ export default function OrderDetailScreen() {
         <OrderStatusTimeline
           currentStatus={order.status}
           theme={resolvedTheme as "light" | "dark"}
+          rejectionReason={order.rejection_reason}
+          rejectionNote={order.rejection_note}
         />
 
         {/* ── Pickup QR (only when ready) ── */}
@@ -342,6 +560,27 @@ export default function OrderDetailScreen() {
               <Text style={[styles.itemPrice, { color: tc }]}>
                 {formatPrice(item.subtotal)}
               </Text>
+              {/* Phase 58 (Workstream E2) — per-item cancel, pending orders
+                  only. Backend enforces ownership + pending status. */}
+              {order.status === "pending" && order.items.length > 1 && (
+                <Pressable
+                  hitSlop={6}
+                  style={styles.itemCancelBtn}
+                  onPress={() => {
+                    setCancelItemTarget({ id: item.id, name: item.item_name });
+                    setCancelItemError("");
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.itemCancelText,
+                      { color: functionalColor(resolvedTheme, "error") },
+                    ]}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              )}
             </View>
           ))}
 
@@ -354,6 +593,65 @@ export default function OrderDetailScreen() {
             </Text>
           </View>
         </View>
+
+        {/* ── Per-item cancel confirmation (Phase 58, Workstream E2) ── */}
+        {cancelItemTarget && (
+          <View
+            style={[
+              styles.cancelCard,
+              { backgroundColor: bg, borderColor: bc, marginBottom: 16 },
+            ]}
+          >
+            <Text style={[styles.cancelTitle, { color: tc }]}>
+              Remove “{cancelItemTarget.name}” from this order?
+            </Text>
+            <Text style={[styles.refundHint, { color: tcMuted }]}>
+              The item is removed and its cost is deducted from the order total.
+              The whole order is cancelled only when it was the last remaining
+              item.
+            </Text>
+            <View style={styles.cancelActions}>
+              <Pressable
+                style={[
+                  styles.cancelBtn,
+                  { backgroundColor: functionalColor(resolvedTheme, "error") },
+                ]}
+                onPress={handleCancelItem}
+                disabled={isCancellingItem}
+              >
+                {isCancellingItem ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.cancelBtnText}>Remove item</Text>
+                )}
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.cancelBtn,
+                  styles.cancelBtnKeep,
+                  { borderColor: bc },
+                ]}
+                onPress={() => {
+                  setCancelItemTarget(null);
+                  setCancelItemError("");
+                }}
+                disabled={isCancellingItem}
+              >
+                <Text style={[styles.cancelBtnText, { color: tc }]}>Keep item</Text>
+              </Pressable>
+            </View>
+            {cancelItemError !== "" && (
+              <Text
+                style={[
+                  styles.cancelError,
+                  { color: functionalColor(resolvedTheme, "error") },
+                ]}
+              >
+                {cancelItemError}
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* ── Payment Info ── */}
         <View style={[styles.infoRow, { backgroundColor: bg, borderColor: bc }]}>
@@ -469,6 +767,251 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
+        {/* ── Refunds (Phase 58, Workstream B) ── */}
+        {isTerminal && (
+          <View style={[styles.refundCard, { backgroundColor: bg, borderColor: bc }]}>
+            <Text style={[styles.refundTitle, { color: tc }]}>Refunds</Text>
+
+            {refundInfo && refundInfo.refunds.length > 0 && (
+              <View style={{ marginBottom: 10, gap: 6 }}>
+                {refundInfo.refunds.map((r) => {
+                  const cfg = REFUND_STATUS_CONFIG[r.status] ?? {
+                    label: r.status,
+                    colorKey: "info" as const,
+                  };
+                  return (
+                    <View
+                      key={r.id}
+                      style={[styles.refundRow, { borderColor: bcSub }]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.refundRowAmount, { color: tc }]}>
+                          {formatPrice(r.amount)}
+                        </Text>
+                        <Text style={[styles.refundRowMeta, { color: tcMuted }]}>
+                          {REFUND_REASONS.find((x) => x.value === r.reason)?.label ??
+                            r.reason.replace(/_/g, " ")}{" "}
+                          · {formatDate(r.created_at)}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.refundStatus,
+                          {
+                            color: functionalColor(resolvedTheme, cfg.colorKey),
+                          },
+                        ]}
+                      >
+                        {cfg.label}
+                      </Text>
+                    </View>
+                  );
+                })}
+                <Text style={[styles.refundHint, { color: tcMuted }]}>
+                  Refund requests are reviewed by an admin; approved money is
+                  returned to the original payment method.
+                </Text>
+              </View>
+            )}
+
+            {/* Failed refund → point the user to a real support channel. There
+                is no in-app support route or configured support email yet, so
+                this is guidance rather than a navigation button (avoids a dead
+                route). Does not imply a retry will succeed. */}
+            {refundInfo &&
+              refundInfo.refunds.some((r) => r.status === "failed") && (
+                <View
+                  style={[
+                    styles.supportBox,
+                    { borderColor: functionalColor(resolvedTheme, "error") + "40" },
+                  ]}
+                >
+                  <Ionicons
+                    name="help-buoy-outline"
+                    size={16}
+                    color={functionalColor(resolvedTheme, "error")}
+                  />
+                  <Text style={[styles.supportBoxText, { color: tcMuted }]}>
+                    This refund failed and is reviewed by an admin. Please
+                    contact the cafeteria service desk or university
+                    administration for assistance.
+                  </Text>
+                </View>
+              )}
+
+            {refundSuccess !== "" && (
+              <View
+                style={[
+                  styles.refundNoteBox,
+                  {
+                    backgroundColor:
+                      functionalColor(resolvedTheme, "success") + "15",
+                    borderColor:
+                      functionalColor(resolvedTheme, "success") + "40",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.refundNoteText,
+                    { color: functionalColor(resolvedTheme, "success") },
+                  ]}
+                >
+                  {refundSuccess}
+                </Text>
+              </View>
+            )}
+            {refundCheckError !== "" && (
+              <View
+                style={[
+                  styles.refundNoteBox,
+                  {
+                    backgroundColor:
+                      functionalColor(resolvedTheme, "error") + "10",
+                    borderColor:
+                      functionalColor(resolvedTheme, "error") + "40",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.refundNoteText,
+                    { color: functionalColor(resolvedTheme, "error") },
+                  ]}
+                >
+                  {refundCheckError}
+                </Text>
+              </View>
+            )}
+
+            {refundFormOpen ? (
+              <View style={{ gap: 10 }}>
+                <Text style={[styles.refundLabel, { color: tcSec }]}>Reason</Text>
+                <View style={styles.refundChips}>
+                  {REFUND_REASONS.map((r) => {
+                    const active = refundReason === r.value;
+                    return (
+                      <Pressable
+                        key={r.value}
+                        onPress={() => setRefundReason(r.value)}
+                        style={[
+                          styles.refundChip,
+                          {
+                            borderColor: active ? brand : bc,
+                            backgroundColor: active ? brand + "15" : bgSec,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.refundChipText,
+                            { color: active ? brand : tcSec },
+                          ]}
+                        >
+                          {r.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.refundLabel, { color: tcSec }]}>
+                  Amount (PKR)
+                </Text>
+                <TextInput
+                  value={refundAmount}
+                  onChangeText={setRefundAmount}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor={tcMuted}
+                  style={[
+                    styles.refundInput,
+                    { borderColor: bc, backgroundColor: bgSec, color: tc },
+                  ]}
+                />
+                {refundInfo && (
+                  <Text style={[styles.refundHint, { color: tcMuted }]}>
+                    Refundable now: {formatPrice(refundInfo.refundable.refundable_amount)}{" "}
+                    · paid {formatPrice(refundInfo.refundable.paid_amount)}{" "}
+                    · already refunded {formatPrice(refundInfo.refundable.total_refunded)}
+                  </Text>
+                )}
+
+                <Text style={[styles.refundLabel, { color: tcSec }]}>
+                  Note (optional)
+                </Text>
+                <TextInput
+                  value={refundNote}
+                  onChangeText={(t) => setRefundNote(t.slice(0, 500))}
+                  placeholder="Additional detail (max 500 characters)"
+                  placeholderTextColor={tcMuted}
+                  multiline
+                  style={[
+                    styles.refundInput,
+                    styles.refundInputMultiline,
+                    { borderColor: bc, backgroundColor: bgSec, color: tc },
+                  ]}
+                />
+
+                {refundError !== "" && (
+                  <Text
+                    style={[
+                      styles.cancelError,
+                      { color: functionalColor(resolvedTheme, "error") },
+                    ]}
+                  >
+                    {refundError}
+                  </Text>
+                )}
+
+                <View style={styles.cancelActions}>
+                  <Pressable
+                    style={[
+                      styles.cancelBtn,
+                      { backgroundColor: brand },
+                    ]}
+                    onPress={handleSubmitRefund}
+                    disabled={refundSubmitting || !refundReason}
+                  >
+                    {refundSubmitting ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.cancelBtnText}>Submit request</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.cancelBtn,
+                      styles.cancelBtnKeep,
+                      { borderColor: bc },
+                    ]}
+                    onPress={() => {
+                      setRefundFormOpen(false);
+                      setRefundError("");
+                    }}
+                    disabled={refundSubmitting}
+                  >
+                    <Text style={[styles.cancelBtnText, { color: tc }]}>
+                      Cancel
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable
+                style={[styles.refundButton, { borderColor: brand }]}
+                onPress={openRefundForm}
+                disabled={refundSubmitting}
+              >
+                <Ionicons name="return-down-back-outline" size={18} color={brand} />
+                <Text style={[styles.refundButtonText, { color: brand }]}>
+                  Request refund
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
         <View style={{ height: 32 }} />
       </ScrollView>
     </View>
@@ -531,7 +1074,7 @@ const styles = StyleSheet.create({
   timelineLabel: { fontSize: 14 },
   cancelledBanner: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
     marginTop: 12,
     padding: 10,
@@ -540,6 +1083,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fef2f2",
   },
   cancelledText: { fontSize: 13, fontWeight: "600" },
+  cancelledReason: { fontSize: 12, lineHeight: 17, marginTop: 2 },
 
   // QR banner
   qrBanner: {
@@ -624,4 +1168,72 @@ const styles = StyleSheet.create({
   cancelBtnKeep: { borderWidth: 1, backgroundColor: "transparent" },
   cancelBtnText: { fontSize: 14, fontWeight: "600", color: "#ffffff" },
   cancelError: { fontSize: 13 },
+
+  // Per-item cancel (Phase 58, Workstream E2)
+  itemCancelBtn: { marginLeft: 8, paddingVertical: 2, paddingHorizontal: 4 },
+  itemCancelText: { fontSize: 12, fontWeight: "600" },
+
+  // Refunds (Phase 58, Workstream B)
+  refundCard: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 8,
+  },
+  refundTitle: { fontSize: 15, fontWeight: "700" },
+  refundRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderBottomWidth: 1,
+    paddingBottom: 6,
+  },
+  refundRowAmount: { fontSize: 13, fontWeight: "600" },
+  refundRowMeta: { fontSize: 11, marginTop: 2 },
+  refundStatus: { fontSize: 12, fontWeight: "600" },
+  refundNoteBox: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+  },
+  refundNoteText: { fontSize: 12, lineHeight: 17 },
+  refundHint: { fontSize: 11, lineHeight: 16 },
+  supportBox: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+  },
+  supportBoxText: { flex: 1, fontSize: 12, lineHeight: 17 },
+  refundLabel: { fontSize: 13, fontWeight: "600" },
+  refundChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  refundChip: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  refundChipText: { fontSize: 12, fontWeight: "500" },
+  refundInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  refundInputMultiline: { minHeight: 64, textAlignVertical: "top" },
+  refundButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  refundButtonText: { fontSize: 14, fontWeight: "600" },
 });

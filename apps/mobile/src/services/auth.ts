@@ -15,9 +15,11 @@ import type {
   OTPResendRequest,
   OTPResponse,
   PINLoginRequest,
+  PINSetupRequest,
+  PINChangeRequest,
+  PINDisableRequest,
   TokenPair,
   User,
-  SessionListResponse,
   PasswordResetRequest,
   PasswordResetConfirm,
   PasswordChangeRequest,
@@ -65,12 +67,6 @@ export async function getCurrentUser(): Promise<User> {
   return apiClient.get<User>("/auth/me");
 }
 
-// ---- Sessions ----
-
-export async function getSessions(): Promise<SessionListResponse> {
-  return apiClient.get<SessionListResponse>("/auth/sessions");
-}
-
 // ---- Logout ----
 
 export async function logout(): Promise<void> {
@@ -106,6 +102,35 @@ export async function changePassword(
 ): Promise<{ message: string }> {
   return apiClient.post<{ message: string }>(
     "/auth/password/change",
+    data,
+  );
+}
+
+// ---- PIN Management (Phase 58, Workstream F+G) ----
+
+export async function enablePin(
+  data: PINSetupRequest,
+): Promise<{ message: string }> {
+  return apiClient.post<{ message: string }>(
+    "/auth/pin/enable",
+    data,
+  );
+}
+
+export async function changePin(
+  data: PINChangeRequest,
+): Promise<{ message: string }> {
+  return apiClient.post<{ message: string }>(
+    "/auth/pin/change",
+    data,
+  );
+}
+
+export async function disablePin(
+  data: PINDisableRequest,
+): Promise<{ message: string }> {
+  return apiClient.post<{ message: string }>(
+    "/auth/pin/disable",
     data,
   );
 }

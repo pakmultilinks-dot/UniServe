@@ -1,0 +1,64 @@
+# UniServe — LOCAL HTTPS verification Caddyfile (Phase 63 security/HTTPS verification only)
+#
+# Purpose: provide a REAL local TLS termination path that mirrors the production
+# architecture in infrastructure/caddy/Caddyfile (Caddy terminates TLS, proxies to
+# the API container and serves/proxies the web app) — without any public DNS,
+# cloud service, or production infrastructure.
+#
+# Scope / trust model (read before use):
+#   - Uses Caddy's INTERNAL local CA (`tls internal`). Certificates are trusted
+#     ONLY on this machine after the local root CA is imported into the user
+#     certificate store (documented in FINAL_SECURITY_HTTPS_AND_FULL_REGRESSION.md).
+#     This is NOT public certificate trust and NOT "production HTTPS".
+#   - Production HTTPS still requires a real domain + publicly trusted cert.
+#
+# Topology:
+#   https://localhost          -> /api/*  => uniserve_api:8000 (Docker network)
+#                            -> /*      => host Next dev server :3001
+#                                            (same-origin /api/v1 base — no mixed content)
+#   http://localhost           -> 301 redirect to https://localhost
+#
+# Run (from repo root):
+#   docker run -d --name uniserve_caddy_local --network uniserve-prod_default \
+#     -p 80:80 -p 443:443 \
+#     -v "$(pwd)/infrastructure/caddy/Caddyfile.local-https:/etc/caddy/Caddyfile:ro" \
+#     -v uniserve_caddy_local_data:/data -v uniserve_caddy_local_config:/config \
+#     caddy:2-alpine
+
+# NOTE: no global `auto_https off` here — that directive also disables
+# certificate management for explicitly-defined https:// sites, which made
+# TLS handshakes fail with no leaf certificate issued. Both the https and
+# http sites below are explicitly defined, so Caddy's automatic behaviour
+# adds nothing beyond them; the internal CA is used via `tls internal`.
+
+https://localhost {
+	tls internal
+
+	# Mirror production security headers (infrastructure/caddy/Caddyfile).
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		X-XSS-Protection "1; mode=block"
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy uniserve_api:8000
+	}
+
+	handle {
+		reverse_proxy host.docker.internal:3001
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# HTTP -> HTTPS behaviour (same pattern Caddy applies automatically in production).
+http://localhost {
+	redir https://localhost{uri} permanent
+}

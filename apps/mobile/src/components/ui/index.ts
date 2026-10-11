@@ -8,6 +8,7 @@ export { BottomSheet, BottomSheetRow } from "./BottomSheet";
 export { QuantityStepper } from "./QuantityStepper";
 export { Divider } from "./Divider";
 export { IconButton } from "./IconButton";
+export { ConfirmDialog } from "./ConfirmDialog";
 export { SectionHeader } from "./SectionHeader";
 export { ErrorState } from "./ErrorState";
 

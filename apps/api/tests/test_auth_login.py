@@ -137,40 +137,73 @@ class TestLogin:
 
 @pytest.mark.asyncio
 class TestAccountLockout:
-    """Verify that the account locks after LOGIN_MAX_ATTEMPTS wrong passwords."""
+    """Verify that the account locks after LOGIN_MAX_ATTEMPTS wrong passwords.
+
+    Phase 63 note: this test previously exercised the shared no-rollback
+    ``client`` session, where the old code's in-memory ORM mutation
+    (``credential.password_failed_attempts += 1``) appeared to accumulate
+    across requests — a false green that masked the counter never actually
+    persisting (the production ``get_db`` rolls the request session back on
+    the raised exception, making the lockout dead code). It now runs against
+    the REAL ``get_db`` boundary: the user is seeded on the isolated
+    persistence database and the per-test ``get_db`` override is popped so
+    each request gets a fresh session with commit-on-success /
+    rollback-on-exception. The counter/lockout now genuinely persist via
+    ``_persist_credential_state``, and the 423 assertion below is a true
+    green. Cross-request persistence + audit-trail assertions live in
+    ``test_login_lockout_persistence.py``.
+    """
 
     EMAIL = "fa22-bse-lock@lgu.edu.pk"
     PASSWORD = "StrongPass1!"
 
-    async def _seed_user(self, db: AsyncSession) -> None:
-        await create_test_user(
-            db,
-            university_id="FA22-BSE-LOCK",
-            university_email=self.EMAIL,
-            password=self.PASSWORD,
-            role=Role.STUDENT,
-            category=UserCategory.STUDENT,
-            status=AccountStatus.ACTIVE,
-            email_verified=True,
-        )
+    async def test_lockout_after_max_attempts(self, otp_persistence_factory):
+        import uuid as _uuid
 
-    async def test_lockout_after_max_attempts(self, client: AsyncClient, db: AsyncSession):
-        await self._seed_user(db)
+        from httpx import ASGITransport
 
-        # Exhaust wrong-password attempts (LOGIN_MAX_ATTEMPTS=10)
-        for _ in range(10):
-            resp = await client.post(
-                "/api/v1/auth/login",
-                json={"university_email": self.EMAIL, "password": "WrongPass1!"},
+        from app.core.database import get_db
+        from app.main import app
+
+        suffix = _uuid.uuid4().hex[:8]
+        email = f"fa22-bse-lock-{suffix}@lgu.edu.pk"
+        uid = f"FA22-BSE-LOCK-{suffix.upper()}"
+
+        # Seed on the isolated persistence DB (the factory the independent
+        # counter-persistence path writes to) and commit.
+        async with otp_persistence_factory() as session:
+            await create_test_user(
+                session,
+                university_id=uid,
+                university_email=email,
+                password=self.PASSWORD,
+                role=Role.STUDENT,
+                category=UserCategory.STUDENT,
+                status=AccountStatus.ACTIVE,
+                email_verified=True,
             )
-            assert resp.status_code == 401
+            await session.commit()
 
-        # Now even the correct password should be rejected (locked)
-        resp = await client.post(
-            "/api/v1/auth/login",
-            json={"university_email": self.EMAIL, "password": self.PASSWORD},
-        )
-        assert resp.status_code == 423  # Locked
+        # Use the REAL get_db boundary (fresh session per request,
+        # rollback-on-exception) — the production request lifecycle.
+        app.dependency_overrides.pop(get_db, None)
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            # Exhaust wrong-password attempts (LOGIN_MAX_ATTEMPTS=10)
+            for _ in range(10):
+                resp = await ac.post(
+                    "/api/v1/auth/login",
+                    json={"university_email": email, "password": "WrongPass1!"},
+                )
+                assert resp.status_code == 401
+
+            # Now even the correct password should be rejected (locked)
+            resp = await ac.post(
+                "/api/v1/auth/login",
+                json={"university_email": email, "password": self.PASSWORD},
+            )
+            assert resp.status_code == 423  # Locked
 
 
 # ---------------------------------------------------------------------------

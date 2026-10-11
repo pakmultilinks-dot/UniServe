@@ -72,6 +72,12 @@ async def list_cafeterias(
     - Students only see STUDENT cafeterias.
     - Faculty see both STUDENT and FACULTY cafeterias.
     - Admin / staff / manager see all.
+    - Phase 58 (Workstream A): students and faculty operate the mobile
+      ordering path — when they omit the is_active parameter, the default
+      is active-only so inactive cafeterias never enter operational
+      customer selection. Admin / manager / staff keep the existing
+      all-records default (they manage inactive cafeterias), and an
+      explicit ``?is_active=...`` is always honored for every role.
     """
     service = CafeteriaService(db)
 
@@ -83,6 +89,11 @@ async def list_cafeterias(
             raise AuthorizationError("You cannot access this cafeteria")
         cafeteria_type = CafeteriaType.STUDENT
     # Faculty and admins see all cafeterias (no filter)
+
+    # Phase 58 (Workstream A) — default-path correctness for customer roles:
+    # students/faculty get active-only unless they explicitly ask otherwise.
+    if is_active is None and auth.user.role in (Role.STUDENT, Role.FACULTY):
+        is_active = True
 
     cafeterias = await service.list_cafeterias(
         is_active=is_active,

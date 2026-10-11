@@ -6,6 +6,8 @@ Percentages are expressed as decimals (e.g. 0.15 = 15%).
 
 from __future__ import annotations
 
+from datetime import datetime  # noqa: TC003 — Pydantic resolves fields at runtime
+
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
@@ -119,3 +121,31 @@ class AdministrationOverviewResponse(BaseModel):
     financial: FinancialSummary
     exceptions: ExceptionsSummary
     menu_items: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Audit Events (Phase 55 — admin security visibility)
+# ---------------------------------------------------------------------------
+
+
+class AuditEventResponse(BaseModel):
+    """Single security audit event."""
+
+    id: int
+    event_type: str
+    user_id: str | None = None
+    user_name: str | None = Field(
+        default=None,
+        description="Actor display name resolved server-side (None when unknown)",
+    )
+    description: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    created_at: datetime
+
+
+class AuditEventListResponse(BaseModel):
+    """Paginated audit event list (newest first)."""
+
+    events: list[AuditEventResponse]
+    total: int

@@ -131,11 +131,41 @@ class ReportService:
         ref_result = await self.db.execute(ref_q)
         total_refunded = int(ref_result.scalar() or 0)
 
+        # Phase 49 — payment volume by method (succeeded payments only).
+        # Mirrors administration.get_financial_summary so reports and
+        # administration financials share one authoritative definition
+        # (payment method lives on Order; Payment rows carry no method).
+        pay_q = (
+            select(
+                func.coalesce(
+                    func.sum(Payment.amount).filter(Order.payment_method == PaymentMethod.ONLINE),
+                    0,
+                ).label("online_volume"),
+                func.coalesce(
+                    func.sum(Payment.amount).filter(Order.payment_method == PaymentMethod.CASH),
+                    0,
+                ).label("cash_volume"),
+            )
+            .select_from(Payment)
+            .join(Order, Payment.order_id == Order.id)
+            .where(
+                Payment.status == PaymentStatus.SUCCEEDED,
+                Order.order_date >= sd,
+                Order.order_date <= ed,
+            )
+        )
+        if cafeteria_id:
+            pay_q = pay_q.where(Order.cafeteria_id == cafeteria_id)
+        pay_result = await self.db.execute(pay_q)
+        pr = pay_result.one()
+
         return {
             "total_revenue": total_revenue,
             "total_orders": total_orders,
             "total_refunded": total_refunded,
             "net_revenue": total_revenue - total_refunded,
+            "online_payment_volume": int(pr.online_volume),
+            "cash_payment_volume": int(pr.cash_volume),
             "currency": "PKR",
         }
 
@@ -223,6 +253,25 @@ class ReportService:
         ref_result = await self.db.execute(ref_q)
         ref_map = {r.cafeteria_id: int(r.refunded) for r in ref_result.all()}
 
+        # Phase 49 — completed/cancelled counts per cafeteria so the admin
+        # comparison table can show lifecycle columns without N+1 calls.
+        stat_q = (
+            select(
+                Order.cafeteria_id,
+                func.count().filter(Order.status == OrderStatus.COMPLETED).label("completed"),
+                func.count().filter(Order.status == OrderStatus.CANCELLED).label("cancelled"),
+            )
+            .where(
+                Order.order_date >= sd,
+                Order.order_date <= ed,
+            )
+            .group_by(Order.cafeteria_id)
+        )
+        stat_result = await self.db.execute(stat_q)
+        stat_map = {
+            r.cafeteria_id: (int(r.completed), int(r.cancelled)) for r in stat_result.all()
+        }
+
         return [
             {
                 "cafeteria_id": row.cafeteria_id,
@@ -230,6 +279,8 @@ class ReportService:
                 "revenue": int(row.revenue),
                 "order_count": int(row.order_count),
                 "refunded_amount": ref_map.get(row.cafeteria_id, 0),
+                "completed_orders": stat_map.get(row.cafeteria_id, (0, 0))[0],
+                "cancelled_orders": stat_map.get(row.cafeteria_id, (0, 0))[1],
             }
             for row in rows
         ]

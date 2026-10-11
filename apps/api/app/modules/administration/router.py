@@ -16,6 +16,8 @@ from app.modules.users.models import Role
 
 from .schemas import (
     AdministrationOverviewResponse,
+    AuditEventListResponse,
+    AuditEventResponse,
     CafeteriaSummary,
     ExceptionsSummary,
     FinancialSummary,
@@ -67,4 +69,37 @@ async def administration_overview(
         financial=FinancialSummary(**financial),
         exceptions=ExceptionsSummary(**exceptions),
         menu_items=menu_items,
+    )
+
+
+@router.get(
+    "/audit-events",
+    response_model=AuditEventListResponse,
+)
+async def list_audit_events(
+    limit: int = Query(
+        50, ge=1, le=200, description="Maximum number of events to return"
+    ),
+    offset: int = Query(0, ge=0, description="Number of events to skip (pagination)"),
+    event_type: str | None = Query(
+        None, description="Optional audit event type filter"
+    ),
+    auth: AuthContext = Depends(RequireRole(*_ADMIN_ROLES)),
+    db: AsyncSession = Depends(get_db),
+) -> AuditEventListResponse:
+    """Security audit log — newest first, paginated. University Admin only.
+
+    Phase 55 — read-only visibility into the security audit trail
+    (logins, password changes, account lifecycle, administrative
+    actions). ``user_id`` identifies the actor; ``user_name`` is a
+    convenience enrichment resolved by the service. No write side
+    effects — this endpoint never mutates audit data.
+    """
+    service = AdminService(db)
+    data = await service.get_audit_events(
+        limit=limit, offset=offset, event_type=event_type
+    )
+    return AuditEventListResponse(
+        events=[AuditEventResponse(**e) for e in data["events"]],
+        total=data["total"],
     )

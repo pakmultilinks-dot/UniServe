@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getNotifications, markNotificationRead, markAllNotificationsRead } from "@/lib/api";
+import { getNotifications, markNotificationRead, markAllNotificationsRead, getApiErrorInfo } from "@/lib/api";
+import type { ApiErrorInfo } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadErrorState } from "@/components/ui/LoadErrorState";
 import { Button } from "@/components/ui/Button";
 import type { Notification } from "@uniserve/shared-types";
 
@@ -58,6 +61,18 @@ const TYPE_ICONS: Record<string, JSX.Element> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   ),
+  // Phase 51 — a refund request was rejected by an admin/manager.
+  refund_rejected: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  // Phase 50 — University Admin broadcast (in-app announcement).
+  admin_announcement: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46" />
+    </svg>
+  ),
 };
 
 export default function NotificationsPage() {
@@ -65,6 +80,9 @@ export default function NotificationsPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  /* Phase 46 — explicit request-failure state (see LoadErrorState). */
+  const [loadError, setLoadError] = useState<ApiErrorInfo | null>(null);
+  const { toast } = useToast();
 
   const loadNotifications = useCallback(async () => {
     setLoading(true);
@@ -72,8 +90,11 @@ export default function NotificationsPage() {
       const data = await getNotifications({ unread_only: showUnreadOnly || undefined, limit: 50 });
       setNotifications(data.items ?? []);
       setUnreadCount(data.unread_count ?? 0);
-    } catch {
-      setNotifications([]);
+      setLoadError(null);
+    } catch (err) {
+      // Phase 46 — surface the failure; "No notifications" must only ever
+      // be shown for a genuinely empty result.
+      setLoadError(getApiErrorInfo(err));
     } finally {
       setLoading(false);
     }
@@ -88,7 +109,10 @@ export default function NotificationsPage() {
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch {}
+    } catch (err) {
+      // Phase 46 — action failures must surface, never silently no-op.
+      toast(getApiErrorInfo(err).message, "error");
+    }
   };
 
   const handleMarkAllRead = async () => {
@@ -96,7 +120,10 @@ export default function NotificationsPage() {
       await markAllNotificationsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
-    } catch {}
+    } catch (err) {
+      // Phase 46 — action failures must surface, never silently no-op.
+      toast(getApiErrorInfo(err).message, "error");
+    }
   };
 
   const formatDate = (iso: string) => {
@@ -137,12 +164,29 @@ export default function NotificationsPage() {
         }
       />
 
+      {/* Phase 46 — notifications refresh failure (compact, retryable) */}
+      {loadError && notifications.length > 0 && (
+        <LoadErrorState
+          compact
+          error={loadError}
+          subject="notifications"
+          onRetry={() => loadNotifications()}
+          className="mb-4 border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10 rounded-xl"
+        />
+      )}
+
       {loading ? (
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-20 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl skeleton" />
           ))}
         </div>
+      ) : loadError && notifications.length === 0 ? (
+        <LoadErrorState
+          error={loadError}
+          subject="notifications"
+          onRetry={() => loadNotifications()}
+        />
       ) : notifications.length === 0 ? (
         <EmptyState
           title="No notifications"

@@ -17,6 +17,8 @@ const STATUS_STYLES: Record<string, string> = {
   deleted: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
   succeeded: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  // Phase 51 — refund rejected by an admin/manager (terminal refund state)
+  rejected: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   processing: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   // PaymentStatus refund states
   refund_pending: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",

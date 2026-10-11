@@ -1,43 +1,143 @@
 /**
- * UniServe — Favorites Screen
+ * UniServe — Favorites Screen (P3-5)
  *
- * Placeholder for saved favorite items for quick reordering.
- * Shows empty state with heart icon per design spec.
+ * Server-backed list of the user's favorited menu items. The backend
+ * favorites API (GET/POST/DELETE /favorites) has existed since Phase 3 —
+ * this screen was a static placeholder. FavoritesContext loads the list
+ * (user-scoped server-side) and provides an optimistic toggle.
+ *
+ * - Two-column FoodCard grid matching the home menu layout
+ * - Heart on each card removes the favorite (optimistic)
+ * - Tapping a card opens item detail (with cafeteria context)
+ * - Pull-to-refresh re-fetches from the server
+ * - Empty state keeps the original design-spec presentation
  */
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { View, Text, ScrollView, StyleSheet, RefreshControl } from "react-native";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
-import { textColor, bgColor, brandGreen } from "../../../src/theme";
+import { useFavorites } from "../../../src/contexts/FavoritesContext";
+import { FoodCard } from "../../../src/components/ui";
+import { textColor, bgColor, borderColor, brandGreen } from "../../../src/theme";
+import { getCafeterias } from "../../../src/services/data";
 
 export default function FavoritesScreen() {
   const { resolvedTheme } = useTheme();
+  const router = useRouter();
+  const { favorites, isFavorite, toggleFavorite, refresh, isLoading } = useFavorites();
+
+  // id → name, so each card can show which cafeteria the item belongs to
+  // (favorites can span cafeterias, unlike the Home menu). Best-effort: if the
+  // lookup fails the cards simply omit the cafeteria line.
+  const [cafeteriaNames, setCafeteriaNames] = useState<Record<string, string>>({});
 
   const brand = brandGreen(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
   const tcMuted = textColor(resolvedTheme, "muted");
   const bg = bgColor(resolvedTheme, "primary");
 
+  useEffect(() => {
+    let mounted = true;
+    getCafeterias()
+      .then((list) => {
+        if (!mounted) return;
+        const map: Record<string, string> = {};
+        for (const c of list) map[c.id] = c.name;
+        setCafeteriaNames(map);
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    await refresh();
+  }, [refresh]);
+
+  // Favorites whose menu item was deleted come back without a payload —
+  // render only the ones we can show.
+  const items = favorites
+    .map((fav) => fav.menu_item)
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
   return (
-    <View style={[styles.screen, { backgroundColor: bg }]}>
-      <View style={[styles.iconContainer, { backgroundColor: brand + "15" }]}>
-        <Ionicons name="heart-outline" size={56} color={brand + "30"} />
-      </View>
-      <Text style={[styles.title, { color: tc }]}>No favorites yet</Text>
-      <Text style={[styles.description, { color: tcMuted }]}>
-        Tap the heart icon on any menu item to save it here for quick reordering.
-      </Text>
-    </View>
+    <SafeAreaView edges={["top"]} style={[styles.screen, { backgroundColor: bg }]}>
+      <ScrollView
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={onRefresh} colors={[brand]} tintColor={brand} />
+        }
+      >
+        {/* Header */}
+        <View style={styles.screenHeader}>
+          <Text style={[styles.screenTitle, { color: tc }]}>Favorites</Text>
+          <Text style={[styles.screenSubtitle, { color: tcMuted }]}>
+            Your saved menu items, ready to reorder
+          </Text>
+        </View>
+
+        {items.length === 0 ? (
+          // Empty state — original design-spec presentation
+          <View style={styles.emptyContainer}>
+            <View style={[styles.iconContainer, { backgroundColor: brand + "15" }]}>
+              <Ionicons name="heart-outline" size={56} color={brand + "30"} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: tc }]}>No favorites yet</Text>
+            <Text style={[styles.emptyDesc, { color: tcMuted }]}>
+              Tap the heart icon on any menu item to save it here for quick reordering.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.gridContainer}>
+            {items.map((item) => (
+              <View key={item.id} style={styles.gridItem}>
+                <FoodCard
+                  name={item.name}
+                  subtitle={cafeteriaNames[item.cafeteria_id]}
+                  description={item.description}
+                  price={item.price}
+                  imageUri={item.image_url}
+                  category={item.category}
+                  preparationTimeMinutes={item.preparation_time_minutes}
+                  isAvailable={item.is_available}
+                  isFavorite={isFavorite(item.id)}
+                  onToggleFavorite={() => {
+                    // Optimistic removal — the heart disappears immediately;
+                    // FavoritesContext reverts if the server rejects it.
+                    toggleFavorite(item.id).catch(() => {});
+                  }}
+                  onPress={() =>
+                    router.push(
+                      `/item/${item.id}?cafeteriaId=${item.cafeteria_id}`,
+                    )
+                  }
+                />
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
+  screen: { flex: 1 },
+  list: { paddingBottom: 32 },
+  screenHeader: { paddingHorizontal: 20, paddingTop: 20, marginBottom: 8 },
+  screenTitle: { fontSize: 28, fontWeight: "700", lineHeight: 34 },
+  screenSubtitle: { fontSize: 13, marginTop: 4 },
+
+  // Empty
+  emptyContainer: {
     alignItems: "center",
-    justifyContent: "center",
     paddingHorizontal: 40,
+    paddingTop: 72,
   },
   iconContainer: {
     width: 96,
@@ -47,14 +147,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 8,
+  emptyTitle: { fontSize: 18, fontWeight: "600", marginBottom: 8 },
+  emptyDesc: { fontSize: 14, textAlign: "center", lineHeight: 20 },
+
+  // Grid — matches home menu layout
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    gap: 10,
+    paddingTop: 8,
   },
-  description: {
-    fontSize: 14,
-    textAlign: "center",
-    lineHeight: 20,
+  gridItem: {
+    width: "48.5%",
+    flexGrow: 0,
+    flexShrink: 0,
   },
 });

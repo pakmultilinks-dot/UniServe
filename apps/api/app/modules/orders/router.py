@@ -41,21 +41,30 @@ async def list_cafeteria_orders(
     cafeteria_id: str,
     status: str | None = Query(None),
     order_date: date | None = Query(None),
+    limit: int | None = Query(None, ge=1, le=100),
+    offset: int | None = Query(None, ge=0),
     auth: AuthContext = Depends(
         RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)
     ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderListResponse:
-    """List orders for a specific cafeteria (manager/staff view)."""
+    """List orders for a specific cafeteria (manager/staff view).
+
+    Phase 54 — optional limit/offset paginate the queue; `total` is the
+    full filtered count (not the page length). Omitting both parameters
+    preserves the previous unpaginated behaviour.
+    """
     service = OrderService(db)
-    orders = await service.list_cafeteria_orders(
+    orders, total = await service.list_cafeteria_orders(
         cafeteria_id=cafeteria_id,
         status=status,
         order_date=order_date,
+        limit=limit,
+        offset=offset,
     )
     return OrderListResponse(
         orders=[OrderResponse.model_validate(o) for o in orders],
-        total=len(orders),
+        total=total,
     )
 
 
@@ -423,7 +432,9 @@ async def get_eta(
     if order.user_id != auth.user.id and auth.user.role != Role.UNIVERSITY_ADMIN:
         if auth.user.role in (Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF):
             from sqlalchemy import select as sa_select
+
             from app.modules.users.models import CafeteriaAssignment
+
             result = await db.execute(
                 sa_select(CafeteriaAssignment).where(
                     CafeteriaAssignment.user_id == auth.user.id,

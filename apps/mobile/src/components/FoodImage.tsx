@@ -10,6 +10,7 @@ import { View, Image, StyleSheet, ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { MenuCategory } from "@uniserve/shared-types";
 import { bgColor } from "../theme";
+import { resolveApiImageUrl } from "../config";
 
 const CATEGORY_IMAGES: Record<string, string> = {
   breakfast: "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=800&q=85",
@@ -38,7 +39,10 @@ export default function FoodImage({
   style,
 }: FoodImageProps) {
   const [imageFailed, setImageFailed] = useState(false);
-  const imageUri = uri || CATEGORY_IMAGES[category ?? ""];
+  // Persisted image references are host-independent ("/api/v1/static/…") —
+  // resolve against the configured API origin before rendering; fall back
+  // to the category placeholder on null, resolution failure, or load error.
+  const imageUri = resolveApiImageUrl(uri) || CATEGORY_IMAGES[category ?? ""];
   const bgColorHex = "#f3ead8";
 
   const containerStyle: ViewStyle[] = [

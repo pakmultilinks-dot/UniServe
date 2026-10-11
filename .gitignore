@@ -122,3 +122,9 @@ secrets/
 
 # ---- Alembic ----
 alembic/versions/*.pyc
+
+# Local test credentials - never upload
+artifacts/phase-7/token.txt
+
+# Local demo account details pending public-repository review
+DEMO_ACCOUNTS.md

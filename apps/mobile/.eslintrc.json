@@ -1,0 +1,16 @@
+{
+  "extends": ["expo"],
+  "ignorePatterns": [
+    "node_modules/",
+    ".expo/",
+    "dist/",
+    "babel.config.js",
+    "metro.config.js",
+    "eas.json",
+    "app.json"
+  ],
+  "rules": {
+    "react-hooks/refs": "warn",
+    "react-hooks/set-state-in-effect": "warn"
+  }
+}

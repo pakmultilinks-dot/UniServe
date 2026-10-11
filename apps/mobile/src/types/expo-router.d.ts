@@ -7,7 +7,6 @@
  */
 declare module "expo-router" {
   import { ComponentType, ReactNode } from "react";
-  import { ParamListBase, RouteProp } from "@react-navigation/native";
 
   export function useRouter(): {
     push: (href: string) => void;

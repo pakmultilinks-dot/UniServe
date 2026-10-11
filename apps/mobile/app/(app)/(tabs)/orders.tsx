@@ -15,11 +15,12 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
-import { getOrders } from "../../../src/services/data";
+import { getOrders, getCafeterias } from "../../../src/services/data";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
-import type { Order, OrderStatus } from "@uniserve/shared-types";
+import type { Order, OrderStatus, Cafeteria } from "@uniserve/shared-types";
 
 // ── Helpers ──
 
@@ -38,6 +39,15 @@ function formatOrderDate(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+/** Summarise the items on an order card, e.g. "Chicken Karahi ×2 · Fries" */
+function itemNamesSummary(order: Order): string {
+  const names = (order.items ?? []).map((i) =>
+    i.quantity > 1 ? `${i.item_name} ×${i.quantity}` : i.item_name,
+  );
+  if (names.length === 0) return "No items";
+  return names.join(" · ");
 }
 
 const STATUS_STYLE: Record<OrderStatus, { label: string; icon: keyof typeof Ionicons.glyphMap; colorKey: "success" | "warning" | "error" | "info" }> = {
@@ -72,6 +82,8 @@ export default function OrdersScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
+  // id → name, so each card can show which cafeteria the order was from.
+  const [cafeteriaNames, setCafeteriaNames] = useState<Record<string, string>>({});
 
   const brand = brandGreen(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
@@ -96,6 +108,24 @@ export default function OrdersScreen() {
     loadOrders().finally(() => setIsLoading(false));
   }, [loadOrders]);
 
+  // Load the id → name map used for the per-card cafeteria label. Best-effort:
+  // if this fails the cards simply omit the name, so it never surfaces as an
+  // order-history error.
+  useEffect(() => {
+    let mounted = true;
+    getCafeterias()
+      .then((list: Cafeteria[]) => {
+        if (!mounted) return;
+        const map: Record<string, string> = {};
+        for (const c of list) map[c.id] = c.name;
+        setCafeteriaNames(map);
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadOrders();
@@ -103,7 +133,7 @@ export default function OrdersScreen() {
   }, [loadOrders]);
 
   return (
-    <View style={[styles.screen, { backgroundColor: bgSec }]}>
+    <SafeAreaView edges={["top"]} style={[styles.screen, { backgroundColor: bgSec }]}>
       <ScrollView
         contentContainerStyle={styles.list}
         refreshControl={
@@ -145,8 +175,21 @@ export default function OrdersScreen() {
           </View>
         ) : (
           orders.map((order) => {
-            const statusCfg = STATUS_STYLE[order.status as OrderStatus] ?? STATUS_STYLE.pending;
+            const orderStatus = order.status as OrderStatus;
+            const statusCfg = STATUS_STYLE[orderStatus] ?? STATUS_STYLE.pending;
             const statusColor = functionalColor(resolvedTheme, statusCfg.colorKey);
+            // A pending order that staff have confirmed is a distinct sub-state.
+            // Fold it into the single status pill (label + icon) rather than
+            // rendering a second "Confirmed" chip, so each card shows exactly
+            // one status.
+            const isConfirmedPending =
+              orderStatus === "pending" && !!order.confirmed_at;
+            const pillLabel = isConfirmedPending
+              ? "Confirmed"
+              : statusCfg.label;
+            const pillIcon: keyof typeof Ionicons.glyphMap =
+              isConfirmedPending ? "shield-checkmark-outline" : statusCfg.icon;
+            const cafeteriaName = cafeteriaNames[order.cafeteria_id];
 
             return (
               <Pressable
@@ -160,17 +203,26 @@ export default function OrdersScreen() {
                     <Text style={[styles.orderNumber, { color: tc }]}>
                       #{order.order_number}
                     </Text>
-                    <Text style={[styles.orderCafeteria, { color: tcMuted }]}>
-                      {order.items?.length ?? 0} {(order.items?.length ?? 0) === 1 ? "item" : "items"}
-                    </Text>
+                    {cafeteriaName ? (
+                      <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.orderCafeteria, { color: tcMuted }]}>
+                        {cafeteriaName}
+                      </Text>
+                    ) : null}
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: statusColor + "15" }]}>
-                    <Ionicons name={statusCfg.icon} size={12} color={statusColor} />
-                    <Text style={[styles.statusLabel, { color: statusColor }]}>
-                      {statusCfg.label}
-                    </Text>
+                  <View style={styles.badgeRow}>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColor + "15" }]}>
+                      <Ionicons name={pillIcon} size={12} color={statusColor} />
+                      <Text style={[styles.statusLabel, { color: statusColor }]}>
+                        {pillLabel}
+                      </Text>
+                    </View>
                   </View>
                 </View>
+
+                {/* Item names */}
+                <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.orderItems, { color: tcMuted }]}>
+                  {itemNamesSummary(order)}
+                </Text>
 
                 {/* Footer row */}
                 <View style={[styles.orderFooter, { borderTopColor: bcSub }]}>
@@ -186,7 +238,7 @@ export default function OrdersScreen() {
           })
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -249,6 +301,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   statusLabel: { fontSize: 11, fontWeight: "600" },
+  orderItems: { fontSize: 12, lineHeight: 17, marginTop: 8 },
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
   orderFooter: {
     flexDirection: "row",
     justifyContent: "space-between",

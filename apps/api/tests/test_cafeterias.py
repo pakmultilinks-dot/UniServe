@@ -131,6 +131,111 @@ async def test_student_cannot_discover_faculty_cafeteria_via_type_param(
 
 
 # ===================================================================
+# Phase 58 (Workstream A) — default-path correctness: inactive
+# cafeterias must not enter operational customer selection.
+# ===================================================================
+
+
+@pytest.mark.asyncio
+async def test_student_default_listing_excludes_inactive_cafeterias(
+    student_client: AsyncClient, db
+):
+    """Workstream A (P1): a student's default listing (no is_active param)
+    must not include inactive cafeterias — inactive cafeterias must never
+    appear in operational customer selection."""
+    await create_test_cafeteria(
+        db, name="Active Student Caf", cafeteria_type=CafeteriaType.STUDENT
+    )
+    await create_test_cafeteria(
+        db,
+        name="Inactive Student Caf",
+        cafeteria_type=CafeteriaType.STUDENT,
+        is_active=False,
+    )
+
+    response = await student_client.get("/api/v1/cafeterias/")
+    assert response.status_code == 200
+    data = response.json()
+    names = {c["name"] for c in data["cafeterias"]}
+    assert "Active Student Caf" in names
+    assert "Inactive Student Caf" not in names
+
+    # Explicit ?is_active=true — same active-only result
+    response = await student_client.get("/api/v1/cafeterias/?is_active=true")
+    assert response.status_code == 200
+    names = {c["name"] for c in response.json()["cafeterias"]}
+    assert names == {"Active Student Caf"}
+
+
+@pytest.mark.asyncio
+async def test_faculty_default_listing_excludes_inactive_cafeterias(
+    faculty_client: AsyncClient, db
+):
+    """Workstream A (P1): faculty default listing is active-only across both
+    cafeteria types; inactive cafeterias remain reachable via an explicit
+    is_active=false (operational selectors keep their full semantics)."""
+    await create_test_cafeteria(
+        db, name="Active Student Caf", cafeteria_type=CafeteriaType.STUDENT
+    )
+    await create_test_cafeteria(
+        db, name="Active Faculty Caf", cafeteria_type=CafeteriaType.FACULTY
+    )
+    await create_test_cafeteria(
+        db,
+        name="Inactive Faculty Caf",
+        cafeteria_type=CafeteriaType.FACULTY,
+        is_active=False,
+    )
+
+    response = await faculty_client.get("/api/v1/cafeterias/")
+    assert response.status_code == 200
+    names = {c["name"] for c in response.json()["cafeterias"]}
+    assert names == {"Active Student Caf", "Active Faculty Caf"}
+
+    # Explicit param is always honored
+    response = await faculty_client.get("/api/v1/cafeterias/?is_active=false")
+    assert response.status_code == 200
+    names = {c["name"] for c in response.json()["cafeterias"]}
+    assert names == {"Inactive Faculty Caf"}
+
+
+@pytest.mark.asyncio
+async def test_admin_default_listing_includes_inactive_cafeterias(
+    admin_client: AsyncClient, db
+):
+    """Workstream A: admin management path is unchanged — the admin default
+    listing still includes inactive cafeterias (they manage them)."""
+    await create_test_cafeteria(db, name="Active Caf", cafeteria_type=CafeteriaType.STUDENT)
+    await create_test_cafeteria(
+        db, name="Inactive Caf", cafeteria_type=CafeteriaType.STUDENT, is_active=False
+    )
+
+    response = await admin_client.get("/api/v1/cafeterias/")
+    assert response.status_code == 200
+    names = {c["name"] for c in response.json()["cafeterias"]}
+    assert "Active Caf" in names
+    assert "Inactive Caf" in names
+
+
+@pytest.mark.asyncio
+async def test_manager_default_listing_includes_inactive_cafeterias(
+    manager_client: AsyncClient, db
+):
+    """Workstream A: manager operational selectors keep their full scope —
+    no inactive default is applied for managerial roles."""
+    await create_test_cafeteria(db, name="Active Caf", cafeteria_type=CafeteriaType.STUDENT)
+    await create_test_cafeteria(
+        db, name="Inactive Caf", cafeteria_type=CafeteriaType.STUDENT, is_active=False
+    )
+
+    response = await manager_client.get("/api/v1/cafeterias/")
+    assert response.status_code == 200
+    names = {c["name"] for c in response.json()["cafeterias"]}
+    assert "Active Caf" in names
+    assert "Inactive Caf" in names
+
+
+# ===================================================================
 # Get Cafeteria
 # ===================================================================
 

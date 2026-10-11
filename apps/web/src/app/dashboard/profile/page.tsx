@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { updateProfile } from "@/lib/api";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
@@ -38,9 +39,13 @@ export default function ProfilePage() {
     }
     setSaving(true);
     try {
-      // Profile name update — backend does not yet expose a profile update endpoint.
-      // Show a notice to the user.
-      toast("Profile editing will be available in a future update", "info");
+      // Phase 55 — PATCH /auth/me (self-scoped profile update).
+      await updateProfile({
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+      });
+      await refreshUser();
+      toast("Profile updated successfully", "success");
       setEditing(false);
     } catch (err: any) {
       toast(err?.message ?? "Failed to update profile", "error");

@@ -114,6 +114,15 @@ class Settings(BaseSettings):
     PAYMENT_WEBHOOK_SECRET: str = ""
     PAYMENT_CALLBACK_URL: str = ""
 
+    # ---- Refund Processor ----
+    # Provider-neutral configuration (backend-only — server env only).
+    # "test" selects the mock processor (development/testing only). Set
+    # REFUND_PROCESSOR to a registered real processor name to enable
+    # provider refunds. Unknown names fail closed (HTTP 503) — no silent
+    # fallback to the mock. Cash ("pay at counter") payments never reach
+    # a processor: they are settled manually by staff.
+    REFUND_PROCESSOR: str = "test"
+
     # ---- Email / SMTP (production OTP delivery) ----
     # Standard SMTP transport for OTP emails (see app/core/email.py).
     # Provider-neutral — no vendor SDK. Credentials come from the
@@ -132,7 +141,16 @@ class Settings(BaseSettings):
     SMTP_TLS_MODE: Literal["starttls", "ssl", "none"] = "starttls"
 
     # ---- CORS ----
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8081"]
+    # Local-dev/testing default allowlist only. Production is driven by
+    # .env.production (CORS_ORIGINS), which overrides this default and is
+    # authoritative — it allows app.localhost / https://app.example.com.
+    # :8082 is added because Expo's web dev server binds there when 8081
+    # is taken (D4: local-dev gap). Specific origins only — never a wildcard.
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:8081",
+        "http://localhost:8082",
+    ]
 
     # ---- Logging ----
     LOG_LEVEL: str = "DEBUG"

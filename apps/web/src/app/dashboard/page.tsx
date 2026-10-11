@@ -17,13 +17,17 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getCafeterias,
+  getMyCafeterias,
   getOrders,
   getCafeteriaOrders,
   getNotifications,
+  getApiErrorInfo,
 } from "@/lib/api";
+import type { ApiErrorInfo } from "@/lib/api";
 import type { Order, Notification, Cafeteria } from "@uniserve/shared-types";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadErrorState } from "@/components/ui/LoadErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 /* Stat card */
@@ -60,6 +64,11 @@ export default function DashboardPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [dataLoading, setDataLoading] = useState(true);
+  /* Phase 46 — per-source failure states. Each section keeps its own error
+     so one failed request never masquerades as a zero/empty section. */
+  const [cafeteriasError, setCafeteriasError] = useState<ApiErrorInfo | null>(null);
+  const [ordersError, setOrdersError] = useState<ApiErrorInfo | null>(null);
+  const [notificationsError, setNotificationsError] = useState<ApiErrorInfo | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -72,29 +81,80 @@ export default function DashboardPage() {
     setDataLoading(true);
 
     const results = await Promise.allSettled([
-      getCafeterias(),
+      // Phase 56 — home is an ordering surface: only ACTIVE cafeterias
+      // are offered. Inactive cafeterias stay visible to admins on the
+      // Cafeterias admin page.
+      getCafeterias({ isActive: true }),
       getNotifications({ limit: 5 }),
     ]);
 
-    if (results[0].status === "fulfilled") setCafeterias(results[0].value);
+    // P3-11 — staff/manager scope: the "Cafeterias" stat and the order
+    // aggregation below reflect the user's actual assignment, not the
+    // university-wide list. Admin keeps the global view. If assignment
+    // info is unavailable, fall back to the previous all-cafeterias view.
+    let visibleCafeterias: Cafeteria[] = [];
+    if (results[0].status === "fulfilled") {
+      visibleCafeterias = results[0].value;
+      setCafeteriasError(null);
+    } else {
+      // Phase 46 — surface the failure; never present it as zero cafeterias.
+      setCafeteriasError(getApiErrorInfo(results[0].reason));
+    }
+    const isDashboardStaff = [
+      "cafeteria_staff",
+      "cafeteria_manager",
+    ].includes(user.role);
+    if (isDashboardStaff && visibleCafeterias.length > 0) {
+      try {
+        const assigned = await getMyCafeterias();
+        if (assigned.length > 0) {
+          visibleCafeterias = visibleCafeterias.filter((c) =>
+            assigned.includes(c.id),
+          );
+        }
+      } catch {
+        // Best-effort: keep the full cafeteria list if assignment lookup fails.
+      }
+    }
+    setCafeterias(visibleCafeterias);
     if (results[1].status === "fulfilled") {
       setNotifications(results[1].value.items);
       setUnreadCount(results[1].value.unread_count);
+      setNotificationsError(null);
+    } else {
+      // Phase 46 — keep any previously loaded notifications on screen and
+      // surface the failure instead of a silent "0 unread".
+      setNotificationsError(getApiErrorInfo(results[1].reason));
     }
 
     // Fetch orders: students get their own orders; staff/admin get cafeteria orders
     const isStaff = ["cafeteria_staff", "cafeteria_manager", "university_admin"].includes(user.role);
     try {
-      if (isStaff && results[0].status === "fulfilled" && results[0].value.length > 0) {
-        // Aggregate orders from all cafeterias, sorted by newest first
+      if (isStaff && visibleCafeterias.length > 0) {
+        // Aggregate orders from the cafeterias this user can actually
+        // access (scoped for staff/manager, all for admin).
         const allCafeOrders = await Promise.allSettled(
-          results[0].value.map((c) => getCafeteriaOrders(c.id)),
+          visibleCafeterias.map((c) => getCafeteriaOrders(c.id)),
         );
         const merged: Order[] = [];
+        let rejected = 0;
         for (const r of allCafeOrders) {
           if (r.status === "fulfilled") {
             merged.push(...((r.value.orders ?? []) as Order[]));
+          } else {
+            rejected += 1;
           }
+        }
+        // Phase 46 — if every cafeteria queue failed, surface the failure
+        // instead of rendering an empty "Recent Orders" section. Partial
+        // failures still show the real data that did load.
+        if (rejected > 0 && merged.length === 0) {
+          const first = allCafeOrders.find((r) => r.status === "rejected");
+          if (first && first.status === "rejected") {
+            setOrdersError(getApiErrorInfo(first.reason));
+          }
+        } else {
+          setOrdersError(null);
         }
         merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         setOrders(merged.slice(0, 5));
@@ -103,9 +163,12 @@ export default function DashboardPage() {
         // take the 5 most recent client-side.
         const myOrders = await getOrders();
         setOrders(myOrders.slice(0, 5));
+        setOrdersError(null);
       }
-    } catch {
-      setOrders([]);
+    } catch (err) {
+      // Phase 46 — keep any previously loaded orders on screen and surface
+      // the failure; never present a broken request as "No orders yet".
+      setOrdersError(getApiErrorInfo(err));
     }
 
     setDataLoading(false);
@@ -192,8 +255,12 @@ export default function DashboardPage() {
       {/* Quick stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
-          label="Cafeterias"
-          value={cafeterias.length}
+          label={
+            ["cafeteria_staff", "cafeteria_manager"].includes(user.role)
+              ? "My Cafeterias"
+              : "Cafeterias"
+          }
+          value={cafeteriasError ? "—" : cafeterias.length}
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z" />
@@ -202,7 +269,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Active Orders"
-          value={activeOrders.length}
+          value={ordersError ? "—" : activeOrders.length}
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
@@ -211,7 +278,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Unread Notifications"
-          value={unreadCount}
+          value={notificationsError ? "—" : unreadCount}
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
@@ -238,6 +305,15 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="divide-y divide-[var(--border-default)]">
+            {ordersError && orders.length > 0 && (
+              <LoadErrorState
+                compact
+                error={ordersError}
+                subject="recent orders"
+                onRetry={() => loadDashboardData()}
+                className="border-b border-[var(--border-default)]"
+              />
+            )}
             {dataLoading ? (
               <div className="p-6 space-y-3">
                 {[1, 2, 3].map((i) => (
@@ -250,6 +326,14 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
+            ) : ordersError && orders.length === 0 ? (
+              <LoadErrorState
+                compact
+                error={ordersError}
+                subject="recent orders"
+                onRetry={() => loadDashboardData()}
+                className="py-8"
+              />
             ) : orders.length === 0 ? (
               <EmptyState
                 icon={
@@ -307,6 +391,15 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="divide-y divide-[var(--border-default)]">
+            {notificationsError && notifications.length > 0 && (
+              <LoadErrorState
+                compact
+                error={notificationsError}
+                subject="recent notifications"
+                onRetry={() => loadDashboardData()}
+                className="border-b border-[var(--border-default)]"
+              />
+            )}
             {dataLoading ? (
               <div className="p-6 space-y-3">
                 {[1, 2, 3].map((i) => (
@@ -316,6 +409,14 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
+            ) : notificationsError && notifications.length === 0 ? (
+              <LoadErrorState
+                compact
+                error={notificationsError}
+                subject="recent notifications"
+                onRetry={() => loadDashboardData()}
+                className="py-8"
+              />
             ) : notifications.length === 0 ? (
               <EmptyState
                 icon={
@@ -355,8 +456,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Cafeterias quick view */}
-      {cafeterias.length > 0 && (
+      {/* Cafeterias quick view — Phase 46: a failed cafeterias request is
+          surfaced here instead of silently hiding the whole section. */}
+      {cafeteriasError && cafeterias.length === 0 ? (
+        <LoadErrorState
+          compact
+          error={cafeteriasError}
+          subject="cafeterias"
+          onRetry={() => loadDashboardData()}
+        />
+      ) : cafeterias.length > 0 && (
         <div>
           <h2 className="text-base font-semibold text-[var(--text-primary)] mb-3">
             Cafeterias

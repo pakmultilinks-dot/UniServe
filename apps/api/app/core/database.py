@@ -39,7 +39,7 @@ class Base(DeclarativeBase):
     pass
 
 
-def StrEnum(*args: Any, **kwargs: Any) -> Enum:
+def StrEnum(*args: Any, **kwargs: Any) -> Enum:  # noqa: N802 — intentional alias name
     """Create an Enum that stores .value (string) instead of .name.
 
     By default, SQLAlchemy's Enum type uses the Python enum member NAME

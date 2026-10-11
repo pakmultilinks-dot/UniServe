@@ -62,7 +62,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const resolvedTheme = resolveTheme(preference, systemColorScheme);
+  // RN 0.86 added "unspecified" to ColorSchemeName — treat it like "no
+  // preference" (null) so resolveTheme keeps its light/dark contract.
+  const resolvedTheme = resolveTheme(
+    preference,
+    systemColorScheme === "unspecified" ? null : systemColorScheme
+  );
 
   const value: ThemeContextType = {
     resolvedTheme,

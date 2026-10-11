@@ -1,16 +1,22 @@
 /**
  * UniServe — Tab Navigator Layout (App)
  *
- * Bottom tab navigator with 4 tabs: Home, Orders, Favorites, Profile.
- * Uses Ionicons for all tab icons. Cart is contextual, NOT a tab.
- * Tab bar height 56px (Android) / 84px (iOS with safe area).
- * Active: brandGreen. Inactive: textMuted.
- * Cart badge on Home tab when items in cart.
+ * Bottom tab navigator with 5 tabs: Home, Orders, Cart, Favorites, Profile.
+ * Notifications is no longer a tab — it is reachable from the header bell on
+ * Home (where the user browses and waits on orders), keeping the tab bar to
+ * the five requested destinations. Uses Ionicons for all tab icons.
+ *
+ * Android: the tab bar height + paddingBottom is computed from the bottom
+ * safe-area inset (via onLayout of the tab bar container) so the bar clears
+ * Android's gesture/navigation bar and every tab stays tappable. Cart badge
+ * on the Home tab when items in cart (same absolute-positioned pattern as
+ * before). Unread badge is shown on the Home header bell, not a tab.
  */
 import React from "react";
 import { Tabs } from "expo-router";
 import { Platform, StyleSheet, View, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
 import { textColor, bgColor, brandGreen, colors } from "../../../src/theme";
@@ -34,10 +40,17 @@ function TabBarIcon({
 export default function TabsLayout() {
   const { resolvedTheme } = useTheme();
   const { cartItemCount } = useCart();
+  const insets = useSafeAreaInsets();
   const bg = bgColor(resolvedTheme, "primary");
   const brand = brandGreen(resolvedTheme);
   const muted = textColor(resolvedTheme, "muted");
   const bc = resolvedTheme === "dark" ? colors.dark.borderDefault : colors.light.borderDefault;
+
+  // Base tab bar content is 56dp tall. Adding the bottom safe-area inset as
+  // padding guarantees the bar clears Android's gesture/navigation controls,
+  // leaving every tab label and icon in the tappable area above the system UI.
+  const tabBarHeight = 56 + Math.max(insets.bottom, Platform.OS === "ios" ? 20 : 8);
+  const tabBarPaddingBottom = Math.max(insets.bottom, Platform.OS === "ios" ? 20 : 8);
 
   return (
     <Tabs
@@ -49,8 +62,8 @@ export default function TabsLayout() {
           backgroundColor: bg,
           borderTopColor: bc,
           borderTopWidth: 1,
-          height: Platform.OS === "ios" ? 84 : 56,
-          paddingBottom: Platform.OS === "ios" ? 24 : 4,
+          height: tabBarHeight,
+          paddingBottom: tabBarPaddingBottom,
           paddingTop: 4,
         },
         tabBarLabelStyle: {
@@ -91,6 +104,24 @@ export default function TabsLayout() {
           title: "Orders",
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon name="receipt" outline="receipt-outline" color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="cart"
+        options={{
+          title: "Cart",
+          tabBarIcon: ({ color, focused }) => (
+            <View>
+              <TabBarIcon name="cart" outline="cart-outline" color={color} focused={focused} />
+              {cartItemCount > 0 && (
+                <View style={[styles.badge, { backgroundColor: colors.error }]}>
+                  <Text style={styles.badgeText}>
+                    {cartItemCount > 99 ? "99+" : cartItemCount}
+                  </Text>
+                </View>
+              )}
+            </View>
           ),
         }}
       />

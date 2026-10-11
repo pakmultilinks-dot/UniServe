@@ -5,8 +5,8 @@ Admin and Manager operations for user lifecycle management.
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditEventType, log_audit_event
@@ -25,11 +25,12 @@ from app.core.exceptions import (
 from app.core.security import generate_otp, hash_password
 from app.modules.auth.schemas import (
     AccountRecoveryRequest,
-    AuthResponse,
+    AccountRecoveryResponse,
     ChangeUserRoleRequest,
     CreateUserByAdminRequest,
     CreateUserResponse,
     SuspendUserRequest,
+    UserListResponse,
     UserSummary,
 )
 from app.modules.users.models import (
@@ -50,25 +51,137 @@ def _get_client_info(request: Request) -> tuple[str | None, str | None]:
     return ip, ua
 
 
+async def _attach_cafeteria_info(
+    summaries: list[UserSummary], db: AsyncSession
+) -> None:
+    """Attach cafeteria assignment info to admin user summaries (Phase 47).
+
+    Reads the CafeteriaAssignment table directly — the same authoritative
+    source the User.cafeteria_assignment relationship maps to — so results are
+    fresh even for objects created or mutated earlier in the same session.
+    Cafeteria names are fetched in one bulk query (no per-user N+1).
+    """
+    from app.modules.cafeterias.models import Cafeteria
+
+    user_ids = [summary.id for summary in summaries]
+    assignment_cafeteria: dict[str, str] = {}
+    cafeteria_ids: set[str] = set()
+    if user_ids:
+        result = await db.execute(
+            select(CafeteriaAssignment.user_id, CafeteriaAssignment.cafeteria_id).where(
+                CafeteriaAssignment.user_id.in_(user_ids)
+            )
+        )
+        for assigned_user_id, cafeteria_id in result.all():
+            assignment_cafeteria[assigned_user_id] = cafeteria_id
+            cafeteria_ids.add(cafeteria_id)
+
+    names: dict[str, str] = {}
+    if cafeteria_ids:
+        result = await db.execute(
+            select(Cafeteria.id, Cafeteria.name).where(Cafeteria.id.in_(cafeteria_ids))
+        )
+        names = {row[0]: row[1] for row in result.all()}
+
+    for summary in summaries:
+        cafeteria_id = assignment_cafeteria.get(summary.id)
+        if cafeteria_id:
+            summary.cafeteria_id = cafeteria_id
+            summary.cafeteria_name = names.get(cafeteria_id)
+
+
 # ---- List Users (Admin only) ----
 
 
-@router.get("/", response_model=list[UserSummary])
+@router.get("/", response_model=list[UserSummary] | UserListResponse)
 async def list_users(
     auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN)),
     db: AsyncSession = Depends(get_db),
     role: str | None = None,
     status: str | None = None,
+    q: str | None = None,
+    cafeteria_id: str | None = None,
+    limit: int | None = Query(
+        None, ge=1, le=200, description="Page size (enables paginated response)"
+    ),
+    offset: int | None = Query(
+        None, ge=0, description="Rows to skip (enables paginated response)"
+    ),
 ):
-    """List all users (university admin only)."""
+    """List users (university admin only).
+
+    Phase 55 — optional pagination + server-side filters. When neither
+    ``limit`` nor ``offset`` is provided the endpoint keeps its original
+    bare-list response shape (existing callers unchanged). When either is
+    provided it returns ``{users, total}`` where ``total`` reflects the
+    filtered set, matching the Phase 54 pagination convention.
+
+    Filters: ``role``/``status`` (enum values), ``q`` (name/email/ID
+    search), ``cafeteria_id`` (assignment id, or the literal ``none``
+    for unassigned users).
+    """
     query = select(User).where(User.status != AccountStatus.DELETED)
     if role:
-        query = query.where(User.role == Role(role))
+        try:
+            role_value = Role(role)
+        except ValueError:
+            raise ValidationError(f"Unknown role filter: {role}") from None
+        query = query.where(User.role == role_value)
     if status:
-        query = query.where(User.status == AccountStatus(status))
+        try:
+            status_value = AccountStatus(status)
+        except ValueError:
+            raise ValidationError(f"Unknown status filter: {status}") from None
+        query = query.where(User.status == status_value)
+    if q and q.strip():
+        pattern = f"%{q.strip()}%"
+        query = query.where(
+            or_(
+                User.first_name.ilike(pattern),
+                User.last_name.ilike(pattern),
+                User.university_email.ilike(pattern),
+                User.university_id.ilike(pattern),
+            )
+        )
+    if cafeteria_id == "none":
+        # Explicit "unassigned" filter used by the admin console.
+        query = query.where(
+            ~select(CafeteriaAssignment.id)
+            .where(CafeteriaAssignment.user_id == User.id)
+            .exists()
+        )
+    elif cafeteria_id:
+        query = query.where(
+            select(CafeteriaAssignment.id)
+            .where(
+                CafeteriaAssignment.user_id == User.id,
+                CafeteriaAssignment.cafeteria_id == cafeteria_id,
+            )
+            .exists()
+        )
+
+    paginated = limit is not None or offset is not None
+    total: int | None = None
+    if paginated:
+        count_result = await db.execute(
+            select(func.count()).select_from(query.subquery())
+        )
+        total = int(count_result.scalar() or 0)
+        if limit is not None:
+            query = query.limit(limit)
+        if offset is not None:
+            query = query.offset(offset)
+
     query = query.order_by(User.created_at.desc())
     result = await db.execute(query)
-    return [UserSummary.model_validate(u) for u in result.scalars().all()]
+    users = list(result.scalars().all())
+    summaries = [UserSummary.model_validate(u) for u in users]
+    await _attach_cafeteria_info(summaries, db)
+    if paginated:
+        return UserListResponse(
+            users=summaries, total=total if total is not None else len(summaries)
+        )
+    return summaries
 
 
 # ---- Get User ----
@@ -85,7 +198,9 @@ async def get_user(
     user = result.scalar_one_or_none()
     if not user:
         raise NotFoundException("User", user_id)
-    return UserSummary.model_validate(user)
+    summary = UserSummary.model_validate(user)
+    await _attach_cafeteria_info([summary], db)
+    return summary
 
 
 # ---- Create User (Admin/Manager) ----
@@ -188,8 +303,10 @@ async def create_user(
         user_agent=ua,
     )
 
+    response_summary = UserSummary.model_validate(user)
+    await _attach_cafeteria_info([response_summary], db)
     return CreateUserResponse(
-        user=UserSummary.model_validate(user),
+        user=response_summary,
         temporary_password=temp_password,
     )
 
@@ -263,7 +380,9 @@ async def suspend_user(
         user_agent=ua,
     )
 
-    return UserSummary.model_validate(user)
+    summary = UserSummary.model_validate(user)
+    await _attach_cafeteria_info([summary], db)
+    return summary
 
 
 # ---- Activate User ----
@@ -295,7 +414,9 @@ async def activate_user(
         user_agent=ua,
     )
 
-    return UserSummary.model_validate(user)
+    summary = UserSummary.model_validate(user)
+    await _attach_cafeteria_info([summary], db)
+    return summary
 
 
 # ---- Delete Account (Self) ----
@@ -378,6 +499,19 @@ async def change_user_role(
     if user.id == auth.user.id:
         raise AuthorizationError("Cannot change your own role")
 
+    # Validate the cafeteria requirement BEFORE mutating the user so a
+    # rejected request never leaves a partial role change behind (Phase 47).
+    if body.role in (Role.CAFETERIA_STAFF, Role.CAFETERIA_MANAGER):
+        if not body.cafeteria_id:
+            raise ValidationError("cafeteria_id is required for staff/manager roles")
+
+        # Verify cafeteria exists
+        from app.modules.cafeterias.models import Cafeteria
+
+        caf_result = await db.execute(select(Cafeteria).where(Cafeteria.id == body.cafeteria_id))
+        if not caf_result.scalar_one_or_none():
+            raise NotFoundException("Cafeteria", body.cafeteria_id)
+
     old_role = user.role
     user.role = body.role
 
@@ -394,16 +528,6 @@ async def change_user_role(
 
     # Handle cafeteria assignment for staff/manager roles
     if body.role in (Role.CAFETERIA_STAFF, Role.CAFETERIA_MANAGER):
-        if not body.cafeteria_id:
-            raise ValidationError("cafeteria_id is required for staff/manager roles")
-
-        # Verify cafeteria exists
-        from app.modules.cafeterias.models import Cafeteria
-
-        caf_result = await db.execute(select(Cafeteria).where(Cafeteria.id == body.cafeteria_id))
-        if not caf_result.scalar_one_or_none():
-            raise NotFoundException("Cafeteria", body.cafeteria_id)
-
         # Remove existing assignment if any
         existing = await db.execute(
             select(CafeteriaAssignment).where(CafeteriaAssignment.user_id == user_id)
@@ -438,13 +562,15 @@ async def change_user_role(
         user_agent=ua,
     )
 
-    return UserSummary.model_validate(user)
+    summary = UserSummary.model_validate(user)
+    await _attach_cafeteria_info([summary], db)
+    return summary
 
 
 # ---- Account Recovery (Admin only) ----
 
 
-@router.post("/{user_id}/recover", response_model=AuthResponse)
+@router.post("/{user_id}/recover", response_model=AccountRecoveryResponse)
 async def recover_account(
     request: Request,
     user_id: str,
@@ -483,6 +609,19 @@ async def recover_account(
     if user.status == AccountStatus.SUSPENDED:
         user.status = AccountStatus.ACTIVE
 
+    # Phase 55 — recovery now issues a one-time temporary password so
+    # admins can restore sign-in for users who forgot theirs. The value
+    # is returned exactly once to the caller and never logged.
+    temp_password = generate_otp() + "Aa1!"
+    new_hash = hash_password(temp_password)
+
+    if credential is None:
+        credential = UserCredential(user_id=user.id, password_hash=new_hash)
+        db.add(credential)
+    else:
+        credential.password_hash = new_hash
+        credential.password_changed_at = datetime.now(UTC)
+
     await log_audit_event(
         session=db,
         event_type=AuditEventType.ACCOUNT_RECOVERED,
@@ -492,4 +631,7 @@ async def recover_account(
         user_agent=ua,
     )
 
-    return AuthResponse(message=f"Account for {user.university_email} has been recovered")
+    return AccountRecoveryResponse(
+        message=f"Account for {user.university_email} has been recovered",
+        temporary_password=temp_password,
+    )

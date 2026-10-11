@@ -28,15 +28,36 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
+import { useFavorites } from "../../../src/contexts/FavoritesContext";
 import FoodImage from "../../../src/components/FoodImage";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
-import { getMenuItem, getTodaysMenu } from "../../../src/services/data";
+import { getMenuItem, getTodaysMenu, getCafeterias } from "../../../src/services/data";
+import { ApiClientError } from "../../../src/services/api";
 import type { MenuItem, MenuCategory } from "@uniserve/shared-types";
 
 // ── Helpers ──
 
 function formatPrice(paisa: number): string {
   return `PKR ${Math.round(paisa / 100)}`;
+}
+
+/* Phase 56 — dietary_info/allergens are JSON array strings on the backend
+   (e.g. '["vegetarian","gluten_free"]'). Render humanized labels, with a
+   fallback to the raw string for legacy/unparseable values. */
+function formatTags(raw?: string | null): string | null {
+  if (!raw || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const labels = parsed
+        .filter((t): t is string => typeof t === "string")
+        .map((t) => t.replace(/_/g, " "));
+      return labels.length > 0 ? labels.join(", ") : null;
+    }
+  } catch {
+    /* not JSON — fall through to raw display */
+  }
+  return raw;
 }
 
 const CATEGORY_LABELS: Record<MenuCategory, string> = {
@@ -53,10 +74,15 @@ const CATEGORY_LABELS: Record<MenuCategory, string> = {
 // ── Screen ──
 
 export default function ItemDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // P3-5: `cafeteriaId` is an optional route param passed by the favorites
+  // tab — a favorite may reference an item in a different cafeteria than the
+  // currently selected one, so the param takes precedence when provided.
+  const { id, cafeteriaId } = useLocalSearchParams<{ id: string; cafeteriaId?: string }>();
   const { resolvedTheme } = useTheme();
   const router = useRouter();
-  const { selectedCafeteria, addToCart } = useCart();
+  const { selectedCafeteria, selectCafeteria, addToCart } = useCart();
+
+  const effectiveCafeteriaId = cafeteriaId ?? selectedCafeteria?.id ?? null;
 
   const brand = brandGreen(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
@@ -71,15 +97,22 @@ export default function ItemDetailScreen() {
   const [isAdding, setIsAdding] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState("");
-  const [isFavorite, setIsFavorite] = useState(false);
+  // D6 (Phase 8): add-to-cart failures must NOT replace the whole screen —
+  // they render inline above the bottom bar so the user keeps context.
+  const [addError, setAddError] = useState("");
+
+  // P3-5: favorite state is server-backed (FavoritesContext) — the previous
+  // local useState never persisted and reset on every navigation.
+  const { isFavorite: isFavoriteItem, toggleFavorite } = useFavorites();
+  const isFavorite = item ? isFavoriteItem(item.id) : false;
 
   const loadItem = useCallback(async () => {
-    if (!id || !selectedCafeteria) return;
+    if (!id || !effectiveCafeteriaId) return;
     setIsLoading(true);
     setError("");
     try {
-      const data = await getMenuItem(selectedCafeteria.id, id);
-      const dailyMenu = await getTodaysMenu(selectedCafeteria.id);
+      const data = await getMenuItem(effectiveCafeteriaId, id);
+      const dailyMenu = await getTodaysMenu(effectiveCafeteriaId);
       const dailyItem = dailyMenu?.items.find((entry) => entry.menu_item_id === data.id);
       setItem(
         dailyItem
@@ -95,20 +128,57 @@ export default function ItemDetailScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [id, selectedCafeteria]);
+  }, [id, effectiveCafeteriaId]);
 
   useEffect(() => {
     loadItem();
   }, [loadItem]);
 
+  // P3-5: when arriving from favorites the route may reference another
+  // cafeteria's item — align the cart's selected cafeteria so Add to Cart
+  // targets the right one (cart ops resolve through selectedCafeteria).
+  useEffect(() => {
+    if (!item || !selectedCafeteria || item.cafeteria_id === selectedCafeteria.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const cafeterias = await getCafeterias();
+        const match = cafeterias.find((c) => c.id === item.cafeteria_id);
+        if (match && !cancelled) selectCafeteria(match);
+      } catch {
+        // Non-fatal — item still displays; add-to-cart may no-op until the
+        // user returns to the home menu for this cafeteria.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [item, selectedCafeteria, selectCafeteria]);
+
   const handleAddToCart = useCallback(async () => {
     if (!item || !selectedCafeteria) return;
     setIsAdding(true);
+    setAddError("");
     try {
       await addToCart(item.id, quantity);
       router.back();
-    } catch {
-      setError("Failed to add to cart");
+    } catch (err) {
+      // D6 (Phase 8): the menu API's is_available flag is the staff toggle,
+      // not live stock — inventory is only checked at add-to-cart time.
+      // Show the server's real reason inline and, when the failure is a
+      // stock/unavailability rejection, reflect it in the availability row
+      // instead of pretending the item is orderable.
+      const message =
+        err instanceof ApiClientError ? err.message : "Failed to add to cart";
+      setAddError(message);
+      if (
+        err instanceof ApiClientError &&
+        err.status === 400 &&
+        /unavailable|inventory/i.test(message)
+      ) {
+        setItem((prev) => (prev ? { ...prev, is_available: false } : prev));
+        setQuantity(1);
+      }
     } finally {
       setIsAdding(false);
     }
@@ -176,8 +246,13 @@ export default function ItemDetailScreen() {
           {/* Favorite button overlay */}
           <Pressable
             style={[styles.favBtn, { backgroundColor: bg + "CC" }]}
-            onPress={() => setIsFavorite(!isFavorite)}
+            onPress={() => {
+              // Optimistic heart via FavoritesContext; server rejection reverts.
+              toggleFavorite(item.id).catch(() => {});
+            }}
             hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={isFavorite ? "Remove from favorites" : "Add to favorites"}
           >
             <Ionicons
               name={isFavorite ? "heart" : "heart-outline"}
@@ -243,18 +318,18 @@ export default function ItemDetailScreen() {
             </View>
           ) : null}
 
-          {/* Dietary / Allergens */}
-          {item.dietary_info && (
+          {/* Dietary / Allergens — Phase 56: JSON arrays → humanized labels */}
+          {formatTags(item.dietary_info) && (
             <View style={[styles.infoTag, { backgroundColor: functionalColor(resolvedTheme, "success") + "10" }]}>
               <Ionicons name="leaf-outline" size={16} color={functionalColor(resolvedTheme, "success")} />
-              <Text style={[styles.tagText, { color: functionalColor(resolvedTheme, "success") }]}>{item.dietary_info}</Text>
+              <Text style={[styles.tagText, { color: functionalColor(resolvedTheme, "success") }]}>{formatTags(item.dietary_info)}</Text>
             </View>
           )}
 
-          {item.allergens && (
+          {formatTags(item.allergens) && (
             <View style={[styles.infoTag, { backgroundColor: functionalColor(resolvedTheme, "warning") + "10" }]}>
               <Ionicons name="warning-outline" size={16} color={functionalColor(resolvedTheme, "warning")} />
-              <Text style={[styles.tagText, { color: functionalColor(resolvedTheme, "warning") }]}>{item.allergens}</Text>
+              <Text style={[styles.tagText, { color: functionalColor(resolvedTheme, "warning") }]}>{formatTags(item.allergens)}</Text>
             </View>
           )}
         </View>
@@ -262,6 +337,15 @@ export default function ItemDetailScreen() {
         {/* Bottom padding for bar */}
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      {/* D6: inline add-to-cart error — keeps the item detail visible instead
+          of replacing it with a full-screen failure. */}
+      {addError ? (
+        <View style={[styles.addErrorBar, { backgroundColor: functionalColor(resolvedTheme, "error") + "12" }]}>
+          <Ionicons name="alert-circle-outline" size={16} color={functionalColor(resolvedTheme, "error")} />
+          <Text style={[styles.addErrorText, { color: functionalColor(resolvedTheme, "error") }]}>{addError}</Text>
+        </View>
+      ) : null}
 
       {/* ── Bottom Bar ── */}
       {item.is_available && (
@@ -501,5 +585,21 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "600",
+  },
+  // D6: inline add-to-cart error above the bottom bar
+  addErrorBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  addErrorText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "500",
   },
 });

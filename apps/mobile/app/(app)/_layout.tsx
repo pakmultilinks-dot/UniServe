@@ -8,7 +8,7 @@
 import React from "react";
 import { Redirect, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { TouchableOpacity, Platform } from "react-native";
+import { TouchableOpacity } from "react-native";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { bgColor, textColor, brandGreen } from "../../src/theme";
@@ -47,18 +47,6 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen
-        name="cart"
-        options={{
-          headerShown: true,
-          title: "My Cart",
-          headerStyle: { backgroundColor: bg },
-          headerTintColor: brand,
-          headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
-          headerShadowVisible: false,
-          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
-        }}
-      />
       <Stack.Screen
         name="item/[id]"
         options={{

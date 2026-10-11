@@ -28,7 +28,7 @@ from app.modules.menus.models import (  # noqa: F401
     MenuFavorite,
     MenuItem,
 )
-from app.modules.notifications.models import Notification  # noqa: F401
+from app.modules.notifications.models import AdminBroadcast, Notification  # noqa: F401
 from app.modules.orders.models import (  # noqa: F401
     NoShow,
     Order,

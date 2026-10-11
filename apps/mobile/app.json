@@ -7,9 +7,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "uniserve",
-    "splash": {
-      "backgroundColor": "#f6efdf"
-    },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
@@ -21,6 +18,14 @@
       },
       "package": "com.uniserve.mobile"
     },
-    "plugins": ["expo-router"]
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#f6efdf"
+        }
+      ]
+    ]
   }
 }

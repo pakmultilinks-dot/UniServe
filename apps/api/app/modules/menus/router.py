@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -16,6 +16,7 @@ from app.core.deps import (
 )
 from app.modules.menus.models import DailyMenuStatus, MenuCategory
 from app.modules.menus.schemas import (
+    CopyDailyMenuRequest,
     DailyMenuAddItemRequest,
     DailyMenuCreateRequest,
     DailyMenuListResponse,
@@ -188,6 +189,77 @@ async def delete_menu_item(
     await service.delete_menu_item(menu_item_id)
 
 
+# ---- Menu item images (Phase 48) ----
+#
+# Raw binary body (not multipart/form-data): the deployment does not
+# install python-multipart and dependency changes are out of scope, and a
+# single-file upload needs no multipart envelope. The client sends the
+# image bytes with an image/jpeg | image/png | image/webp Content-Type;
+# magic bytes decide the stored format, filenames are server-generated.
+
+
+@menu_items_router.post("/{menu_item_id}/image", response_model=MenuItemResponse)
+async def upload_menu_item_image(
+    cafeteria_id: str,
+    menu_item_id: str,
+    request: Request,
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> MenuItemResponse:
+    """Upload or replace a menu item's image (manager/admin, scoped).
+
+    Validates type (magic bytes + declared Content-Type), size (5MB),
+    writes a server-generated filename under app/static/food/, persists a
+    host-independent ``/api/v1/static/food/<file>`` reference, and removes
+    the previous file only when no other menu item references it.
+    """
+    service = MenuService(db)
+    item = await service.get_menu_item(menu_item_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=item.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="MenuItem",
+        db=db,
+        auth=auth,
+    )
+    content = await request.body()
+    item = await service.set_menu_item_image(
+        menu_item_id,
+        content=content,
+        declared_content_type=request.headers.get("content-type"),
+    )
+    return MenuItemResponse.model_validate(item)
+
+
+@menu_items_router.delete("/{menu_item_id}/image", response_model=MenuItemResponse)
+async def remove_menu_item_image(
+    cafeteria_id: str,
+    menu_item_id: str,
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> MenuItemResponse:
+    """Remove a menu item's image (manager/admin, scoped).
+
+    Clears ``image_url``; the menu item itself remains fully usable and
+    clients fall back to their existing placeholder behaviour.
+    """
+    service = MenuService(db)
+    item = await service.get_menu_item(menu_item_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=item.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="MenuItem",
+        db=db,
+        auth=auth,
+    )
+    item = await service.remove_menu_item_image(menu_item_id)
+    return MenuItemResponse.model_validate(item)
+
+
 # ===================================================================
 # Daily Menus
 # ===================================================================
@@ -207,6 +279,31 @@ async def create_daily_menu(
     menu = await service.create_daily_menu(
         cafeteria_id=cafeteria_id,
         menu_date=body.menu_date,
+        created_by=auth.user.id,
+    )
+    return DailyMenuResponse.model_validate(menu)
+
+
+@daily_menus_router.post("/copy", response_model=DailyMenuResponse, status_code=201)
+async def copy_daily_menu(
+    cafeteria_id: str,
+    body: CopyDailyMenuRequest,
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> DailyMenuResponse:
+    """Copy a previous day's menu into a new draft (Phase 56, manager/admin).
+
+    The target date must be free — an existing draft or published menu on
+    the target date produces an explicit 409 conflict, never a silent
+    overwrite. Inactive menu items are skipped; the source menu is untouched.
+    """
+    service = MenuService(db)
+    menu = await service.copy_daily_menu(
+        cafeteria_id=cafeteria_id,
+        source_date=body.source_date,
+        target_date=body.target_date,
         created_by=auth.user.id,
     )
     return DailyMenuResponse.model_validate(menu)
@@ -362,6 +459,35 @@ async def publish_daily_menu(
     return DailyMenuResponse.model_validate(menu)
 
 
+@daily_menus_router.patch("/{daily_menu_id}/unpublish", response_model=DailyMenuResponse)
+async def unpublish_daily_menu(
+    cafeteria_id: str,
+    daily_menu_id: str,
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> DailyMenuResponse:
+    """Unpublish (archive) a published daily menu (manager/admin).
+
+    ARCHIVED removes the menu from published-menu lookups so a replacement
+    draft can be created for the same date. Historical published menus remain
+    auditable (items are preserved).
+    """
+    service = MenuService(db)
+    # Verify the daily menu belongs to the claimed cafeteria
+    daily_menu = await service.get_daily_menu(daily_menu_id)
+    await verify_resource_cafeteria(
+        resource_cafeteria_id=daily_menu.cafeteria_id,
+        expected_cafeteria_id=cafeteria_id,
+        resource_type="DailyMenu",
+        db=db,
+        auth=auth,
+    )
+    menu = await service.unpublish_daily_menu(daily_menu_id)
+    return DailyMenuResponse.model_validate(menu)
+
+
 # ===================================================================
 # Favorites
 # ===================================================================
@@ -441,16 +567,20 @@ async def search_menu_items(
     # If a specific cafeteria is requested, verify access
     if cafeteria_id:
         from sqlalchemy import select as sa_select
+
+        from app.core.exceptions import AuthorizationError, NotFoundException
         from app.modules.cafeterias.models import Cafeteria, CafeteriaType
-        from app.core.exceptions import AuthorizationError
+
         caf_result = await db.execute(sa_select(Cafeteria).where(Cafeteria.id == cafeteria_id))
         caf = caf_result.scalar_one_or_none()
         if caf is None:
-            from app.core.exceptions import NotFoundException
             raise NotFoundException("Cafeteria", cafeteria_id)
-        if auth.user.role in (Role.STUDENT, Role.FACULTY):
-            if caf.type == CafeteriaType.FACULTY and auth.user.category.value != "faculty":
-                raise AuthorizationError("You cannot access this cafeteria")
+        if (
+            auth.user.role in (Role.STUDENT, Role.FACULTY)
+            and caf.type == CafeteriaType.FACULTY
+            and auth.user.category.value != "faculty"
+        ):
+            raise AuthorizationError("You cannot access this cafeteria")
 
     service = MenuService(db)
     items = await service.search_menu_items(

@@ -4,12 +4,16 @@
  * User profile info organized into sections: Account, Security, Support.
  * Uses Ionicons for all icons, no emojis.
  */
-import React from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
+import React, { useState } from "react";
+import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useTheme } from "../../../src/contexts/ThemeContext";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import { BottomSheet, Button, ConfirmDialog, PasswordInput, Toast } from "../../../src/components/ui";
+import * as authApi from "../../../src/services/auth";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
 
 // ── Helpers ──
@@ -75,23 +79,181 @@ export default function ProfileScreen() {
     .join("")
     .toUpperCase() || "?";
 
+  // P3-1: Expo web never surfaces Alert.alert (no dialog, no callback), so
+  // sign-out controls were inert in the browser. ConfirmDialog is a plain RN
+  // Modal — it renders on native and web with the same button callbacks.
+  const [signOutDialog, setSignOutDialog] = useState<"none" | "single" | "all">("none");
+
   const handleLogout = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign Out", style: "destructive", onPress: logout },
-    ]);
+    setSignOutDialog("single");
   };
 
   const handleLogoutAll = () => {
-    Alert.alert("Sign Out All Devices", "This will sign you out from all devices.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign Out All", style: "destructive", onPress: logoutAll },
-    ]);
+    setSignOutDialog("all");
+  };
+
+  const closeDialog = () => setSignOutDialog("none");
+
+  // Phase 58 — Workstream F: change-password self-service (POST /auth/password/change).
+  const [passwordSheet, setPasswordSheet] = useState(false);
+  const [pwdCurrent, setPwdCurrent] = useState("");
+  const [pwdNew, setPwdNew] = useState("");
+  const [pwdConfirm, setPwdConfirm] = useState("");
+  const [pwdSubmitting, setPwdSubmitting] = useState(false);
+  const [pwdError, setPwdError] = useState("");
+
+  // Phase 58 — Workstream G: PIN self-service. The backend exposes no
+  // pin_enabled flag in any response, so these forms never claim a PIN is
+  // currently active — server error/success messages are surfaced verbatim.
+  const [pinSheet, setPinSheet] = useState(false);
+  const [pinMode, setPinMode] = useState<"enable" | "change" | "disable">("enable");
+  const [pinCurrentPassword, setPinCurrentPassword] = useState("");
+  const [pinCurrent, setPinCurrent] = useState("");
+  const [pinNew, setPinNew] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [pinSubmitting, setPinSubmitting] = useState(false);
+  const [pinError, setPinError] = useState("");
+  const [pinSuccess, setPinSuccess] = useState("");
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+
+  const PIN_DIGITS = /^\d{4}$/;
+
+  const openPasswordSheet = () => {
+    setPwdCurrent(""); setPwdNew(""); setPwdConfirm("");
+    setPwdError("");
+    setPasswordSheet(true);
+  };
+
+  const openPinSheet = () => {
+    setPinMode("enable");
+    setPinCurrentPassword(""); setPinCurrent(""); setPinNew(""); setPinConfirm("");
+    setPinError(""); setPinSuccess("");
+    setPinSheet(true);
+  };
+
+  const resetPinForm = () => {
+    setPinMode("enable");
+    setPinCurrentPassword(""); setPinCurrent(""); setPinNew(""); setPinConfirm("");
+    setPinError(""); setPinSuccess("");
+  };
+
+  const handleChangePassword = async () => {
+    if (!pwdCurrent) { setPwdError("Enter your current password."); return; }
+    if (
+      pwdNew.length < 8 ||
+      !/[A-Z]/.test(pwdNew) ||
+      !/[a-z]/.test(pwdNew) ||
+      !/\d/.test(pwdNew)
+    ) {
+      setPwdError("New password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a digit.");
+      return;
+    }
+    if (pwdNew !== pwdConfirm) { setPwdError("New passwords do not match."); return; }
+    setPwdError("");
+    setPwdSubmitting(true);
+    try {
+      const res = await authApi.changePassword({
+        current_password: pwdCurrent,
+        new_password: pwdNew,
+      });
+      setPasswordSheet(false);
+      setPwdCurrent(""); setPwdNew(""); setPwdConfirm("");
+      setToast({ message: res.message || "Password changed", type: "success" });
+    } catch (err) {
+      setPwdError(err instanceof Error ? err.message : "Could not change password.");
+    } finally {
+      setPwdSubmitting(false);
+    }
+  };
+
+  const handlePinSubmit = async () => {
+    setPinError("");
+    setPinSuccess("");
+    if (pinMode === "enable") {
+      if (!pinCurrentPassword) { setPinError("Enter your current password."); return; }
+      if (!PIN_DIGITS.test(pinNew)) { setPinError("PIN must be exactly 4 digits."); return; }
+      if (pinNew !== pinConfirm) { setPinError("PINs do not match."); return; }
+      setPinSubmitting(true);
+      try {
+        const res = await authApi.enablePin({
+          current_password: pinCurrentPassword,
+          pin: pinNew,
+          confirm_pin: pinConfirm,
+        });
+        setPinSheet(false);
+        resetPinForm();
+        setToast({ message: res.message || "PIN enabled", type: "success" });
+      } catch (err) {
+        setPinError(err instanceof Error ? err.message : "Could not enable PIN.");
+      } finally {
+        setPinSubmitting(false);
+      }
+    } else if (pinMode === "change") {
+      if (!PIN_DIGITS.test(pinCurrent)) { setPinError("Current PIN must be exactly 4 digits."); return; }
+      if (!PIN_DIGITS.test(pinNew)) { setPinError("New PIN must be exactly 4 digits."); return; }
+      if (pinNew !== pinConfirm) { setPinError("PINs do not match."); return; }
+      setPinSubmitting(true);
+      try {
+        const res = await authApi.changePin({
+          current_pin: pinCurrent,
+          new_pin: pinNew,
+          confirm_pin: pinConfirm,
+        });
+        setPinSheet(false);
+        resetPinForm();
+        setToast({ message: res.message || "PIN changed", type: "success" });
+      } catch (err) {
+        setPinError(err instanceof Error ? err.message : "Could not change PIN.");
+      } finally {
+        setPinSubmitting(false);
+      }
+    } else {
+      if (!pinCurrentPassword) { setPinError("Enter your current password."); return; }
+      setPinSubmitting(true);
+      try {
+        const res = await authApi.disablePin({ current_password: pinCurrentPassword });
+        setPinSheet(false);
+        resetPinForm();
+        setToast({ message: res.message || "PIN disabled", type: "success" });
+      } catch (err) {
+        setPinError(err instanceof Error ? err.message : "Could not disable PIN.");
+      } finally {
+        setPinSubmitting(false);
+      }
+    }
   };
 
   return (
+    <>
+      <ConfirmDialog
+        visible={signOutDialog === "single"}
+        title="Sign Out"
+        message="Are you sure you want to sign out?"
+        confirmLabel="Sign Out"
+        cancelLabel="Cancel"
+        destructive
+        onCancel={closeDialog}
+        onConfirm={() => {
+          closeDialog();
+          logout();
+        }}
+      />
+      <ConfirmDialog
+        visible={signOutDialog === "all"}
+        title="Sign Out All Devices"
+        message="This will sign you out from all devices."
+        confirmLabel="Sign Out All"
+        cancelLabel="Cancel"
+        destructive
+        onCancel={closeDialog}
+        onConfirm={() => {
+          closeDialog();
+          logoutAll();
+        }}
+      />
+    <SafeAreaView edges={["top"]} style={[styles.screen, { backgroundColor: bgSec }]}>
     <ScrollView
-      style={[styles.screen, { backgroundColor: bgSec }]}
+      style={{ flex: 1 }}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
@@ -128,9 +290,18 @@ export default function ProfileScreen() {
       {/* ── Security Section ── */}
       <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
         <Text style={[styles.sectionTitle, { color: tcMuted }]}>SECURITY</Text>
-        {/* "Change Password" was removed — it was a no-op stub with no UI.
-            The change-password API and client service exist; wiring the
-            screen is deferred to a future feature phase. */}
+        <SectionRow
+          icon="lock-closed-outline"
+          label="Change Password"
+          onPress={openPasswordSheet}
+          theme={theme}
+        />
+        <SectionRow
+          icon="key-outline"
+          label="PIN Login"
+          onPress={openPinSheet}
+          theme={theme}
+        />
         <SectionRow
           icon="phone-portrait-outline"
           label="Sign Out All Devices"
@@ -151,7 +322,179 @@ export default function ProfileScreen() {
         <Text style={[styles.footerText, { color: tcMuted }]}>Lahore Garrison University</Text>
         <Text style={[styles.footerVersion, { color: tcMuted }]}>UniServe v0.1.0</Text>
       </View>
-    </ScrollView>
+      </ScrollView>
+      </SafeAreaView>
+
+      {/* Phase 58 — Change Password sheet */}
+      <BottomSheet
+        visible={passwordSheet}
+        onClose={() => setPasswordSheet(false)}
+        title="Change Password"
+        maxHeight={640}
+      >
+        <Text style={[styles.sheetHelper, { color: tcMuted }]}>
+          Your new password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a digit.
+        </Text>
+        <PasswordInput
+          label="Current password"
+          placeholder="Enter your current password"
+          value={pwdCurrent}
+          onChangeText={(text: string) => { setPwdCurrent(text); setPwdError(""); }}
+          autoComplete="current-password"
+        />
+        <PasswordInput
+          label="New password"
+          placeholder="Enter a new password"
+          value={pwdNew}
+          onChangeText={(text: string) => { setPwdNew(text); setPwdError(""); }}
+          autoComplete="new-password"
+        />
+        <PasswordInput
+          label="Confirm new password"
+          placeholder="Re-enter the new password"
+          value={pwdConfirm}
+          onChangeText={(text: string) => { setPwdConfirm(text); setPwdError(""); }}
+          autoComplete="new-password"
+        />
+        {pwdError ? (
+          <Text style={[styles.sheetError, { color: functionalColor(resolvedTheme, "error") }]}>{pwdError}</Text>
+        ) : null}
+        <Button
+          title={pwdSubmitting ? "Updating..." : "Update Password"}
+          onPress={handleChangePassword}
+          loading={pwdSubmitting}
+          disabled={pwdSubmitting}
+          fullWidth
+        />
+        <Button title="Cancel" variant="ghost" onPress={() => setPasswordSheet(false)} fullWidth />
+      </BottomSheet>
+
+      {/* Phase 58 — PIN Login sheet */}
+      <BottomSheet
+        visible={pinSheet}
+        onClose={() => setPinSheet(false)}
+        title="PIN Login"
+        maxHeight={700}
+      >
+        <Text style={[styles.sheetHelper, { color: tcMuted }]}>
+          A 4-digit PIN lets you sign in quickly on this device. The server decides whether a PIN is active — if a change fails, the server message appears below.
+        </Text>
+        <View style={styles.pinModeRow}>
+          {(["enable", "change", "disable"] as const).map((m) => (
+            <Pressable
+              key={m}
+              onPress={() => { setPinMode(m); setPinError(""); setPinSuccess(""); }}
+              style={[
+                styles.pinModeChip,
+                { borderColor: bc },
+                pinMode === m && { backgroundColor: brand + "20", borderColor: brand },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.pinModeChipText,
+                  { color: pinMode === m ? brand : tcMuted },
+                ]}
+              >
+                {m === "enable" ? "Enable" : m === "change" ? "Change" : "Disable"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        {pinMode === "enable" ? (
+          <>
+            <PasswordInput
+              label="Current password"
+              placeholder="Enter your current password"
+              value={pinCurrentPassword}
+              onChangeText={(text: string) => { setPinCurrentPassword(text); setPinError(""); }}
+              autoComplete="current-password"
+            />
+            <PasswordInput
+              label="New PIN (4 digits)"
+              placeholder="Enter a 4-digit PIN"
+              value={pinNew}
+              onChangeText={(text: string) => { setPinNew(text); setPinError(""); }}
+              keyboardType="number-pad"
+              maxLength={4}
+            />
+            <PasswordInput
+              label="Confirm new PIN"
+              placeholder="Re-enter the new PIN"
+              value={pinConfirm}
+              onChangeText={(text: string) => { setPinConfirm(text); setPinError(""); }}
+              keyboardType="number-pad"
+              maxLength={4}
+            />
+          </>
+        ) : pinMode === "change" ? (
+          <>
+            <PasswordInput
+              label="Current PIN"
+              placeholder="Enter your current PIN"
+              value={pinCurrent}
+              onChangeText={(text: string) => { setPinCurrent(text); setPinError(""); }}
+              keyboardType="number-pad"
+              maxLength={4}
+            />
+            <PasswordInput
+              label="New PIN (4 digits)"
+              placeholder="Enter a new 4-digit PIN"
+              value={pinNew}
+              onChangeText={(text: string) => { setPinNew(text); setPinError(""); }}
+              keyboardType="number-pad"
+              maxLength={4}
+            />
+            <PasswordInput
+              label="Confirm new PIN"
+              placeholder="Re-enter the new PIN"
+              value={pinConfirm}
+              onChangeText={(text: string) => { setPinConfirm(text); setPinError(""); }}
+              keyboardType="number-pad"
+              maxLength={4}
+            />
+          </>
+        ) : (
+          <PasswordInput
+            label="Current password"
+            placeholder="Enter your current password"
+            value={pinCurrentPassword}
+            onChangeText={(text: string) => { setPinCurrentPassword(text); setPinError(""); }}
+            autoComplete="current-password"
+          />
+        )}
+        {pinError ? (
+          <Text style={[styles.sheetError, { color: functionalColor(resolvedTheme, "error") }]}>{pinError}</Text>
+        ) : null}
+        {pinSuccess ? (
+          <Text style={[styles.sheetError, { color: functionalColor(resolvedTheme, "success") }]}>{pinSuccess}</Text>
+        ) : null}
+        <Button
+          title={
+            pinSubmitting
+              ? "Working..."
+              : pinMode === "enable"
+                ? "Enable PIN"
+                : pinMode === "change"
+                  ? "Change PIN"
+                  : "Disable PIN"
+          }
+          onPress={handlePinSubmit}
+          loading={pinSubmitting}
+          disabled={pinSubmitting}
+          variant={pinMode === "disable" ? "danger" : "primary"}
+          fullWidth
+        />
+        <Button title="Cancel" variant="ghost" onPress={() => setPinSheet(false)} fullWidth />
+      </BottomSheet>
+
+      <Toast
+        message={toast?.message ?? ""}
+        type={toast?.type ?? "success"}
+        visible={toast !== null}
+        onDismiss={() => setToast(null)}
+      />
+    </>
   );
 }
 
@@ -230,4 +573,18 @@ const styles = StyleSheet.create({
   footer: { alignItems: "center", gap: 4 },
   footerText: { fontSize: 12 },
   footerVersion: { fontSize: 11 },
+
+  // Phase 58 — security sheets
+  sheetHelper: { fontSize: 12, lineHeight: 17, marginBottom: 12 },
+  sheetError: { fontSize: 13, marginBottom: 10, lineHeight: 18 },
+  pinModeRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  pinModeChip: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingVertical: 8,
+  },
+  pinModeChipText: { fontSize: 13, fontWeight: "600" },
 });

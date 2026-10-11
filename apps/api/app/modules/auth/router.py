@@ -1,6 +1,7 @@
 """Auth module — API endpoints for authentication and authorization."""
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -19,6 +20,7 @@ from app.modules.auth.schemas import (
     PINDisableRequest,
     PINLoginRequest,
     PINSetupRequest,
+    ProfileUpdateRequest,
     RefreshTokenRequest,
     RegisterRequest,
     RegisterResponse,
@@ -28,7 +30,7 @@ from app.modules.auth.schemas import (
     UserSummary,
 )
 from app.modules.auth.service import AuthService
-from app.modules.users.models import User
+from app.modules.users.models import CafeteriaAssignment, Role, User
 
 router = APIRouter()
 
@@ -185,6 +187,60 @@ async def get_current_user_info(
 ):
     """Get current authenticated user information."""
     return UserSummary.model_validate(auth.user)
+
+
+@router.patch("/me", response_model=UserSummary)
+async def update_current_user_info(
+    body: ProfileUpdateRequest,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the current authenticated user's own profile.
+
+    Phase 55 — self-service profile editing. Accepts first/last name
+    only; everything else about the account is immutable here. Strictly
+    self-scoped: the target user is always the authenticated user.
+    Returns the updated user summary so clients can refresh local state.
+    """
+    service = AuthService(db)
+    user = await service.update_profile(
+        user_id=auth.user.id,
+        first_name=body.first_name,
+        last_name=body.last_name,
+    )
+    return UserSummary.model_validate(user)
+
+
+@router.get("/me/cafeterias")
+async def get_my_cafeterias(
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the cafeteria IDs the current user is assigned to.
+
+    P3-3 — lets the web console default cafeteria selectors to the
+    staff member's / manager's actual assignment instead of an arbitrary
+    first cafeteria from the unfiltered list.
+
+    - University Admin: empty list (admin may select any cafeteria;
+      there is no single "assigned" cafeteria).
+    - Cafeteria staff / manager: their assigned cafeteria IDs.
+    - Students / faculty: empty list (no dashboard assignments).
+
+    Read-only, scoped strictly to the authenticated user's own
+    assignments — it leaks nothing about other users or cafeterias
+    beyond what GET /cafeterias already returns for these roles.
+    """
+    if auth.user.role in (Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF):
+        result = await db.execute(
+            select(CafeteriaAssignment.cafeteria_id).where(
+                CafeteriaAssignment.user_id == auth.user.id
+            )
+        )
+        cafeteria_ids = list(result.scalars().all())
+    else:
+        cafeteria_ids = []
+    return {"cafeteria_ids": cafeteria_ids}
 
 
 # ---- Sessions ----

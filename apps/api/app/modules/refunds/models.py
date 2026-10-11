@@ -35,6 +35,8 @@ class RefundStatus(str, enum.Enum):
     PROCESSING = "processing"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    # Phase 51 — admin rejection resolution state
+    REJECTED = "rejected"
 
 
 class RefundReason(str, enum.Enum):
@@ -95,6 +97,9 @@ class Refund(Base):
         StrEnum(RefundReason, create_type=False, native_enum=False), nullable=False
     )
     reason_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Phase 51 — admin rejection reason (set only when status == REJECTED)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Authorization
     requested_by: Mapped[str] = mapped_column(

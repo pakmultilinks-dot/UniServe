@@ -40,6 +40,14 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+    volumes:
+      # Durable persistence for menu food images (D1 fix). The image
+      # bakes 27 seed photos into /app/app/static/food at build time;
+      # without a named volume, runtime admin uploads live only in the
+      # ephemeral container layer and are lost on rebuild/recreate. A
+      # fresh named volume is seeded from the image content on first
+      # run, then persists all future uploads across deploys.
+      - menu_images_data:/app/app/static/food
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,5 +99,7 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  menu_images_data:
     driver: local
 

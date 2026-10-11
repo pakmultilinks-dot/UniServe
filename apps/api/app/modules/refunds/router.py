@@ -16,11 +16,14 @@ from fastapi import APIRouter, Depends, Query
 from app.core.database import get_db
 from app.core.deps import AuthContext, RequireRole, get_current_user
 from app.core.exceptions import AuthorizationError
-from app.modules.refunds.processors.test_processor import TestRefundProcessor
+from app.modules.refunds.processors import create_refund_processor
 from app.modules.refunds.schemas import (
     RefundableAmountResponse,
+    RefundAdminListResponse,
+    RefundAdminResponse,
     RefundCreateRequest,
     RefundListResponse,
+    RefundRejectRequest,
     RefundResponse,
 )
 from app.modules.refunds.service import RefundService
@@ -35,8 +38,12 @@ router = APIRouter()
 
 
 def _get_refund_processor() -> RefundProcessor:
-    """Get the refund processor. Uses test processor for Phase 5."""
-    return TestRefundProcessor()
+    """Get the configured refund processor (settings.REFUND_PROCESSOR).
+
+    Selection is configuration-driven and fails closed on unknown names —
+    never a silent fallback to the test processor (Phase 8 D7).
+    """
+    return create_refund_processor()
 
 
 def _get_refund_service(db: AsyncSession) -> RefundService:
@@ -144,7 +151,7 @@ async def get_refundable_amount(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/admin/all", response_model=RefundListResponse)
+@router.get("/admin/all", response_model=RefundAdminListResponse)
 async def list_all_refunds(
     cafeteria_id: str | None = Query(None),
     status: str | None = Query(None),
@@ -152,19 +159,27 @@ async def list_all_refunds(
     offset: int = Query(0, ge=0),
     auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN)),
     db: AsyncSession = Depends(get_db),
-) -> RefundListResponse:
-    """List all refunds (university admin only)."""
+) -> RefundAdminListResponse:
+    """List all refunds with student/order/payment context (university admin only)."""
     service = _get_refund_service(db)
-    refunds = await service.list_order_refunds(
+    refunds, total = await service.list_admin_refunds(
         cafeteria_id=cafeteria_id,
         status=status,
         limit=limit,
         offset=offset,
     )
-    return RefundListResponse(
-        refunds=[RefundResponse.model_validate(r) for r in refunds],
-        total=len(refunds),
-    )
+    return RefundAdminListResponse(refunds=refunds, total=total)
+
+
+@router.get("/admin/{refund_id}", response_model=RefundAdminResponse)
+async def get_admin_refund(
+    refund_id: str,
+    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> RefundAdminResponse:
+    """Get one refund with complete decision context (university admin only)."""
+    service = _get_refund_service(db)
+    return await service.get_admin_refund(refund_id)
 
 
 @router.post("/{refund_id}/process", response_model=RefundResponse)
@@ -186,3 +201,26 @@ async def process_refund(
         processor_role=auth.user.role,
     )
     return RefundResponse.model_validate(refund)
+
+
+@router.post("/{refund_id}/reject", response_model=RefundAdminResponse)
+async def reject_refund(
+    refund_id: str,
+    body: RefundRejectRequest,
+    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)),
+    db: AsyncSession = Depends(get_db),
+) -> RefundAdminResponse:
+    """Reject a pending refund with a persisted reason.
+
+    - UNIVERSITY_ADMIN: can reject any refund
+    - CAFETERIA_MANAGER: can reject refunds for their assigned cafeteria
+    - Others: denied
+    """
+    service = _get_refund_service(db)
+    await service.reject_refund(
+        refund_id=refund_id,
+        rejected_by_user_id=auth.user.id,
+        rejected_by_role=auth.user.role,
+        rejection_reason=body.rejection_reason,
+    )
+    return await service.get_admin_refund(refund_id)

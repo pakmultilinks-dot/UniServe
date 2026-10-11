@@ -826,9 +826,12 @@ class TestOrderCancellation:
         checkout_resp = await _checkout(faculty_client, cafeteria.id)
         order_id = checkout_resp.json()["id"]
 
-        # Student tries to cancel — should fail
+        # Student tries to cancel — must fail with the same 403 a
+        # non-owner gets from GET /orders/{id} (Phase 8 D8: the cancel
+        # endpoint must not act as an order-status oracle).
         resp = await student_client.post(f"/api/v1/orders/{order_id}/cancel", json={})
-        assert resp.status_code == 400
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Order not found"
 
     async def test_manager_cancel_any_order(
         self,
@@ -1913,3 +1916,219 @@ class TestReadyInvariant:
             json={},
         )
         assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Phase 54 — Orders Console completion: queue pagination + date filtering
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestPhase54CafeteriaQueuePagination:
+    """Phase 54 — GET /orders/cafeteria/{id} pagination and date filtering.
+
+    The queue endpoint previously returned every matching order with
+    total=len(orders) and silently ignored any limit/offset query params.
+    Phase 54 adds optional limit/offset (limit capped at 100) and makes
+    `total` the full filtered count so the console can paginate. Calls
+    without limit/offset must keep the original unpaginated behaviour.
+    """
+
+    async def _seed_orders(
+        self,
+        client: AsyncClient,
+        cafeteria_id: str,
+        menu_item_id: str,
+        n: int,
+        note: str | None = None,
+    ) -> list[str]:
+        """Create n immediate pending orders via checkout."""
+        order_ids = []
+        for _ in range(n):
+            await _add_cart_item(client, cafeteria_id, menu_item_id)
+            resp = await _checkout(client, cafeteria_id, note=note)
+            assert resp.status_code == 201, resp.text
+            order_ids.append(resp.json()["id"])
+        return order_ids
+
+    async def _manager_cafeteria(
+        self, db: AsyncSession, manager_user, name: str = "Phase54 Pagination Cafeteria"
+    ):
+        cafeteria = await create_test_cafeteria(db, name=name)
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+        return cafeteria
+
+    async def test_default_without_params_stays_unpaginated(
+        self,
+        student_client: AsyncClient,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """No limit/offset → full list, total == len(orders) (baseline preserved)."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+        await self._seed_orders(student_client, cafeteria.id, item.id, 3)
+
+        resp = await manager_client.get(f"/api/v1/orders/cafeteria/{cafeteria.id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["orders"]) == 3
+        assert data["total"] == 3
+
+    async def test_limit_offset_slice_and_total(
+        self,
+        student_client: AsyncClient,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """limit/offset slice the page; total stays the full filtered count."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+        await self._seed_orders(student_client, cafeteria.id, item.id, 5)
+
+        # First page
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?limit=2&offset=0"
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["orders"]) == 2
+        assert data["total"] == 5
+
+        # Last page (offset 4 → 1 remaining row)
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?limit=2&offset=4"
+        )
+        data = resp.json()
+        assert len(data["orders"]) == 1
+        assert data["total"] == 5
+
+        # Offset beyond the end → empty page, total intact (no crash)
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?limit=2&offset=10"
+        )
+        data = resp.json()
+        assert data["orders"] == []
+        assert data["total"] == 5
+
+    async def test_limit_and_offset_validate_range(
+        self,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """limit ≤ 100 and offset ≥ 0 are enforced (422 otherwise)."""
+        cafeteria = await self._manager_cafeteria(db, manager_user)
+
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?limit=101"
+        )
+        assert resp.status_code == 422
+
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?offset=-1"
+        )
+        assert resp.status_code == 422
+
+    async def test_order_date_filter_with_pagination(
+        self,
+        student_client: AsyncClient,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """order_date narrows the filtered set; total + pages follow it."""
+        from sqlalchemy import update as sa_update
+
+        from app.modules.orders.models import Order
+
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+        today_ids = await self._seed_orders(student_client, cafeteria.id, item.id, 3)
+        past_ids = await self._seed_orders(
+            student_client, cafeteria.id, item.id, 2, note="dated in the past"
+        )
+        await db.execute(
+            sa_update(Order)
+            .where(Order.id.in_(past_ids))
+            .values(order_date=date(2020, 1, 1))
+        )
+        await db.flush()
+
+        # No date filter → all 5 orders
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?limit=10"
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 5
+
+        # Today's date → only the 3 today orders, page size 2
+        today = date.today().isoformat()
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?order_date={today}&limit=2&offset=0"
+        )
+        data = resp.json()
+        assert data["total"] == 3
+        assert len(data["orders"]) == 2
+        returned = {o["id"] for o in data["orders"]}
+        assert returned.issubset(set(today_ids))
+
+        # Past date → the 2 relocated orders only
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?order_date=2020-01-01"
+        )
+        data = resp.json()
+        assert data["total"] == 2
+        assert {o["id"] for o in data["orders"]} == set(past_ids)
+
+    async def test_status_filter_with_pagination(
+        self,
+        student_client: AsyncClient,
+        db: AsyncSession,
+        manager_client,
+        manager_user,
+    ):
+        """status filter composes with limit/offset and keeps the true total."""
+        cafeteria, item, _ = await _setup_order_test_data(db)
+        await assign_user_to_cafeteria(
+            db, manager_user.id, cafeteria.id, role=Role.CAFETERIA_MANAGER
+        )
+        await db.flush()
+        ids = await self._seed_orders(student_client, cafeteria.id, item.id, 3)
+
+        # Move one order to preparing through the real workflow
+        resp = await manager_client.post(f"/api/v1/orders/{ids[0]}/confirm", json={})
+        assert resp.status_code == 200
+        resp = await manager_client.put(
+            f"/api/v1/orders/{ids[0]}/status", json={"status": "preparing"}
+        )
+        assert resp.status_code == 200
+
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?status=pending&limit=1"
+        )
+        data = resp.json()
+        assert data["total"] == 2
+        assert len(data["orders"]) == 1
+        assert data["orders"][0]["id"] != ids[0]
+
+        resp = await manager_client.get(
+            f"/api/v1/orders/cafeteria/{cafeteria.id}?status=preparing&limit=10"
+        )
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["orders"][0]["id"] == ids[0]

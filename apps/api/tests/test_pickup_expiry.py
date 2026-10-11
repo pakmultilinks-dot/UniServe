@@ -584,7 +584,16 @@ class TestProcessExpiredPickupsNoEligible:
         service = OrderService(db)
         stats = await service.process_expired_pickups()
 
-        assert stats == {"examined": 0, "processed": 0, "skipped": 0, "failed": 0}
+        # Phase 44 (P3-14 Phase 2) extended the stats dict with scheduled
+        # expiry counters — empty state keeps all of them at zero.
+        assert stats == {
+            "examined": 0,
+            "processed": 0,
+            "skipped": 0,
+            "failed": 0,
+            "scheduled_examined": 0,
+            "scheduled_expired": 0,
+        }
 
     @pytest.mark.asyncio
     async def test_all_orders_in_future(self, db: AsyncSession):

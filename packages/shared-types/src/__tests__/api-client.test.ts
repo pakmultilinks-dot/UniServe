@@ -344,3 +344,103 @@ describe("ApiClient.request() — happy paths", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ApiClient.request() — error semantics (Phase 60)", () => {
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("surfaces backend validation detail on 400 without refreshing", async () => {
+    const provider = createMockTokenProvider({
+      accessToken: "my-token",
+      refreshToken: "my-refresh",
+    });
+    const client = new ApiClient("http://api.test/v1", provider);
+
+    fetchSpy.mockResolvedValueOnce(
+      mockResponse({ detail: "Email already registered" }, 400),
+    );
+
+    try {
+      await client.post("/auth/register", {});
+      expect.fail("Should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiClientError);
+      expect((err as ApiClientError).status).toBe(400);
+      expect((err as ApiClientError).message).toBe(
+        "Email already registered",
+      );
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats 403 as a permission error and never refreshes", async () => {
+    const provider = createMockTokenProvider({
+      accessToken: "my-token",
+      refreshToken: "my-refresh",
+    });
+    const client = new ApiClient("http://api.test/v1", provider);
+
+    fetchSpy.mockResolvedValueOnce(
+      mockResponse({ detail: "Not assigned to this cafeteria" }, 403),
+    );
+
+    try {
+      await client.get("/orders/cafeteria/foreign");
+      expect.fail("Should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiClientError);
+      expect((err as ApiClientError).status).toBe(403);
+      expect((err as ApiClientError).message).toBe(
+        "Not assigned to this cafeteria",
+      );
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps network failures as ApiClientError status 0", async () => {
+    const provider = createMockTokenProvider({ accessToken: null, refreshToken: null });
+    const client = new ApiClient("http://api.test/v1", provider);
+
+    fetchSpy.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    try {
+      await client.get("/auth/me");
+      expect.fail("Should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiClientError);
+      expect((err as ApiClientError).status).toBe(0);
+      expect((err as ApiClientError).message).toContain("Network error");
+    }
+  });
+
+  it("aborts requests that exceed the timeout and reports status 408", async () => {
+    const provider = createMockTokenProvider({ accessToken: null, refreshToken: null });
+    const client = new ApiClient("http://api.test/v1", provider);
+
+    fetchSpy.mockImplementationOnce(
+      (_url: string, opts?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          opts?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        }),
+    );
+
+    try {
+      await client.request("GET", "/slow", { timeout: 30 });
+      expect.fail("Should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiClientError);
+      expect((err as ApiClientError).status).toBe(408);
+      expect((err as ApiClientError).message).toBe("Request timed out");
+    }
+  });
+});

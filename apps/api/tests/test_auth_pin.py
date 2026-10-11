@@ -135,24 +135,75 @@ class TestPINLogin:
         assert resp.status_code == 400
 
     async def test_pin_lockout_after_max_attempts(
-        self, client: AsyncClient, db: AsyncSession, student_user
+        self, client: AsyncClient, db: AsyncSession, student_user, otp_persistence_factory
     ):
-        await self._enable_pin(db, student_user.id)
+        """PIN lockout engages after PIN_MAX_FAILED_ATTEMPTS wrong PINs.
 
-        # Exhaust wrong PIN attempts (PIN_MAX_FAILED_ATTEMPTS=5)
-        for _ in range(5):
-            resp = await client.post(
-                "/api/v1/auth/pin/login",
-                json={"user_id": student_user.id, "pin": "9999"},
+        Phase 63 note: like the password path, the PIN failed-attempt counter
+        previously mutated the shared no-rollback in-memory session (false
+        green) while production ``get_db`` rolled the increment back —
+        dead-code lockout. The counter is now persisted independently via
+        ``_persist_credential_state``. This test seeds the PIN-enabled user on
+        the isolated persistence DB and exercises the REAL ``get_db`` boundary
+        so the lockout is a true green. Full cross-request persistence
+        assertions live in ``test_login_lockout_persistence.py``.
+        """
+        import uuid as _uuid
+
+        from httpx import ASGITransport
+
+        from app.core.database import get_db
+        from app.core.security import hash_password
+        from app.main import app
+        from app.modules.users.models import AccountStatus, Role, User, UserCategory
+
+        suffix = _uuid.uuid4().hex[:8]
+        uid = f"FA22-BSE-PINLK-{suffix.upper()}"
+
+        # Seed a PIN-enabled user on the isolated persistence DB and commit.
+        async with otp_persistence_factory() as session:
+            user = User(
+                first_name="Pin",
+                last_name="Lockout",
+                university_id=uid,
+                university_email=f"{uid.lower()}@lgu.edu.pk",
+                category=UserCategory.STUDENT,
+                role=Role.STUDENT,
+                status=AccountStatus.ACTIVE,
+                email_verified=True,
             )
-            assert resp.status_code == 400
+            session.add(user)
+            await session.flush()
+            cred = UserCredential(
+                user_id=user.id,
+                password_hash=hash_password("StrongPass1!"),
+                pin_hash=hash_pin("1234"),
+                pin_enabled=True,
+            )
+            session.add(cred)
+            await session.commit()
+            user_id = user.id
 
-        # Even correct PIN should now be locked
-        resp = await client.post(
-            "/api/v1/auth/pin/login",
-            json={"user_id": student_user.id, "pin": "1234"},
-        )
-        assert resp.status_code == 423
+        # Use the REAL get_db boundary (fresh session per request,
+        # rollback-on-exception) — the production request lifecycle.
+        app.dependency_overrides.pop(get_db, None)
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            # Exhaust wrong PIN attempts (PIN_MAX_FAILED_ATTEMPTS=5)
+            for _ in range(5):
+                resp = await ac.post(
+                    "/api/v1/auth/pin/login",
+                    json={"user_id": user_id, "pin": "9999"},
+                )
+                assert resp.status_code == 400
+
+            # Even correct PIN should now be locked
+            resp = await ac.post(
+                "/api/v1/auth/pin/login",
+                json={"user_id": user_id, "pin": "1234"},
+            )
+            assert resp.status_code == 423
 
 
 # ---------------------------------------------------------------------------

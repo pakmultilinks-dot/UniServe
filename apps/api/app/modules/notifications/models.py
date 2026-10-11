@@ -4,13 +4,16 @@ Provides:
 - NotificationType enum — maps to order lifecycle events
 - DeliveryStatus enum — tracks delivery state (foundation for push)
 - Notification model — per-user, per-event durable records with idempotency
+- AdminBroadcast model (Phase 50) — broadcast operation log for Admin
+  notifications; recipient delivery is persisted as ordinary per-user
+  Notification rows (reference_type="broadcast").
 """
 
 import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, StrEnum
@@ -32,6 +35,10 @@ class NotificationType(str, enum.Enum):
     REFUND_REQUESTED = "refund_requested"
     REFUND_PROCESSED = "refund_processed"
     REFUND_FAILED = "refund_failed"
+    # Phase 51 — admin rejected a refund request (in-app, existing infra)
+    REFUND_REJECTED = "refund_rejected"
+    # Phase 50 — University Admin broadcast (in-app announcement)
+    ADMIN_ANNOUNCEMENT = "admin_announcement"
 
 
 class DeliveryStatus(str, enum.Enum):
@@ -112,4 +119,54 @@ class Notification(Base):
         return (
             f"<Notification {self.notification_type.value} "
             f"user={self.user_id} read={self.is_read}>"
+        )
+
+
+class AdminBroadcast(Base):
+    """Phase 50 — Admin broadcast operation log.
+
+    One row per sent University Admin announcement. Recipient delivery is
+    persisted as ordinary per-user Notification rows in the existing
+    notifications table (notification_type=ADMIN_ANNOUNCEMENT,
+    reference_type="broadcast", reference_id=<this id>) — this table is NOT
+    a parallel notification system; it follows the OrderEvent/RefundEvent
+    pattern of recording the operation itself.
+
+    Why this record exists (small additive change, tightly scoped):
+    - idempotency_key is UNIQUE → DB-level duplicate-broadcast guard
+      (same convention as Payment.idempotency_key).
+    - The notifications table alone cannot store audience / author /
+      recipient_count once, which a useful Admin history view needs.
+    - Existing notification rows and read/unread behavior are untouched.
+    """
+
+    __tablename__ = "admin_broadcasts"
+    __table_args__ = (
+        Index("idx_admin_broadcast_created_at", "created_at"),
+        Index("idx_admin_broadcast_idempotency_key", "idempotency_key", unique=True),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    created_by_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_by_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    audience: Mapped[str] = mapped_column(String(50), nullable=False)
+    cafeteria_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("cafeterias.id", ondelete="SET NULL"), nullable=True
+    )
+    recipient_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AdminBroadcast {self.id} audience={self.audience} "
+            f"recipients={self.recipient_count}>"
         )

@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import MutableHeaders
 
 from app.api.router import api_router
 from app.core.config import settings
@@ -146,6 +147,35 @@ def create_application() -> FastAPI:
             status_code=status,
             content={"detail": exc.message, "code": exc.code},
         )
+
+    # Security-headers middleware — defence-in-depth hardening for the static
+    # food-image server (finding: served images lacked X-Content-Type-Options).
+    # Pure ASGI middleware (safe with StaticFiles FileResponse streaming, which is
+    # why BaseHTTPMiddleware is avoided). Adds nosniff to every response.
+    # NOTE: the `Server: uvicorn` banner is injected by uvicorn's transport layer
+    # (default_headers) AFTER the app returns, so it cannot be removed here — it is
+    # classified as a low-risk INFO limitation instead (not a fake "fix").
+    class SecurityHeadersMiddleware:
+        """Pure ASGI middleware injecting X-Content-Type-Options: nosniff."""
+
+        def __init__(self, app) -> None:
+            self.app = app
+
+        async def __call__(self, scope, receive, send) -> None:
+            if scope["type"] != "http":
+                await self.app(scope, receive, send)
+                return
+
+            async def send_with_headers(message) -> None:
+                if message["type"] == "http.response.start":
+                    headers = MutableHeaders(scope=message)
+                    if "X-Content-Type-Options" not in headers:
+                        headers["X-Content-Type-Options"] = "nosniff"
+                await send(message)
+
+            await self.app(scope, receive, send_with_headers)
+
+    application.add_middleware(SecurityHeadersMiddleware)
 
     # CORS middleware
     application.add_middleware(

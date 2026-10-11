@@ -58,6 +58,19 @@ export type OrderStatus =
 
 export type OrderType = "immediate" | "scheduled";
 
+/**
+ * Phase 58 (Workstream H) — backend `OrderRejectionReason` enum, mirrored so
+ * the web console sends enum values (never free text) to POST
+ * /orders/{id}/reject. Backend `reject_order` validates this enum and raises
+ * 400 on any other value.
+ */
+export type OrderRejectionReason =
+  | "capacity"
+  | "item_unavailable"
+  | "cafeteria_issue"
+  | "operational_issue"
+  | "other";
+
 export type PaymentStatus =
   | "pending"
   | "processing"
@@ -70,7 +83,7 @@ export type PaymentStatus =
 
 export type PaymentMethod = "cash" | "online";
 
-export type RefundStatus = "pending" | "processing" | "succeeded" | "failed";
+export type RefundStatus = "pending" | "processing" | "succeeded" | "failed" | "rejected";
 
 export type RefundReason =
   | "order_cancelled"
@@ -95,7 +108,11 @@ export type NotificationType =
   | "payment_confirmed"
   | "refund_requested"
   | "refund_processed"
-  | "refund_failed";
+  | "refund_failed"
+  /** Phase 51 — a University Admin/Manager rejected a refund request. */
+  | "refund_rejected"
+  /** Phase 50 — in-app notification created by a University Admin broadcast. */
+  | "admin_announcement";
 
 export type OrderEventType =
   | "created"
@@ -135,6 +152,11 @@ export interface User {
   status: AccountStatus;
   email_verified: boolean;
   created_at: string;
+  // Phase 47 — cafeteria assignment surfaced by the admin users endpoints
+  // (null for members without an assignment; absent on non-admin responses).
+  cafeteria_id?: string | null;
+  cafeteria_name?: string | null;
+  updated_at?: string | null;
 }
 
 export interface TokenPair {
@@ -190,13 +212,27 @@ export interface PINLoginRequest {
   pin: string;
 }
 
-export interface PINSetRequest {
+/** Enable PIN authentication (POST /auth/pin/enable).
+ *  Mirrors backend PINSetupRequest — current password required to prove
+ *  possession before a new PIN is bound to the account. */
+export interface PINSetupRequest {
+  current_password: string;
   pin: string;
+  confirm_pin: string;
 }
 
+/** Change existing PIN (POST /auth/pin/change).
+ *  Mirrors backend PINChangeRequest — current PIN + new PIN + confirm. */
 export interface PINChangeRequest {
   current_pin: string;
   new_pin: string;
+  confirm_pin: string;
+}
+
+/** Disable PIN authentication (POST /auth/pin/disable).
+ *  Mirrors backend PINDisableRequest — current password required. */
+export interface PINDisableRequest {
+  current_password: string;
 }
 
 export interface RefreshTokenRequest {
@@ -538,6 +574,8 @@ export interface Refund {
   status: RefundStatus;
   reason: RefundReason;
   reason_note?: string;
+  /** Phase 51 — admin rejection reason (present when status === "rejected"). */
+  rejection_reason?: string;
   requested_by: string;
   processed_by?: string;
   provider_reference?: string;
@@ -551,6 +589,74 @@ export interface RefundRequest {
   reason: RefundReason;
   reason_note?: string;
   idempotency_key: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 51 — ADMIN REFUND RESOLUTION (rejection + enriched context)
+// ═══════════════════════════════════════════════════════════════════
+
+export interface RefundRejectRequest {
+  /** Persisted admin decision reason (10–500 chars, validated server-side). */
+  rejection_reason: string;
+}
+
+export interface RefundStudentContext {
+  id: string;
+  first_name: string;
+  last_name: string;
+  university_email: string;
+  university_id: string;
+  role: string;
+}
+
+export interface RefundOrderContext {
+  id: string;
+  order_number: number;
+  status: string;
+  payment_method: string;
+  total_amount: number;
+  currency: string;
+  order_date?: string;
+  cafeteria_id?: string | null;
+  cafeteria_name?: string | null;
+  created_at: string;
+}
+
+export interface RefundPaymentContext {
+  /** Non-sensitive payment facts only — never provider secrets. */
+  id: string;
+  status: string;
+  provider_name?: string | null;
+  provider_reference?: string | null;
+  amount: number;
+  currency: string;
+}
+
+export interface RefundAdminResponse {
+  id: string;
+  order_id: string;
+  payment_id: string;
+  user_id: string;
+  amount: number;
+  currency: string;
+  status: RefundStatus;
+  reason: RefundReason;
+  reason_note?: string | null;
+  rejection_reason?: string | null;
+  requested_by: string;
+  processed_by?: string | null;
+  provider_reference?: string | null;
+  created_at: string;
+  processed_at?: string | null;
+  updated_at: string;
+  student: RefundStudentContext;
+  order: RefundOrderContext;
+  payment: RefundPaymentContext;
+}
+
+export interface RefundAdminListResponse {
+  refunds: RefundAdminResponse[];
+  total: number;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -593,6 +699,57 @@ export interface MarkAllReadResponse {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// ADMIN BROADCAST (Phase 50)
+// ═══════════════════════════════════════════════════════════════════
+//
+// In-app announcements sent by a University Admin through the existing
+// UniServe notification infrastructure. There is NO push channel: a
+// broadcast creates in-app Notification rows that recipients see in
+// their existing notification center.
+
+export type BroadcastAudience =
+  | "all_users"
+  | "students"
+  | "faculty"
+  | "cafeteria_staff"
+  | "cafeteria_managers"
+  | "university_admins"
+  | "cafeteria";
+
+export interface BroadcastCreateRequest {
+  title: string;
+  message: string;
+  audience: BroadcastAudience;
+  /** Required iff audience === "cafeteria"; rejected otherwise. */
+  cafeteria_id?: string;
+  /** Idempotency key — replay-safe duplicate protection (payments convention). */
+  idempotency_key: string;
+}
+
+export interface BroadcastResponse {
+  id: string;
+  title: string;
+  message: string;
+  audience: string;
+  cafeteria_id?: string | null;
+  recipient_count: number;
+  created_at: string;
+  /** True when an idempotency replay returned the original broadcast. */
+  duplicate: boolean;
+}
+
+export interface BroadcastListResponse {
+  items: BroadcastResponse[];
+  total: number;
+}
+
+export interface BroadcastAudienceCountResponse {
+  audience: string;
+  cafeteria_id?: string | null;
+  recipient_count: number;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // REPORTS
 // ═══════════════════════════════════════════════════════════════════
 
@@ -613,6 +770,10 @@ export interface SalesSummary {
   total_orders: number;
   total_refunded: number;
   net_revenue: number;
+  /** Phase 49: succeeded payment volume (paisa) from ONLINE-paid orders. */
+  online_payment_volume?: number;
+  /** Phase 49: succeeded payment volume (paisa) from CASH-paid orders. */
+  cash_payment_volume?: number;
   currency: string;
 }
 
@@ -638,6 +799,10 @@ export interface CafeteriaSalesRow {
   revenue: number;
   order_count: number;
   refunded_amount: number;
+  /** Phase 49: orders in COMPLETED status for this cafeteria in range. */
+  completed_orders?: number;
+  /** Phase 49: orders in CANCELLED status for this cafeteria in range. */
+  cancelled_orders?: number;
 }
 
 export interface SalesByCafeteriaResponse {
@@ -882,6 +1047,34 @@ export interface CafeteriaAssignment {
   assigned_at: string;
 }
 
+// ---- Phase 47 — Member & Staff Management (mirrors backend admin schemas) ----
+
+export interface AdminCreateUserRequest {
+  first_name: string;
+  last_name: string;
+  university_id: string;
+  university_email: string;
+  role: UserRole;
+  /** Required when role is cafeteria_staff or cafeteria_manager. */
+  cafeteria_id?: string | null;
+}
+
+export interface AdminCreateUserResponse {
+  user: User;
+  /** Shown exactly once at creation — must be shared securely. */
+  temporary_password: string;
+}
+
+export interface AdminChangeRoleRequest {
+  role: UserRole;
+  /** Required when the new role is cafeteria_staff or cafeteria_manager. */
+  cafeteria_id?: string | null;
+}
+
+export interface AdminSuspendRequest {
+  reason: string;
+}
+
 // ---- Additional Phase 6 types ----
 
 export interface EtaResponse {
@@ -1077,6 +1270,72 @@ export class ApiClient {
 
   delete<T>(endpoint: string): Promise<T> {
     return this.request<T>("DELETE", endpoint);
+  }
+
+  /**
+   * Upload a raw binary body (e.g. an image File/Blob) with an explicit
+   * Content-Type header. Used for menu-item image uploads, where the API
+   * expects the image bytes directly rather than a JSON envelope — the
+   * deployment does not ship multipart support (python-multipart), so
+   * single-file uploads ride the raw request body.
+   *
+   * Auth, token-refresh-on-401, timeout and error semantics mirror request().
+   */
+  async uploadBinary<T>(
+    method: string,
+    endpoint: string,
+    body: Blob,
+    contentType: string,
+    options?: { timeout?: number },
+  ): Promise<T> {
+    const { timeout = 30000 } = options ?? {};
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": contentType,
+      };
+
+      const token = this.tokenProvider.getAccessToken();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      let response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method,
+        headers,
+        body,
+        signal: controller.signal,
+      });
+
+      if (response.status === 401 && this.tokenProvider.getRefreshToken()) {
+        const newToken = await this.handleTokenRefresh();
+        if (newToken) {
+          headers["Authorization"] = `Bearer ${newToken}`;
+          response = await fetch(`${this.baseUrl}${endpoint}`, {
+            method,
+            headers,
+            body,
+            signal: controller.signal,
+          });
+        } else {
+          this.tokenProvider.clearTokens();
+          this.onAuthFailure?.();
+          throw new ApiClientError(401, "Session expired. Please log in again.");
+        }
+      }
+
+      return await this.handleResponse<T>(response);
+    } catch (err) {
+      if (err instanceof ApiClientError) throw err;
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new ApiClientError(408, "Request timed out");
+      }
+      throw new ApiClientError(0, `Network error: ${(err as Error).message ?? "unknown"}`);
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   // ---- Internal helpers ----

@@ -6,21 +6,25 @@ Handles:
 - Listing, reading, and marking notifications
 - Idempotent creation via source_event dedup
 - Title/body templates for each notification type
+- Phase 50 — Admin broadcast (in-app announcements to supported audiences)
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import func, select, update
 
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import NotFoundException, ValidationError
 from app.modules.notifications.models import (
+    AdminBroadcast,
     DeliveryStatus,
     Notification,
     NotificationType,
 )
+from app.modules.notifications.schemas import BroadcastAudience
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -165,6 +169,10 @@ _REFUND_NOTIFICATION_TEMPLATES: dict[str, tuple[str, str]] = {
     "refund_failed": (
         "Refund Failed",
         "Your refund request for order #{order_number} could not be processed. Please contact support.",
+    ),
+    "refund_rejected": (
+        "Refund Rejected",
+        "Your refund request for order #{order_number} has been rejected. Please contact support for details.",
     ),
 }
 
@@ -478,5 +486,205 @@ class NotificationService:
             "refund_requested": NotificationType.REFUND_REQUESTED,
             "refund_succeeded": NotificationType.REFUND_PROCESSED,
             "refund_failed": NotificationType.REFUND_FAILED,
+            "refund_rejected": NotificationType.REFUND_REJECTED,
         }
         return mapping[event_type]
+
+
+# ====================================================================
+# Phase 50 — Admin broadcast
+# ====================================================================
+
+
+class BroadcastService:
+    """University Admin broadcast (in-app announcement) workflow.
+
+    Reuses NotificationService._create_notification for per-recipient
+    persistence — no parallel notification write path. Broadcast
+    idempotency follows the Payment.idempotency_key convention: a unique
+    key on AdminBroadcast prevents accidental duplicate sends, and a
+    replay returns the original broadcast without creating new rows.
+    """
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+        self._notifications = NotificationService(db)
+
+    async def _resolve_recipient_ids(
+        self,
+        audience: BroadcastAudience,
+        cafeteria_id: str | None,
+    ) -> list[str]:
+        """Resolve active, non-deleted recipient user ids for an audience."""
+        from app.modules.cafeterias.models import Cafeteria
+        from app.modules.users.models import AccountStatus, CafeteriaAssignment, Role, User
+
+        base = select(User.id).where(
+            User.status == AccountStatus.ACTIVE,
+            User.deleted_at.is_(None),
+        )
+
+        role_map = {
+            BroadcastAudience.STUDENTS: Role.STUDENT,
+            BroadcastAudience.FACULTY: Role.FACULTY,
+            BroadcastAudience.CAFETERIA_STAFF: Role.CAFETERIA_STAFF,
+            BroadcastAudience.CAFETERIA_MANAGERS: Role.CAFETERIA_MANAGER,
+            BroadcastAudience.UNIVERSITY_ADMINS: Role.UNIVERSITY_ADMIN,
+        }
+
+        if audience == BroadcastAudience.ALL_USERS:
+            query = base
+        elif audience in role_map:
+            query = base.where(User.role == role_map[audience])
+        elif audience == BroadcastAudience.CAFETERIA:
+            if not cafeteria_id:
+                raise ValidationError(
+                    "cafeteria_id is required when audience is 'cafeteria'"
+                )
+            cafeteria = (
+                await self.db.execute(
+                    select(Cafeteria).where(Cafeteria.id == cafeteria_id)
+                )
+            ).scalar_one_or_none()
+            if cafeteria is None:
+                raise NotFoundException("Cafeteria", cafeteria_id)
+            query = base.where(
+                User.id.in_(
+                    select(CafeteriaAssignment.user_id).where(
+                        CafeteriaAssignment.cafeteria_id == cafeteria_id
+                    )
+                )
+            )
+        else:
+            # Defensive — pydantic rejects unknown audiences first.
+            raise ValidationError(f"Unsupported audience: {audience}")
+
+        result = await self.db.execute(query.order_by(User.id))
+        return list(result.scalars().all())
+
+    async def count_audience(
+        self,
+        *,
+        audience: BroadcastAudience,
+        cafeteria_id: str | None = None,
+    ) -> int:
+        """Count active recipients an audience resolves to (preview support)."""
+        recipient_ids = await self._resolve_recipient_ids(audience, cafeteria_id)
+        return len(recipient_ids)
+
+    async def create_broadcast(
+        self,
+        *,
+        title: str,
+        message: str,
+        audience: BroadcastAudience,
+        cafeteria_id: str | None,
+        idempotency_key: str,
+        created_by,
+    ) -> tuple[AdminBroadcast, bool]:
+        """Create and persist an Admin broadcast + per-recipient notifications.
+
+        Returns (broadcast, duplicate). duplicate=True means this key was
+        already sent — the original broadcast is returned untouched.
+        Nothing is persisted unless recipient resolution succeeds and the
+        transaction commits (get_db commits on request success).
+        """
+        title = title.strip()
+        message = message.strip()
+        if not title:
+            raise ValidationError("Broadcast title cannot be empty")
+        if not message:
+            raise ValidationError("Broadcast message cannot be empty")
+
+        if audience == BroadcastAudience.CAFETERIA and not cafeteria_id:
+            raise ValidationError("cafeteria_id is required when audience is 'cafeteria'")
+        if audience != BroadcastAudience.CAFETERIA and cafeteria_id:
+            raise ValidationError(
+                "cafeteria_id is only supported when audience is 'cafeteria'"
+            )
+
+        # Idempotency — payments convention: replay returns the original.
+        existing = (
+            await self.db.execute(
+                select(AdminBroadcast).where(
+                    AdminBroadcast.idempotency_key == idempotency_key
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            logger.debug(
+                "broadcast_idempotent_replay",
+                broadcast_id=existing.id,
+                idempotency_key=idempotency_key,
+            )
+            return existing, True
+
+        recipient_ids = await self._resolve_recipient_ids(audience, cafeteria_id)
+        if not recipient_ids:
+            raise ValidationError(
+                f"Audience '{audience.value}' has no active recipients — nothing sent"
+            )
+
+        created_by_name = (
+            f"{created_by.first_name} {created_by.last_name}".strip()
+            if created_by is not None
+            else "Unknown"
+        )
+        # Explicit id (Payment-creation pattern) — recipient rows below need
+        # reference_id BEFORE the flush that assigns column defaults.
+        broadcast_id = str(uuid.uuid4())
+        broadcast = AdminBroadcast(
+            id=broadcast_id,
+            created_by_id=getattr(created_by, "id", None),
+            created_by_name=created_by_name,
+            title=title,
+            message=message,
+            audience=audience.value,
+            cafeteria_id=cafeteria_id,
+            recipient_count=len(recipient_ids),
+            idempotency_key=idempotency_key,
+        )
+        self.db.add(broadcast)
+
+        for user_id in recipient_ids:
+            await self._notifications._create_notification(
+                user_id=user_id,
+                notification_type=NotificationType.ADMIN_ANNOUNCEMENT,
+                title=title,
+                body=message,
+                cafeteria_id=cafeteria_id,
+                reference_type="broadcast",
+                reference_id=broadcast_id,
+                source_event_type="admin_broadcast",
+                source_event_id=None,
+            )
+
+        await self.db.flush()
+        logger.info(
+            "broadcast_created",
+            broadcast_id=broadcast.id,
+            audience=audience.value,
+            recipient_count=broadcast.recipient_count,
+            created_by_id=broadcast.created_by_id,
+        )
+        return broadcast, False
+
+    async def list_broadcasts(
+        self,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[AdminBroadcast], int]:
+        """Broadcast history — newest first, with total count."""
+        total_result = await self.db.execute(
+            select(func.count()).select_from(AdminBroadcast)
+        )
+        total = total_result.scalar() or 0
+
+        result = await self.db.execute(
+            select(AdminBroadcast)
+            .order_by(AdminBroadcast.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.scalars().all()), total

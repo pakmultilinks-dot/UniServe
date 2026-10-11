@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 — Pydantic resolves fields at runtime
 
 from pydantic import BaseModel, ConfigDict, Field
 

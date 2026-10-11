@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { isWebDashboardRole } from "@/lib/roles";
-import { LguBrand, LguSeal } from "@/components/LguBrand";
+import { LguSeal } from "@/components/LguBrand";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 

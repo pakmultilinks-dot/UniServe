@@ -18,7 +18,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -46,6 +46,12 @@ logger = structlog.get_logger(__name__)
 
 # Scheduled order cancellation deadline (30 minutes before collection)
 CANCELLATION_DEADLINE_MINUTES = 30
+
+# P3-14: scheduled orders still PENDING this long after their collection
+# slot can no longer be fulfilled at the promised time — the background
+# worker cancels them automatically. Mirrors the 30-minute user-cancellation
+# window on the other side of the slot.
+SCHEDULED_EXPIRY_GRACE_MINUTES = 30
 
 
 class OrderService:
@@ -335,20 +341,37 @@ class OrderService:
         cafeteria_id: str,
         status: str | None = None,
         order_date: date | None = None,
-    ) -> list[Order]:
-        """List orders for a cafeteria (manager/staff view)."""
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> tuple[list[Order], int]:
+        """List orders for a cafeteria (manager/staff view).
+
+        Phase 54 — optional limit/offset paginate the queue; the returned
+        total is the full count of orders matching the filters (before
+        pagination) so callers can render page navigation. Omitting both
+        preserves the original unpaginated behaviour exactly.
+        """
+        filters = [Order.cafeteria_id == cafeteria_id]
+        if status is not None:
+            filters.append(Order.status == status)
+        if order_date is not None:
+            filters.append(Order.order_date == order_date)
+
+        count_query = select(func.count()).select_from(Order).where(*filters)
+        total = (await self.db.execute(count_query)).scalar_one()
+
         query = (
             select(Order)
-            .where(Order.cafeteria_id == cafeteria_id)
+            .where(*filters)
             .options(selectinload(Order.items))
             .order_by(Order.created_at.desc())
         )
-        if status is not None:
-            query = query.where(Order.status == status)
-        if order_date is not None:
-            query = query.where(Order.order_date == order_date)
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        return list(result.scalars().all()), total
 
     # ===================================================================
     # Cancellation
@@ -374,6 +397,15 @@ class OrderService:
         """
         order = await self.get_order(order_id)
 
+        if not is_manager:
+            # Verify ownership BEFORE any status validation so that the
+            # response cannot be used as an order-status oracle (Phase 8 D8).
+            # Non-owners get the same "Order not found" answer as GET /orders/{id}.
+            if user_id and order.user_id != user_id:
+                from app.core.exceptions import AuthorizationError
+
+                raise AuthorizationError("Order not found")
+
         # Already cancelled or completed
         if order.status == OrderStatus.CANCELLED:
             raise ValidationError("Order is already cancelled")
@@ -390,10 +422,6 @@ class OrderService:
             # User can only cancel PENDING orders
             if order.status != OrderStatus.PENDING:
                 raise ValidationError(f"Cannot cancel order in {order.status.value} status")
-
-            # Verify ownership
-            if user_id and order.user_id != user_id:
-                raise ValidationError("Order does not belong to this user")
 
             # Scheduled cancellation deadline check
             if order.order_type == OrderType.SCHEDULED and order.scheduled_collection_time:
@@ -494,27 +522,15 @@ class OrderService:
         if new_status == "ready":
             return await self.mark_ready(order_id=order_id, actor_id=actor_id, notes=notes)
 
-        # PENDING → PREPARING through this generic endpoint must satisfy the
-        # same business gates as start_preparation (POST /prepare): the order
-        # must be confirmed, and online orders must have a succeeded payment.
+        # P3-8: PENDING → PREPARING through this generic endpoint must satisfy
+        # the same business gates as start_preparation (POST /prepare) AND set
+        # the same lifecycle fields. Delegating keeps the two paths
+        # indistinguishable — previously this path left preparation_started_at
+        # NULL and skipped ETA when staff skipped the explicit Prepare step.
         if new_status == "preparing":
-            if order.confirmed_at is None:
-                raise ValidationError("Order must be confirmed before starting preparation")
-            if order.payment_method == PaymentMethod.ONLINE:
-                from app.modules.payments.models import Payment, PaymentStatus
-
-                result = await self.db.execute(
-                    select(Payment).where(Payment.order_id == order.id)
-                )
-                payment = result.scalar_one_or_none()
-
-                if payment is None:
-                    raise ValidationError("Payment not found for online order")
-                if payment.status != PaymentStatus.SUCCEEDED:
-                    raise ValidationError(
-                        f"Cannot start preparation: payment is {payment.status.value}, "
-                        f"must be succeeded"
-                    )
+            return await self.start_preparation(
+                order_id=order_id, actor_id=actor_id, notes=notes
+            )
 
         order.status = OrderStatus(new_status)
 
@@ -1453,21 +1469,25 @@ class OrderService:
             except (ValueError, IndexError):
                 pass  # Invalid closing_time format — skip operating-hours check
 
-    async def _check_scheduled_cancellation_deadline(self, order: Order) -> None:
-        """Check if a scheduled order can still be cancelled by the user.
-
-        User can cancel until 30 minutes before scheduled collection time.
+    async def _scheduled_collection_utc(self, order: Order) -> datetime | None:
+        """Resolve a scheduled order's collection slot as a UTC datetime.
 
         scheduled_collection_time is cafeteria-local (same convention as
-        checkout validation in _validate_scheduled_order_time), so it is
-        combined with the order date using the cafeteria's timezone — not UTC.
+        checkout validation in _validate_scheduled_order_time), combined
+        with the order date using the cafeteria's timezone. Returns None
+        when the order has no scheduled time or it is malformed.
         """
         if not order.scheduled_collection_time:
-            return
+            return None
 
         parts = order.scheduled_collection_time.split(":")
-        collection_hour = int(parts[0])
-        collection_minute = int(parts[1])
+        if len(parts) != 2:
+            return None
+        try:
+            collection_hour = int(parts[0])
+            collection_minute = int(parts[1])
+        except ValueError:
+            return None
 
         from datetime import time as dt_time
         from zoneinfo import ZoneInfo
@@ -1488,9 +1508,19 @@ class OrderService:
             dt_time(collection_hour, collection_minute),
             tzinfo=tz,
         )
+        return collection_dt.astimezone(UTC)
+
+    async def _check_scheduled_cancellation_deadline(self, order: Order) -> None:
+        """Check if a scheduled order can still be cancelled by the user.
+
+        User can cancel until 30 minutes before scheduled collection time.
+        """
+        collection_utc = await self._scheduled_collection_utc(order)
+        if collection_utc is None:
+            return
+
         deadline = (
-            collection_dt.astimezone(UTC)
-            - timedelta(minutes=CANCELLATION_DEADLINE_MINUTES)
+            collection_utc - timedelta(minutes=CANCELLATION_DEADLINE_MINUTES)
         )
         now = datetime.now(UTC)
 
@@ -1508,13 +1538,30 @@ class OrderService:
     async def process_expired_pickups(self) -> dict[str, int]:
         """Process orders whose pickup deadline has expired.
 
-        Finds READY orders where pickup_deadline <= now and uncollected_at is NULL.
-        Uses SELECT FOR UPDATE SKIP LOCKED to handle concurrent workers safely
-        on PostgreSQL. On other dialects (SQLite), locking is skipped.
+        Phase 1 — READY orders where pickup_deadline <= now and
+        uncollected_at is NULL are marked uncollected (no-show).
 
-        Returns processing statistics: {examined, processed, skipped, failed}.
+        Phase 2 (P3-14) — SCHEDULED orders still PENDING more than
+        SCHEDULED_EXPIRY_GRACE_MINUTES after their collection slot are
+        cancelled automatically. Before this phase existed, a scheduled
+        order that staff never confirmed stayed PENDING indefinitely
+        (hours past its slot). Completed/collected/cancelled orders and
+        orders still inside the grace window are never touched.
+
+        Uses SELECT FOR UPDATE SKIP LOCKED to handle concurrent workers
+        safely on PostgreSQL. On other dialects (SQLite), locking is skipped.
+
+        Returns processing statistics: {examined, processed, skipped,
+        failed, scheduled_examined, scheduled_expired}.
         """
-        stats = {"examined": 0, "processed": 0, "skipped": 0, "failed": 0}
+        stats = {
+            "examined": 0,
+            "processed": 0,
+            "skipped": 0,
+            "failed": 0,
+            "scheduled_examined": 0,
+            "scheduled_expired": 0,
+        }
         now = datetime.now(UTC)
 
         # Find eligible orders: READY, deadline passed, not yet uncollected
@@ -1561,6 +1608,81 @@ class OrderService:
                 # Continue processing other orders
                 continue
 
+        # ------------------------------------------------------------------
+        # Phase 2 (P3-14): scheduled PENDING orders past their collection slot
+        # ------------------------------------------------------------------
+        # Scheduled orders are same-day-only, so a bounded date window is
+        # enough to find every candidate; the exact slot deadline is then
+        # resolved in Python (cafeteria-local time → UTC).
+        scheduled_cutoff_date = (now + timedelta(days=1)).date()
+        scheduled_stmt = select(Order).where(
+            Order.status == OrderStatus.PENDING,
+            Order.order_type == OrderType.SCHEDULED,
+            Order.scheduled_collection_time.is_not(None),
+            Order.order_date <= scheduled_cutoff_date,
+        )
+        if dialect_name == "postgresql":
+            scheduled_stmt = scheduled_stmt.with_for_update(skip_locked=True)
+
+        scheduled_result = await self.db.execute(scheduled_stmt)
+        scheduled_orders = list(scheduled_result.scalars().all())
+        stats["scheduled_examined"] = len(scheduled_orders)
+
+        for order in scheduled_orders:
+            try:
+                # Re-check status — a concurrent staff action may have
+                # advanced the order since the query snapshot.
+                if order.status != OrderStatus.PENDING:
+                    stats["skipped"] += 1
+                    continue
+
+                collection_utc = await self._scheduled_collection_utc(order)
+                if collection_utc is None:
+                    stats["skipped"] += 1
+                    continue
+
+                # Still inside the collection window (slot + grace) — leave
+                # it for staff to confirm and prepare.
+                if now <= collection_utc + timedelta(
+                    minutes=SCHEDULED_EXPIRY_GRACE_MINUTES
+                ):
+                    continue
+
+                if order.inventory_reserved:
+                    await self._release_inventory(order, actor_id=None)
+
+                reason = (
+                    "Automatic expiry: scheduled collection time passed "
+                    "without confirmation"
+                )
+                order.status = OrderStatus.CANCELLED
+                order.cancelled_at = now
+                order.cancelled_by = None
+                order.cancellation_reason = reason
+
+                event = OrderEvent(
+                    order_id=order.id,
+                    event_type=OrderEventType.CANCELLED,
+                    actor_id=None,
+                    notes=reason,
+                )
+                self.db.add(event)
+                await self._emit_notification(order, event)
+                stats["scheduled_expired"] += 1
+                logger.info(
+                    "scheduled_order_auto_expired",
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    scheduled_collection_time=order.scheduled_collection_time,
+                )
+            except Exception:
+                stats["failed"] += 1
+                logger.exception(
+                    "failed_to_expire_scheduled_order",
+                    order_id=order.id,
+                )
+                continue
+
         # Flush all changes — caller is responsible for commit.
         # (Consistent with the rest of the service pattern; the background
         #  worker in main.py calls session.commit() after this returns.)
@@ -1571,5 +1693,7 @@ class OrderService:
             processed=stats["processed"],
             skipped=stats["skipped"],
             failed=stats["failed"],
+            scheduled_examined=stats["scheduled_examined"],
+            scheduled_expired=stats["scheduled_expired"],
         )
         return stats

@@ -93,6 +93,17 @@ class DailyMenuRemoveItemRequest(BaseModel):
     menu_item_id: str
 
 
+class CopyDailyMenuRequest(BaseModel):
+    """Request to copy a previous day's daily menu into a new draft (Phase 56).
+
+    The target date must NOT already have a non-archived daily menu —
+    copying never silently overwrites an existing draft or published menu.
+    """
+
+    source_date: date
+    target_date: date
+
+
 class DailyMenuItemResponse(BaseModel):
     """A single item on a daily menu."""
 

@@ -17,6 +17,13 @@
 ls -la backups/uniserve_*.pgdump | tail -1
 ```
 
+> **Data-volume safety (D1):** the production stack persists two volumes —
+> `postgres_data` (database) and `menu_images_data` (uploaded menu photos).
+> `docker compose down` **without** `-v` preserves both; **never** run
+> `docker compose down -v` / `docker volume rm` against them. If you must
+> re-seed images, re-run `scripts/restore_missing_food_images.py` and copy the
+> result into the volume — do not delete the volume to "reset" it.
+
 ### 2. Pull Latest Code
 
 ```bash

@@ -7,10 +7,14 @@ test provider.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.core.config import settings
 from app.core.exceptions import ServiceUnavailableError
-from app.modules.payments.providers.base import PaymentProvider
 from app.modules.payments.providers.test_provider import TestPaymentProvider
+
+if TYPE_CHECKING:
+    from app.modules.payments.providers.base import PaymentProvider
 
 # Registry of provider name -> implementation.
 # A real provider registers here; selection is via settings.PAYMENT_PROVIDER.

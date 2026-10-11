@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.health import router as health_router
+from app.modules.administration.router import router as administration_router
 from app.modules.auth.router import router as auth_router
 
 # Phase 3 routers
@@ -15,7 +16,11 @@ from app.modules.menus.router import (
     menu_items_router,
     search_router,
 )
+from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import router as orders_router
+from app.modules.payments.router import router as payments_router
+from app.modules.refunds.router import router as refunds_router
+from app.modules.reports.router import router as reports_router
 from app.modules.users.router import router as users_router
 
 api_router = APIRouter()
@@ -70,25 +75,16 @@ api_router.include_router(
 api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 
 # Payments (Phase 5)
-from app.modules.payments.router import router as payments_router
-from app.modules.refunds.router import router as refunds_router
-
 api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
 api_router.include_router(refunds_router, prefix="/refunds", tags=["refunds"])
 
 # Notifications (Phase 6)
-from app.modules.notifications.router import router as notifications_router
-
 api_router.include_router(notifications_router, prefix="/notifications", tags=["notifications"])
 
 # Reports (Phase 7)
-from app.modules.reports.router import router as reports_router
-
 api_router.include_router(reports_router, prefix="/reports", tags=["reports"])
 
 # Administration (Phase 7)
-from app.modules.administration.router import router as administration_router
-
 api_router.include_router(
     administration_router, prefix="/administration", tags=["administration"]
 )

@@ -7,13 +7,16 @@
  *   - (app):  authenticated screens (main app content)
  */
 
-import React, { useEffect } from "react";
+import React from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
 import { ThemeProvider, useTheme } from "../src/contexts/ThemeContext";
 import { CartProvider } from "../src/contexts/CartContext";
+import { FavoritesProvider } from "../src/contexts/FavoritesContext";
+import { NotificationsProvider } from "../src/contexts/NotificationsContext";
+import WebDashboardGate from "../src/components/WebDashboardGate";
 
 /**
  * Roles allowed in the mobile ordering app.
@@ -22,19 +25,20 @@ import { CartProvider } from "../src/contexts/CartContext";
  */
 const MOBILE_ROLES = ["student", "faculty"];
 
+/**
+ * Phase 53 — admins/managers/staff who sign in on mobile no longer get a
+ * silent logout + blank screen. They see an explicit "Use the Web Dashboard"
+ * gate with the existing Sign Out action. No admin data or management
+ * surfaces are mounted for them; the session model is otherwise unchanged
+ * and backend RBAC remains the enforcement boundary.
+ */
 function RoleGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, user, logout } = useAuth();
-
-  useEffect(() => {
-    if (isAuthenticated && user && !MOBILE_ROLES.includes(user.role)) {
-      logout();
-    }
-  }, [isAuthenticated, user, logout]);
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) return null;
 
   if (isAuthenticated && user && !MOBILE_ROLES.includes(user.role)) {
-    return null; // logout in progress — blank while redirecting to (auth)
+    return <WebDashboardGate />;
   }
 
   return <>{children}</>;
@@ -70,11 +74,15 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <CartProvider>
-          <RoleGate>
-            <RootNavigator />
-          </RoleGate>
-        </CartProvider>
+        <NotificationsProvider>
+          <FavoritesProvider>
+            <CartProvider>
+              <RoleGate>
+                <RootNavigator />
+              </RoleGate>
+            </CartProvider>
+          </FavoritesProvider>
+        </NotificationsProvider>
       </AuthProvider>
     </ThemeProvider>
   );
