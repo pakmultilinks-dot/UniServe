@@ -181,10 +181,17 @@ async def update_menu_item(
 async def delete_menu_item(
     cafeteria_id: str,
     menu_item_id: str,
-    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN)),
+    auth: AuthContext = Depends(
+        RequireCafeteriaWriteScope(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Soft-delete a menu item (admin only)."""
+    """Soft-delete a menu item.
+
+    B21: aligned with create/update — cafeteria managers may delete within
+    their own cafeteria scope (deletion is a soft-delete, so it is
+    recoverable and audited like any other write).
+    """
     service = MenuService(db)
     await service.delete_menu_item(menu_item_id)
 

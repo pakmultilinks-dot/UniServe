@@ -84,6 +84,9 @@ export default function OrdersScreen() {
   const [error, setError] = useState("");
   // id → name, so each card can show which cafeteria the order was from.
   const [cafeteriaNames, setCafeteriaNames] = useState<Record<string, string>>({});
+  // Lookback window in days (backend supports 1-90). The scope is explicit
+  // in the UI so the 7-day default is never a silent limit.
+  const [days, setDays] = useState(7);
 
   const brand = brandGreen(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
@@ -96,13 +99,12 @@ export default function OrdersScreen() {
   const loadOrders = useCallback(async () => {
     try {
       setError("");
-      // Backend returns orders from the last 7 days (no limit param).
-      const data = await getOrders();
+      const data = await getOrders({ days });
       setOrders(data);
     } catch {
       setError("Failed to load order history.");
     }
-  }, []);
+  }, [days]);
 
   useEffect(() => {
     loadOrders().finally(() => setIsLoading(false));
@@ -149,6 +151,29 @@ export default function OrdersScreen() {
         <View style={styles.screenHeader}>
           <Text style={[styles.screenTitle, { color: tc }]}>Order history</Text>
           <Text style={[styles.screenSubtitle, { color: tcMuted }]}>UniServe · your recent orders</Text>
+        </View>
+        {/* Lookback scope — explicit so the default window is never silent */}
+        <View style={styles.scopeRow}>
+          {([7, 30, 90] as const).map((d) => {
+            const selected = days === d;
+            return (
+              <Pressable
+                key={d}
+                accessibilityRole="button"
+                accessibilityLabel={`Show orders from the last ${d} days`}
+                accessibilityState={{ selected }}
+                onPress={() => setDays(d)}
+                style={[
+                  styles.scopeChip,
+                  { borderColor: selected ? brand : bc, backgroundColor: selected ? brand + "14" : "transparent" },
+                ]}
+              >
+                <Text style={[styles.scopeChipText, { color: selected ? brand : tcMuted }]}>
+                  {d === 90 ? "3 months" : `${d} days`}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
         {isLoading ? (
           <>
@@ -247,9 +272,17 @@ export default function OrdersScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32 },
-  screenHeader: { marginBottom: 22 },
+  screenHeader: { marginBottom: 12 },
   screenTitle: { fontSize: 28, fontWeight: "700", lineHeight: 34 },
   screenSubtitle: { fontSize: 13, marginTop: 4 },
+  scopeRow: { flexDirection: "row", gap: 8, marginBottom: 18 },
+  scopeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  scopeChipText: { fontSize: 13, fontWeight: "600" },
 
   // Empty
   emptyContainer: {

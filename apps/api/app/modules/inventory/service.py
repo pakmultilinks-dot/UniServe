@@ -1,5 +1,7 @@
 """Inventory service — business logic for inventory tracking and adjustments."""
 
+from typing import Any
+
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -195,3 +197,49 @@ class InventoryService:
     async def get_low_stock_items(self, cafeteria_id: str) -> list[InventoryItem]:
         """Get inventory items below their low-stock threshold."""
         return await self.list_inventory_items(cafeteria_id=cafeteria_id, low_only=True)
+
+    async def reserve_for_order(self, order: Any) -> None:
+        """Reserve inventory for an order's items (post online-payment).
+
+        B20: extracted from OrderService._reserve_inventory_for_online_payment
+        so payments/service.py no longer imports OrderService. The inventory
+        reservation is an inventory concern; the order flag + event stay with
+        the caller (orders module) via the returned item count.
+
+        Uses row-level locks, matching the other reservation paths.
+        Raises ValidationError when an item is unavailable or short.
+        """
+        from app.modules.orders.models import OrderEvent, OrderEventType, OrderItem
+
+        result = await self.db.execute(
+            select(OrderItem).where(OrderItem.order_id == order.id)
+        )
+        order_items = result.scalars().all()
+
+        for oi in order_items:
+            inv_result = await self.db.execute(
+                select(InventoryItem)
+                .where(
+                    InventoryItem.menu_item_id == oi.menu_item_id,
+                    InventoryItem.cafeteria_id == order.cafeteria_id,
+                )
+                .with_for_update()
+            )
+            inv = inv_result.scalar_one_or_none()
+            if inv is None:
+                # Clean user-facing error — never leak raw UUIDs.
+                raise ValidationError("This item is currently unavailable")
+            if inv.quantity < oi.quantity:
+                raise ValidationError(
+                    f"Insufficient inventory: available={inv.quantity}, requested={oi.quantity}"
+                )
+            inv.quantity -= oi.quantity
+
+        order.inventory_reserved = True
+        event = OrderEvent(
+            order_id=order.id,
+            event_type=OrderEventType.INVENTORY_RESERVED,
+            notes="Reserved after successful online payment",
+        )
+        self.db.add(event)
+        logger.info("online_payment_inventory_reserved", order_id=order.id)

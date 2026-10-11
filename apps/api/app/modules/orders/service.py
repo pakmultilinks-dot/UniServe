@@ -1432,41 +1432,13 @@ class OrderService:
     async def _reserve_inventory_for_online_payment(self, order: Order) -> None:
         """Reserve inventory after successful online payment.
 
-        Called by the payment service when an online payment succeeds.
-        Reads from OrderItems (already created at checkout).
+        B20: now delegates to InventoryService.reserve_for_order (the
+        inventory concern lives in the inventory module). Kept as a thin
+        wrapper so existing callers/tests keep working.
         """
-        from app.modules.inventory.models import InventoryItem
+        from app.modules.inventory.service import InventoryService
 
-        result = await self.db.execute(select(OrderItem).where(OrderItem.order_id == order.id))
-        order_items = result.scalars().all()
-
-        for oi in order_items:
-            inv_result = await self.db.execute(
-                select(InventoryItem)
-                .where(
-                    InventoryItem.menu_item_id == oi.menu_item_id,
-                    InventoryItem.cafeteria_id == order.cafeteria_id,
-                )
-                .with_for_update()
-            )
-            inv = inv_result.scalar_one_or_none()
-            if inv is None:
-                # Clean user-facing error — never leak raw UUIDs (Phase 42 P1).
-                raise ValidationError("This item is currently unavailable")
-            if inv.quantity < oi.quantity:
-                raise ValidationError(
-                    f"Insufficient inventory: available={inv.quantity}, requested={oi.quantity}"
-                )
-            inv.quantity -= oi.quantity
-
-        order.inventory_reserved = True
-        event = OrderEvent(
-            order_id=order.id,
-            event_type=OrderEventType.INVENTORY_RESERVED,
-            notes="Reserved after successful online payment",
-        )
-        self.db.add(event)
-        logger.info("online_payment_inventory_reserved", order_id=order.id)
+        await InventoryService(self.db).reserve_for_order(order)
 
     async def _release_inventory(self, order: Order, actor_id: str) -> None:
         """Release reserved inventory when an order is cancelled."""

@@ -38,6 +38,22 @@ export const API_BASE_URL = ENV[environment].API_BASE_URL;
 export const APP_ENV = environment;
 
 /**
+ * Placeholder production hostnames must be replaced with the real API
+ * origin before any release build. Failing loudly here is deliberate:
+ * silently pointing the app at a fake domain would make every request
+ * fail in a way that looks like a backend outage.
+ */
+const PLACEHOLDER_HOSTS = ["staging-api.uniserve.app", "api.uniserve.app"];
+export function assertApiConfigured(): void {
+  if (PLACEHOLDER_HOSTS.some((h) => API_BASE_URL.includes(h))) {
+    throw new Error(
+      `API_BASE_URL is still the placeholder (${API_BASE_URL}). ` +
+        "Set EXPO_PUBLIC_API_BASE_URL or configure the production origin before release."
+    );
+  }
+}
+
+/**
  * Host-independent menu-image URL resolver (Phase 48).
  *
  * The API persists image references as `/api/v1/static/food/<file>` —

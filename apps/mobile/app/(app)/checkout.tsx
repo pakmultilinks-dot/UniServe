@@ -30,15 +30,35 @@ function formatPrice(paisa: number): string {
   return `PKR ${Math.round(paisa / 100)}`;
 }
 
-function getCollectionSlots(operatingHours?: string): string[] {
+function getCollectionSlots(operatingHours?: string, timezone?: string): string[] {
   const match = operatingHours?.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
   if (!match) return [];
 
   const [, startHour, startMinute, endHour, endMinute] = match;
   const start = Number(startHour) * 60 + Number(startMinute);
   const end = Number(endHour) * 60 + Number(endMinute);
-  const now = new Date();
-  const roundedNow = now.getHours() * 60 + now.getMinutes() + 30;
+
+  // "Now" in the cafeteria's timezone (not the device's): a student with
+  // their phone set to another timezone still sees correct local slots.
+  // Falls back to Asia/Karachi (LGU) when the cafeteria has no timezone.
+  const tz = timezone || "Asia/Karachi";
+  let nowMinutes: number;
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date());
+    const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+    const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+    nowMinutes = h * 60 + m;
+  } catch {
+    const now = new Date();
+    nowMinutes = now.getHours() * 60 + now.getMinutes();
+  }
+
+  const roundedNow = nowMinutes + 30;
   const firstSlot = Math.max(start, Math.ceil(roundedNow / 30) * 30);
   const slots: string[] = [];
 
@@ -78,7 +98,10 @@ export default function CheckoutScreen() {
   );
 
   const items = cart?.items ?? [];
-  const collectionSlots = getCollectionSlots(selectedCafeteria?.operating_hours);
+  const collectionSlots = getCollectionSlots(
+    selectedCafeteria?.operating_hours,
+    selectedCafeteria?.timezone
+  );
 
   const handlePlaceOrder = useCallback(async () => {
     if (!selectedCafeteria) return;

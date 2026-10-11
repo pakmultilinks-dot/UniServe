@@ -56,7 +56,7 @@ class TestDebugProductionGuard:
 
     def test_development_default_debug_unchanged(self) -> None:
         # Non-production default behaviour must not change.
-        settings = Settings(_env_file=None)
+        settings = Settings(_env_file=None, APP_ENV="development")
         assert settings.APP_ENV == "development"
         assert settings.APP_DEBUG is True
 
@@ -96,7 +96,7 @@ class TestSecretProductionGuard:
 
     def test_empty_secret_unchanged_in_development(self) -> None:
         # Guard is production-only; development behaviour must not change.
-        settings = Settings(_env_file=None, APP_SECRET_KEY="")
+        settings = Settings(_env_file=None, APP_ENV="development", APP_SECRET_KEY="")
         assert settings.APP_ENV == "development"
         assert settings.APP_SECRET_KEY == ""
 
@@ -120,7 +120,7 @@ class TestDbPasswordProductionGuard:
 
     def test_dev_default_password_unchanged_in_development(self) -> None:
         # Guard is production-only; development defaults must not change.
-        settings = Settings(_env_file=None)
+        settings = Settings(_env_file=None, APP_ENV="development")
         assert settings.APP_ENV == "development"
         assert settings.POSTGRES_PASSWORD == "uniserve_dev_password"
 
