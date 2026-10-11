@@ -47,7 +47,7 @@ import LoginScreen from "../../app/(auth)/login";
 
 const fillForm = (email: string, password: string) => {
   fireEvent.changeText(
-    screen.getByPlaceholderText("student@lgu.edu.pk"),
+    screen.getByPlaceholderText("you@lgu.edu.pk"),
     email,
   );
   fireEvent.changeText(
@@ -80,12 +80,12 @@ describe("LoginScreen — sign-in flow", () => {
     mockLogin.mockResolvedValue(undefined);
     render(<LoginScreen />);
 
-    fillForm("  student@lgu.edu.pk  ", "Pass123!");
+    fillForm("  you@lgu.edu.pk  ", "Pass123!");
     fireEvent.press(screen.getByText("Log In"));
 
     await waitFor(() =>
       expect(mockLogin).toHaveBeenCalledWith(
-        "student@lgu.edu.pk",
+        "you@lgu.edu.pk",
         "Pass123!",
       ),
     );
@@ -95,7 +95,7 @@ describe("LoginScreen — sign-in flow", () => {
     mockLogin.mockRejectedValue(new Error("Invalid credentials"));
     render(<LoginScreen />);
 
-    fillForm("student@lgu.edu.pk", "WrongPass!");
+    fillForm("you@lgu.edu.pk", "WrongPass!");
     fireEvent.press(screen.getByText("Log In"));
 
     expect(await screen.findByText("Invalid credentials")).toBeTruthy();
