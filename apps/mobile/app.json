@@ -7,7 +7,9 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "uniserve",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.uniserve.mobile"
@@ -26,6 +28,13 @@
           "backgroundColor": "#f6efdf"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "811d39ba-29fe-4ca7-aaa7-3c3a9335095b"
+      }
+    },
+    "owner": "kominman"
   }
 }
