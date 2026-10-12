@@ -44,7 +44,7 @@ export function ThemeToggle({ className }: { className?: string }) {
   // Initialize theme on mount
   useEffect(() => {
     const stored = getStoredTheme();
-    const initial = stored || getSystemPreference();
+    const initial = stored || "light";
     setTheme(initial);
     applyTheme(initial);
     setMounted(true);
