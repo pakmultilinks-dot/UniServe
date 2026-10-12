@@ -38,6 +38,8 @@ services:
         generateValue: true
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: SEED_DEMO_DATA
+        value: "true"
 
 databases:
   - name: uniserve-db
