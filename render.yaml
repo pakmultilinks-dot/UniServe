@@ -10,6 +10,8 @@ services:
     envVars:
       - key: APP_ENV
         value: production
+      - key: APP_DEBUG
+        value: "false"
       - key: POSTGRES_HOST
         fromDatabase:
           name: uniserve-db
