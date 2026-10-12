@@ -205,9 +205,9 @@ export default function OrdersPage() {
   useEffect(() => { loadCafeterias(); }, [loadCafeterias]);
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
-  // Auto-refresh every 30s (preserves cafeteria/status/date/page filters)
+  // Auto-refresh every 5s for near real-time updates (preserves cafeteria/status/date/page filters)
   useEffect(() => {
-    const interval = setInterval(loadOrders, 30000);
+    const interval = setInterval(loadOrders, 5000);
     return () => clearInterval(interval);
   }, [loadOrders]);
 
