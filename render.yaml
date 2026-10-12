@@ -40,6 +40,8 @@ services:
         value: "1"
       - key: SEED_DEMO_DATA
         value: "true"
+      - key: CORS_ORIGINS
+        value: '["https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard.vercel.app"]'
 
 databases:
   - name: uniserve-db
