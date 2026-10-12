@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: uniserve-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    plan: free
+    branch: review/landing-and-fixes
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: uniserve-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: uniserve-db
+          property: port
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: uniserve-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: uniserve-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: uniserve-db
+          property: password
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+databases:
+  - name: uniserve-db
+    plan: free
+    databaseName: uniserve
+    user: uniserve
