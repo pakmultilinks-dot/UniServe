@@ -18,7 +18,7 @@ const ENV = {
     API_BASE_URL: "https://staging-api.uniserve.app/api/v1",
   },
   production: {
-    API_BASE_URL: "https://api.uniserve.app/api/v1",
+    API_BASE_URL: "https://uniserve-api.onrender.com/api/v1",
   },
 };
 
