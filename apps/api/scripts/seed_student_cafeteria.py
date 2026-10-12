@@ -36,22 +36,6 @@ STUDENT_CAFETERIA = {
 # Prices in paisa (22000 = Rs 220). Images are real Unsplash food photos.
 MENU_ITEMS = [
     # ---- Breakfast ----
-    {
-        "name": "Halwa Puri Set",
-        "description": "Fluffy puris with suji halwa, chana curry and pickle.",
-        "category": MenuCategory.MAIN_COURSE,
-        "price": 15000,
-        "preparation_time_minutes": 10,
-        "image_url": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=800&q=85",
-    },
-    {
-        "name": "Anda Paratha",
-        "description": "Crispy ghee paratha served with masala omelette.",
-        "category": MenuCategory.MAIN_COURSE,
-        "price": 12000,
-        "preparation_time_minutes": 8,
-        "image_url": "https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=800&q=85",
-    },
     # ---- Desi Main Course ----
     {
         "name": "Chicken Biryani",
@@ -108,7 +92,7 @@ MENU_ITEMS = [
         "category": MenuCategory.SNACK,
         "price": 18000,
         "preparation_time_minutes": 10,
-        "image_url": "https://images.unsplash.com/photo-1628294895950-9805252327bc?auto=format&fit=crop&w=800&q=85",
+        "image_url": "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?auto=format&fit=crop&w=800&q=85",
     },
     {
         "name": "Paratha Roll",
@@ -143,12 +127,12 @@ MENU_ITEMS = [
         "image_url": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=800&q=85",
     },
     {
-        "name": "Chicken Pakora",
-        "description": "Crispy besan-coated chicken fritters with imli chutney.",
+        "name": "Chicken Tikka Boti",
+        "description": "Char-grilled chicken tikka skewers with mint chutney.",
         "category": MenuCategory.SNACK,
-        "price": 12000,
-        "preparation_time_minutes": 10,
-        "image_url": "https://images.unsplash.com/photo-1601050690117-94f5f6fa8bd7?auto=format&fit=crop&w=800&q=85",
+        "price": 18000,
+        "preparation_time_minutes": 15,
+        "image_url": "https://images.unsplash.com/photo-1628294895950-9805252327bc?auto=format&fit=crop&w=800&q=85",
     },
     {
         "name": "Finger Fries",
@@ -216,8 +200,8 @@ MENU_ITEMS = [
         "image_url": "https://images.unsplash.com/photo-1572490122747-3968b75cc699?auto=format&fit=crop&w=800&q=85",
     },
     {
-        "name": "Coca-Cola",
-        "description": "Chilled canned soft drink.",
+        "name": "Pepsi",
+        "description": "Chilled canned Pepsi.",
         "category": MenuCategory.BEVERAGE,
         "price": 8000,
         "preparation_time_minutes": 1,
@@ -232,22 +216,6 @@ MENU_ITEMS = [
         "image_url": "https://images.unsplash.com/photo-1548839140-29a749e1cf4d?auto=format&fit=crop&w=800&q=85",
     },
     # ---- Desserts ----
-    {
-        "name": "Gulab Jamun (4 pcs)",
-        "description": "Soft, warm gulab jamuns in syrup.",
-        "category": MenuCategory.DESSERT,
-        "price": 8000,
-        "preparation_time_minutes": 3,
-        "image_url": "https://images.unsplash.com/photo-1589119908995-c6837fa14848?auto=format&fit=crop&w=800&q=85",
-    },
-    {
-        "name": "Kheer",
-        "description": "Creamy rice pudding with cardamom and nuts.",
-        "category": MenuCategory.DESSERT,
-        "price": 10000,
-        "preparation_time_minutes": 3,
-        "image_url": "https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=800&q=85",
-    },
 ]
 
 
