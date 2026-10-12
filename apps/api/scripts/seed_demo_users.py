@@ -19,10 +19,10 @@ from app.core.security import hash_password
 from app.modules.cafeterias.models import Cafeteria
 from app.modules.users.models import (
     AccountStatus,
+    CafeteriaAssignment,
     Role,
     User,
     UserCategory,
-    UserCafeteriaRole,
     UserCredential,
 )
 
@@ -133,14 +133,13 @@ async def seed() -> None:
                 Role.CAFETERIA_STAFF,
             ):
                 role_result = await session.execute(
-                    select(UserCafeteriaRole).where(
-                        UserCafeteriaRole.user_id == user.id,
-                        UserCafeteriaRole.cafeteria_id == cafeteria.id,
+                    select(CafeteriaAssignment).where(
+                        CafeteriaAssignment.user_id == user.id,
                     )
                 )
                 if role_result.scalar_one_or_none() is None:
                     session.add(
-                        UserCafeteriaRole(
+                        CafeteriaAssignment(
                             user_id=user.id,
                             cafeteria_id=cafeteria.id,
                             role=user_data["role"],
