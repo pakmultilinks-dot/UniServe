@@ -11,8 +11,8 @@ echo "Migrations complete."
 # Both seed scripts are idempotent and safe to rerun.
 if [ "$SEED_DEMO_DATA" = "true" ]; then
   echo "Seeding demo data..."
-  python scripts/seed_student_cafeteria.py
-  python scripts/seed_demo_users.py
+  PYTHONPATH=/app python scripts/seed_student_cafeteria.py
+  PYTHONPATH=/app python scripts/seed_demo_users.py
   echo "Demo data seeded."
 fi
 
