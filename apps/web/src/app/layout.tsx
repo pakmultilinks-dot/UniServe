@@ -20,6 +20,12 @@ export const metadata: Metadata = {
     description:
       "Skip the line. Order ahead from the Student and Faculty cafeterias at Lahore Garrison University.",
   },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "UniServe",
+  },
 };
 
 /**
