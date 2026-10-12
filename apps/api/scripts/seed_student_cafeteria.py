@@ -279,6 +279,17 @@ async def seed() -> None:
                 inventory.low_threshold = 10
         await session.flush()
 
+        # Deactivate old menu items not in the current menu (never delete)
+        current_names = {item_data["name"] for item_data in MENU_ITEMS}
+        all_items_result = await session.execute(
+            select(MenuItem).where(MenuItem.cafeteria_id == cafeteria.id)
+        )
+        for existing_item in all_items_result.scalars().all():
+            if existing_item.name not in current_names:
+                existing_item.is_active = False
+                existing_item.is_available = False
+        await session.flush()
+
         menu_result = await session.execute(
             select(DailyMenu).where(
                 DailyMenu.cafeteria_id == cafeteria.id,
@@ -303,7 +314,9 @@ async def seed() -> None:
             select(DailyMenuItem).where(DailyMenuItem.daily_menu_id == daily_menu.id)
         )
         existing = {entry.menu_item_id: entry for entry in existing_result.scalars().all()}
+        current_ids = set()
         for display_order, item in enumerate(items_by_name.values()):
+            current_ids.add(item.id)
             entry = existing.get(item.id)
             if entry is None:
                 session.add(
@@ -317,6 +330,10 @@ async def seed() -> None:
             else:
                 entry.is_available_today = True
                 entry.display_order = display_order
+        # Hide old items from today's menu (never delete)
+        for entry_id, entry in existing.items():
+            if entry_id not in current_ids:
+                entry.is_available_today = False
 
         await session.commit()
         print(f"Seeded {len(items_by_name)} Student Cafeteria items for {date.today()}.")
