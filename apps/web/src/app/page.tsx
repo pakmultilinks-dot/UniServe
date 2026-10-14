@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -57,9 +57,9 @@ function Nav() {
 
   const links = [
     { href: "#cafeterias", label: "Cafeterias" },
-    { href: "#menu", label: "Menu" },
+    { href: "#live-menu", label: "Today's Menu" },
+    { href: "#menu", label: "Categories" },
     { href: "#how", label: "How it works" },
-    
   ];
 
   return (
@@ -579,6 +579,277 @@ function Roles() {
   );
 }
 
+function LiveMenu() {
+  const [items, setItems] = useState<Array<{ name: string; price: number; image_url?: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://uniserve-api.onrender.com/api/v1";
+    fetch(`${apiUrl}/cafeterias`)
+      .then((r) => r.json())
+      .then((cafs) => {
+        const first = Array.isArray(cafs) ? cafs[0] : cafs?.data?.[0];
+        if (!first?.id) throw new Error("no cafeteria");
+        return fetch(`${apiUrl}/cafeterias/${first.id}/menu/today`);
+      })
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : data?.items || data?.data || [];
+        setItems(list.filter((i: any) => i.is_available !== false).slice(0, 8));
+      })
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <section id="live-menu" className="scroll-mt-20">
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <SectionHeading
+          eyebrow="Today's menu"
+          title="Live from the cafeteria"
+          sub="Real items, real prices, updated daily by the cafeteria team."
+        />
+        {loading ? (
+          <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              <div key={i} className="animate-pulse rounded-2xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4">
+                <div className="h-28 rounded-xl bg-[var(--bg-tertiary)]" />
+                <div className="mt-3 h-4 w-3/4 rounded bg-[var(--bg-tertiary)]" />
+                <div className="mt-2 h-4 w-1/3 rounded bg-[var(--bg-tertiary)]" />
+              </div>
+            ))}
+          </div>
+        ) : items.length > 0 ? (
+          <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {items.map((item, i) => (
+              <div
+                key={i}
+                className="group overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--bg-primary)] shadow-card transition-all hover:-translate-y-1 hover:shadow-card-hover"
+              >
+                {item.image_url ? (
+                  <img
+                    src={item.image_url}
+                    alt={item.name}
+                    className="h-28 w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex h-28 w-full items-center justify-center bg-brand-100 dark:bg-brand-900/30">
+                    <span className="text-2xl">🍽️</span>
+                  </div>
+                )}
+                <div className="p-4">
+                  <p className="truncate text-sm font-bold text-[var(--text-primary)]">{item.name}</p>
+                  <p className="mt-1 text-sm font-extrabold text-brand-700 dark:text-brand-400">
+                    Rs {Number(item.price).toFixed(0)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-12 text-center text-[var(--text-muted)]">
+            Today&apos;s menu is being prepared. Check back soon.
+          </p>
+        )}
+        <p className="mt-8 text-center text-sm text-[var(--text-muted)]">
+          <Link href="/register" className="font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-400">
+            Sign up
+          </Link>{" "}
+          to order from the full menu.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function Testimonials() {
+  const quotes = [
+    {
+      name: "Ahmed R.",
+      role: "CS Student, Batch 2025",
+      text: "I order between lectures and pick it up on the way out. No more 20-minute lines for biryani.",
+    },
+    {
+      name: "Dr. Sarah K.",
+      role: "Faculty Member",
+      text: "The faculty cafeteria menu is curated and the monthly billing saves me so much hassle.",
+    },
+    {
+      name: "Bilal M.",
+      role: "BBA Student, Batch 2024",
+      text: "Live tracking is the best part. I know exactly when my food is ready.",
+    },
+  ];
+  return (
+    <section className="scroll-mt-20 bg-[var(--bg-secondary)]">
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <SectionHeading
+          eyebrow="Testimonials"
+          title="Loved across campus"
+          sub="Students and faculty are already skipping the line with UniServe."
+        />
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          {quotes.map((q) => (
+            <div
+              key={q.name}
+              className="rounded-[1.75rem] border border-[var(--border-default)] bg-[var(--bg-primary)] p-7 shadow-card"
+            >
+              <div className="flex gap-1" aria-label="5 out of 5 stars">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <svg key={s} className="h-4 w-4 text-gold-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 1.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8L10 14.9 4.7 17.6l1-5.8L1.5 7.7l5.9-.9L10 1.5z" />
+                  </svg>
+                ))}
+              </div>
+              <p className="mt-4 leading-relaxed text-[var(--text-secondary)]">&ldquo;{q.text}&rdquo;</p>
+              <div className="mt-5 border-t border-[var(--border-light)] pt-4">
+                <p className="text-sm font-bold text-[var(--text-primary)]">{q.name}</p>
+                <p className="text-xs text-[var(--text-muted)]">{q.role}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Faq() {
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const faqs = [
+    {
+      q: "How do I place an order?",
+      a: "Create a free account, pick your cafeteria, browse today's menu, add items to your cart, and check out. You can pay by cash on pickup or online.",
+    },
+    {
+      q: "Can I schedule an order for later?",
+      a: "Yes. Choose a pickup time when checking out and your order will be prepared fresh for that slot.",
+    },
+    {
+      q: "How do I know when my food is ready?",
+      a: "Track your order live in the app or dashboard. You'll get a notification the moment it's marked Ready, with a pickup code to show at the counter.",
+    },
+    {
+      q: "Is there a mobile app?",
+      a: "Yes. The UniServe mobile app is available for Android, and the web dashboard works on any phone browser with an installable app experience.",
+    },
+    {
+      q: "What if I need a refund?",
+      a: "Request a refund from your order history. Cafeteria managers review and approve refunds, and the amount is credited back to your original payment method.",
+    },
+  ];
+  return (
+    <section className="scroll-mt-20">
+      <div className="mx-auto max-w-3xl px-4 py-20 sm:px-6">
+        <SectionHeading
+          eyebrow="FAQ"
+          title="Questions, answered"
+        />
+        <div className="mt-10 space-y-3">
+          {faqs.map((f, i) => (
+            <div
+              key={i}
+              className="overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--bg-primary)] shadow-card"
+            >
+              <button
+                type="button"
+                onClick={() => setOpenIdx(openIdx === i ? null : i)}
+                className="flex w-full items-center justify-between px-6 py-4 text-left"
+              >
+                <span className="font-semibold text-[var(--text-primary)]">{f.q}</span>
+                <svg
+                  className={`h-5 w-5 flex-shrink-0 text-brand-700 transition-transform dark:text-brand-400 ${openIdx === i ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {openIdx === i && (
+                <p className="px-6 pb-5 text-sm leading-relaxed text-[var(--text-secondary)]">{f.a}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AppDownload() {
+  return (
+    <section className="scroll-mt-20 bg-[var(--bg-secondary)]">
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <div className="grid items-center gap-10 lg:grid-cols-2">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-700 dark:text-brand-400">
+              Mobile app
+            </p>
+            <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-4xl">
+              Take UniServe anywhere
+            </h2>
+            <p className="mt-4 leading-relaxed text-[var(--text-secondary)]">
+              Order from your phone, get push notifications when your food is
+              ready, and pick up with a single tap. The Android app connects
+              to the same live backend as the dashboard.
+            </p>
+            <ul className="mt-6 space-y-2.5">
+              {["Live order tracking with notifications", "Full menu with real photos and prices", "Cash and online payment", "Order history and favorites"].map((f) => (
+                <li key={f} className="flex items-start gap-2.5 text-sm text-[var(--text-secondary)]">
+                  <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-700 dark:text-brand-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 111.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clipRule="evenodd" />
+                  </svg>
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full bg-brand-700 px-6 py-3 text-sm font-semibold text-white">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.05 2.7.65 3.47 1.66-3.16 1.9-2.63 6.03.64 7.2-.6 1.55-1.38 3.08-3.76 4.15zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+                </svg>
+                Android app coming soon
+              </span>
+              <Link
+                href="/register"
+                className="rounded-full border border-[var(--border-default)] bg-[var(--bg-primary)] px-6 py-3 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-secondary)]"
+              >
+                Use web app now
+              </Link>
+            </div>
+          </div>
+          <div className="mx-auto w-full max-w-xs">
+            <div className="rounded-[2.5rem] border-8 border-[var(--text-primary)] bg-[var(--bg-primary)] p-2 shadow-card">
+              <div className="overflow-hidden rounded-[2rem] bg-[var(--bg-secondary)] p-6 text-center">
+                <img
+                  src="/lgu-logo.jpg"
+                  alt="UniServe"
+                  className="mx-auto h-16 w-16 rounded-full object-cover"
+                />
+                <p className="mt-4 text-lg font-extrabold text-[var(--text-primary)]">UniServe</p>
+                <p className="text-xs text-[var(--text-muted)]">Lahore Garrison University</p>
+                <div className="mt-6 space-y-2">
+                  {["Chicken Biryani — Rs 250", "Beef Burger — Rs 250", "Cold Coffee — Rs 140"].map((m) => (
+                    <div key={m} className="rounded-xl bg-[var(--bg-primary)] px-4 py-2.5 text-left text-xs font-medium text-[var(--text-primary)] shadow-card">
+                      {m}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-6 rounded-full bg-brand-700 py-2.5 text-sm font-bold text-white">
+                  Order now
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function CtaBand() {
   const { isAuthenticated } = useAuth();
   return (
@@ -671,10 +942,14 @@ export default function LandingPage() {
       <main>
         <Hero />
         <Stats />
+        <LiveMenu />
         <Cafeterias />
         <MenuPreview />
         <HowItWorks />
+        <AppDownload />
         <Roles />
+        <Testimonials />
+        <Faq />
         <CtaBand />
       </main>
       <Footer />
