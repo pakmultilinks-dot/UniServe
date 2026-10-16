@@ -10,6 +10,8 @@
  */
 
 // Same configuration source and fallback as lib/api.ts (module-private there).
+// Production builds fail loudly in next.config.js when NEXT_PUBLIC_API_URL
+// is unset, so the localhost fallback below only ever applies in development.
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 

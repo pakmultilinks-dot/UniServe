@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getCafeterias, getMyCafeterias, getMenuItems, updateMenuItem, createMenuItem, deleteMenuItem, getDailyMenus, createDailyMenu, copyDailyMenu, addDailyMenuItem, publishDailyMenu, unpublishDailyMenu, removeDailyMenuItem, uploadMenuItemImage, removeMenuItemImage, ApiClientError, getApiErrorInfo } from "@/lib/api";
 import type { ApiErrorInfo } from "@/lib/api";
 import { resolveApiImageUrl } from "@/lib/imageUrl";
+import { formatPricePKR } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -64,6 +65,7 @@ export default function MenuPage() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [editItem, setEditItem] = useState<MenuItem | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   /* Today's daily-menu workflow (manager/admin — backend write scope) */
@@ -119,6 +121,13 @@ export default function MenuPage() {
     }
   }, [selectedCafeteria, isStaff, isManager]);
 
+  // Debounce the search input: without this, every keystroke fires a
+  // menu-items API request (loadItems depends on the query string).
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   const loadItems = useCallback(async () => {
     if (!selectedCafeteria) return;
     setLoading(true);
@@ -126,7 +135,7 @@ export default function MenuPage() {
     try {
       const data = await getMenuItems(selectedCafeteria, {
         category: category !== "all" ? category : undefined,
-        search: searchQuery || undefined,
+        search: debouncedSearchQuery || undefined,
       });
       setItems(data.items ?? []);
       setLoadError(null);
@@ -147,7 +156,7 @@ export default function MenuPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCafeteria, category, searchQuery]);
+  }, [selectedCafeteria, category, debouncedSearchQuery]);
 
   useEffect(() => { loadCafeterias(); }, [loadCafeterias]);
   useEffect(() => { loadItems(); }, [loadItems]);
@@ -286,7 +295,7 @@ export default function MenuPage() {
     }
   };
 
-  const formatPrice = (p: number) => `PKR ${Math.round(p / 100)}`;
+  const formatPrice = (p: number) => formatPricePKR(p);
 
   /* 48B — remove image: named confirmation, then the real DELETE endpoint.
      The menu item itself stays fully usable (backend clears image_url only). */
@@ -344,6 +353,7 @@ export default function MenuPage() {
       <div className="flex flex-wrap gap-3 mb-6">
         <input
           type="text"
+          aria-label="Search menu items"
           placeholder="Search menu items..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -1184,7 +1194,7 @@ function DailyMenuItemModal({
               >
                 {addable.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.name} — PKR {Math.round(m.price / 100)}
+                    {m.name} — {formatPricePKR(m.price)}
                   </option>
                 ))}
               </select>

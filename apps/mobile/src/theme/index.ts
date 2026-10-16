@@ -1,5 +1,5 @@
 export { colors } from "./colors";
-export { typography, textColor, bgColor, borderColor, brandGreen, functionalColor } from "./typography";
+export { typography, textColor, bgColor, borderColor, brandGreen, brandText, functionalColor } from "./typography";
 
 /**
  * Spacing scale (4/8/12/16/20/24/32/40)

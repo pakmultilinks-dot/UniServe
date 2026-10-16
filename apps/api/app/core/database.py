@@ -51,6 +51,16 @@ def StrEnum(*args: Any, **kwargs: Any) -> Enum:  # noqa: N802 — intentional al
     return Enum(*args, **kwargs)
 
 
+def escape_like(value: str) -> str:
+    """Escape LIKE special characters in user-supplied search input.
+
+    A raw ``%`` or ``_`` in user input acts as a wildcard inside ``ilike()``
+    (LIKE injection: result-set manipulation). Escape them so the input is
+    matched literally. Use with ``.ilike(pattern, escape="\\")``.
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency that provides a database session.
 

@@ -12,6 +12,7 @@ import { SecureStorage } from "../services/secure-storage";
 import type { User, TokenPair } from "@uniserve/shared-types";
 import * as authApi from "../services/auth";
 import { loadPersistedTokens, secureStoreTokenProvider, setOnAuthFailure } from "../services/api";
+import { ApiClientError } from "@uniserve/shared-types";
 
 const USER_KEY = "uniserve_user";
 
@@ -198,8 +199,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const updatedUser = await authApi.getCurrentUser();
       await SecureStorage.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
       setUser(updatedUser);
-    } catch {
-      await clearTokens();
+    } catch (err) {
+      // Only wipe the session when the server rejects it (401/403). A
+      // transient network failure or 5xx must not log the user out — the
+      // ApiClient already handles 401 refresh/logout centrally.
+      if (err instanceof ApiClientError && (err.status === 401 || err.status === 403)) {
+        await clearTokens();
+      }
     }
   }, [clearTokens]);
 

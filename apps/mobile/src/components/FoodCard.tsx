@@ -137,7 +137,7 @@ export default function FoodCard({
         {description || preparationTimeMinutes || !isAvailable ? (
           <Text
             style={[styles.desc, { color: tc("muted") }]}
-            numberOfLines={1}
+            numberOfLines={2}
             ellipsizeMode="tail"
           >
             {isAvailable
@@ -148,9 +148,10 @@ export default function FoodCard({
           </Text>
         ) : null}
 
-        {/* Price row */}
+        {/* Price row — price uses dark primary text (not gold) so it stands
+            out from the gold + button. */}
         <View style={styles.priceRow}>
-          <Text style={[styles.price, { color: brand }]}>{formatPrice(price)}</Text>
+          <Text style={[styles.price, { color: tc("primary") }]}>{formatPrice(price)}</Text>
 
           {quantity > 0 ? (
             /* Compact stepper */

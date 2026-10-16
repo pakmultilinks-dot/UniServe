@@ -264,7 +264,7 @@ export default function HomeScreen() {
       {/* ── Zone 2: Header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.greeting, { color: tc }]}>Uni Cafe Menu</Text>
+          <Text style={[styles.greeting, { color: tc }]}>UniServe</Text>
           {selectedCafeteria ? (
             <Pressable
               onPress={() => setCafeteriaSheetVisible(true)}
@@ -273,16 +273,28 @@ export default function HomeScreen() {
               accessibilityRole="button"
             >
               <Ionicons name="location-outline" size={14} color={brand} />
-              <Text style={[styles.cafeteriaInlineName, { color: tcSec }]}> 
-                {selectedCafeteria.name}
-              </Text>
-              {selectedCafeteria.location ? (
-                <Text style={[styles.cafeteriaInlineLoc, { color: tcMuted }]}>
-                  {" · "}{selectedCafeteria.location}
-                </Text>
-              ) : null}
-              <View style={[styles.statusDot, { backgroundColor: functionalColor(resolvedTheme, isCafeteriaOpen ? "success" : "error") }]} />
-              <Ionicons name="chevron-down" size={14} color={tcMuted} />
+              <View style={styles.cafeteriaTextCol}>
+                <View style={styles.cafeteriaNameRow}>
+                  <Text
+                    style={[styles.cafeteriaInlineName, { color: tcSec }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {selectedCafeteria.name}
+                  </Text>
+                  <View style={[styles.statusDot, { backgroundColor: functionalColor(resolvedTheme, isCafeteriaOpen ? "success" : "error") }]} />
+                  <Ionicons name="chevron-down" size={14} color={tcMuted} />
+                </View>
+                {selectedCafeteria.location ? (
+                  <Text
+                    style={[styles.cafeteriaInlineLoc, { color: tcMuted }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {selectedCafeteria.location}
+                  </Text>
+                ) : null}
+              </View>
             </Pressable>
           ) : (
             <Pressable
@@ -302,7 +314,7 @@ export default function HomeScreen() {
         <Pressable
           style={styles.headerIcon}
           hitSlop={8}
-          onPress={() => router.push("/(tabs)/notifications")}
+          onPress={() => router.push("/(app)/notifications")}
           accessibilityRole="button"
           accessibilityLabel={
             unreadCount > 0
@@ -314,32 +326,31 @@ export default function HomeScreen() {
           {unreadCount > 0 && (
             <View style={styles.bellBadge}>
               <Text style={styles.bellBadgeText}>
-                {unreadCount > 9 ? "9+" : unreadCount}
+                {unreadCount > 99 ? "99+" : unreadCount}
               </Text>
             </View>
           )}
         </Pressable>
       </View>
 
-      {/* ── Zone 3: Search (only once a cafeteria is chosen) ── */}
+      {/* ── Zone 3+4: Search + Category Chips (solid background so the
+          menu grid never shows through when scrolling underneath) ── */}
       {selectedCafeteria && (
-        <View style={{ marginTop: 12 }}>
-          <SearchBar
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search products..."
-          />
-        </View>
-      )}
-
-      {/* ── Zone 4: Category Chips (only once a cafeteria is chosen) ── */}
-      {selectedCafeteria && (
-        <View style={{ marginTop: 8 }}>
-          <CategoryChips
-            categories={ALL_CATEGORIES}
-            selected={selectedCategory}
-            onSelect={handleCategoryPress}
-          />
+        <View style={[styles.stickySearchWrap, { backgroundColor: bg }]}>
+          <View style={{ marginTop: 12 }}>
+            <SearchBar
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search products..."
+            />
+          </View>
+          <View style={{ marginTop: 8 }}>
+            <CategoryChips
+              categories={ALL_CATEGORIES}
+              selected={selectedCategory}
+              onSelect={handleCategoryPress}
+            />
+          </View>
         </View>
       )}
 
@@ -543,6 +554,18 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 4,
   },
+  // Solid background + subtle shadow for the sticky search/chips block so
+  // scrolling menu content never shows through with a hard cut.
+  stickySearchWrap: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+    zIndex: 1,
+  },
   headerLeft: {
     flex: 1,
   },
@@ -551,14 +574,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginTop: 7,
+    flex: 1,
+    paddingRight: 8,
+  },
+  cafeteriaTextCol: {
+    flex: 1,
+    marginLeft: 4,
+  },
+  cafeteriaNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   cafeteriaInlineName: {
     fontSize: 14,
     fontWeight: "600",
+    flexShrink: 1,
   },
   cafeteriaInlineLoc: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "400",
+    marginTop: 1,
   },
   statusDot: {
     width: 8,
@@ -654,18 +689,19 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Grid
+  // Grid — two equal columns with 16px gaps. Uses space-between (not the
+  // `gap` property) because gap + flexWrap is unreliable on some RN versions
+  // and produced a single-column layout.
   gridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     paddingHorizontal: 16,
-    gap: 10,
+    justifyContent: "space-between",
     paddingTop: 8,
   },
   gridItem: {
-    width: "48.5%",
-    flexGrow: 0,
-    flexShrink: 0,
+    width: "48%",
+    marginBottom: 16,
   },
 
   // Bottom sheet

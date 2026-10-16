@@ -40,7 +40,7 @@ interface CafeteriaListResponse {
  * For students, the backend additionally filters to student cafeterias.
  */
 export async function getCafeterias(): Promise<Cafeteria[]> {
-  const data = await apiClient.get<CafeteriaListResponse>("/cafeterias?is_active=true");
+  const data = await apiClient.get<CafeteriaListResponse>("/cafeterias/?is_active=true");
   return data.cafeterias ?? [];
 }
 
@@ -142,13 +142,15 @@ interface OrderListResponse {
 
 export interface OrderParams {
   status?: string;
+  /** Lookback window in days (backend: 1-90, default 7). */
+  days?: number;
 }
 
 export async function getOrders(params?: OrderParams): Promise<Order[]> {
-  // Backend GET /orders accepts only cafeteria_id/status/days — there is no
-  // `limit` param (the default window is the last 7 days).
+  // Backend GET /orders accepts cafeteria_id/status/days (1-90, default 7).
   const queryParams = new URLSearchParams();
   if (params?.status) queryParams.append("status", params.status);
+  if (params?.days) queryParams.append("days", String(params.days));
   const qs = queryParams.toString();
   const data = await apiClient.get<OrderListResponse>(`/orders${qs ? `?${qs}` : ""}`);
   return data.orders ?? [];

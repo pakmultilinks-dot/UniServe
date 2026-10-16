@@ -1,11 +1,13 @@
 /**
  * UniServe — LguSeal Component (React Native)
  *
- * SVG-free LGU shield logo rendered with basic React Native shapes.
+ * Renders the real LGU logo (same asset as the web landing page) for
+ * consistent branding across web and mobile. Falls back to the drawn
+ * shield if the image asset is unavailable.
  */
 
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { Image, View, Text, StyleSheet } from "react-native";
 import { colors } from "../theme/colors";
 
 interface LguSealProps {
@@ -18,9 +20,30 @@ const SIZES = {
   lg: { container: 80, text: 24, barWidth: 34, barHeight: 7, bookWidth: 18, bookHeight: 10 },
 } as const;
 
+// Bundled real LGU logo — the same image the web app serves.
+const LGU_LOGO = require("../../assets/lgu-logo.jpg");
+
 export function LguSeal({ size = "md" }: LguSealProps) {
   const s = SIZES[size];
+  const [imageFailed, setImageFailed] = useState(false);
 
+  if (!imageFailed) {
+    return (
+      <Image
+        source={LGU_LOGO}
+        style={{
+          width: s.container,
+          height: s.container,
+          borderRadius: s.container * 0.15,
+        }}
+        resizeMode="cover"
+        accessibilityLabel="Lahore Garrison University logo"
+        onError={() => setImageFailed(true)}
+      />
+    );
+  }
+
+  // Fallback: drawn shield (only if the bundled asset is missing).
   return (
     <View
       style={[
@@ -32,9 +55,7 @@ export function LguSeal({ size = "md" }: LguSealProps) {
         },
       ]}
     >
-      {/* Shield top section */}
       <View style={[styles.shieldBody, { flex: 1 }]}>
-        {/* Gold bar */}
         <View
           style={[
             styles.goldBar,
@@ -44,7 +65,6 @@ export function LguSeal({ size = "md" }: LguSealProps) {
             },
           ]}
         />
-        {/* Book icon */}
         <View
           style={[
             styles.book,
@@ -55,8 +75,6 @@ export function LguSeal({ size = "md" }: LguSealProps) {
           ]}
         />
       </View>
-
-      {/* LGU text at bottom */}
       <Text style={[styles.lguText, { fontSize: s.text }]}>LGU</Text>
     </View>
   );

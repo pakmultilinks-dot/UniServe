@@ -8,9 +8,14 @@ Provides:
 """
 
 import asyncio
+import os
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+# The suite runs in "testing" mode: IP rate limiting is disabled so tests
+# exercise per-account lockouts, not the IP throttle (see B15).
+os.environ["APP_ENV"] = "testing"
 
 import pytest
 import pytest_asyncio

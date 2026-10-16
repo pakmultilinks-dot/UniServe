@@ -33,6 +33,7 @@ class AuditEventType(str, enum.Enum):
     # Password
     PASSWORD_CHANGED = "password_changed"
     PASSWORD_RESET_REQUESTED = "password_reset_requested"
+    PASSWORD_RESET_OTP_VERIFIED = "password_reset_otp_verified"
     PASSWORD_RESET_COMPLETED = "password_reset_completed"
 
     # PIN

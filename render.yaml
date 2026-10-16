@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: uniserve-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    plan: free
+    branch: review/landing-and-fixes
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: uniserve-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: uniserve-db
+          property: port
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: uniserve-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: uniserve-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: uniserve-db
+          property: password
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: APP_SECRET_KEY
+        generateValue: true
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: CORS_ORIGINS
+        value: '["https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard.vercel.app"]'
+
+databases:
+  - name: uniserve-db
+    plan: free
+    databaseName: uniserve
+    user: uniserve

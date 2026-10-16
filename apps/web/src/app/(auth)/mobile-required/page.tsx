@@ -3,7 +3,8 @@
  *
  * Displayed when a student or faculty member logs into the web dashboard.
  * Explains that ordering is available through the UniServe mobile app and
- * shows the local-development mobile URL.
+ * tells the user exactly how to get it (university distribution — there is
+ * no public store listing yet, so no dead download button).
  *
  * This page is intentionally NOT part of /dashboard — it lives in the
  * (auth) route group so it renders with the centred auth layout.
@@ -82,13 +83,15 @@ export default function MobileRequiredPage() {
           )}
 
           {/* Mobile app availability */}
-          <div className="mt-6 p-4 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg">
-            <p className="text-sm font-medium text-[var(--text-primary)] mb-1">
-              Mobile App
+          <div className="mt-6 p-4 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-left">
+            <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">
+              How to get the mobile app
             </p>
             <p className="text-sm text-[var(--text-muted)]">
-              Download the UniServe mobile app to order meals, view schedules,
-              and pick up your orders.
+              The UniServe app is distributed by the university and is not on
+              public app stores yet. Ask at your cafeteria counter or contact
+              the university IT helpdesk for the install link, then sign in
+              with the same account you just created.
             </p>
           </div>
 

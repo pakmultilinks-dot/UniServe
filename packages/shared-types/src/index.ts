@@ -521,6 +521,7 @@ export interface Order {
   rejection_reason?: string;
   rejection_note?: string;
   collected_at?: string;
+  uncollected_at?: string;
   cancelled_at?: string;
   cancellation_reason?: string;
   created_at: string;
@@ -1196,7 +1197,7 @@ export class ApiClient {
     endpoint: string,
     options?: { body?: unknown; timeout?: number },
   ): Promise<T> {
-    const { body, timeout = 15000 } = options ?? {};
+    const { body, timeout = 60000 } = options ?? {};
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -1210,12 +1211,49 @@ export class ApiClient {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      let response = await fetch(`${this.baseUrl}${endpoint}`, {
-        method,
-        headers,
-        body: body != null ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
+      // Manual redirect handling: React Native's fetch may drop the
+      // Authorization header on 307 redirects (FastAPI trailing-slash
+      // redirects). We follow redirects manually, preserving headers.
+      let url = `${this.baseUrl}${endpoint}`;
+      let response: Response | null = null;
+      let redirectCount = 0;
+      const maxRedirects = 5;
+
+      while (redirectCount <= maxRedirects) {
+        response = await fetch(url, {
+          method,
+          headers,
+          body: body != null ? JSON.stringify(body) : undefined,
+          signal: controller.signal,
+          // Prevent automatic redirect following so we can preserve headers
+          redirect: "manual",
+        } as RequestInit);
+
+        // Handle redirects manually (301, 302, 303, 307, 308)
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get("location");
+          if (!location) break;
+
+          // Resolve relative URLs
+          url = location.startsWith("http") ? location : new URL(location, url).href;
+          redirectCount++;
+
+          // For 303, change method to GET (per spec)
+          if (response.status === 303 && method !== "GET" && method !== "HEAD") {
+            method = "GET" as string;
+          }
+          continue;
+        }
+        break;
+      }
+
+      if (!response) {
+        throw new ApiClientError(0, "Network error: no response received");
+      }
+
+      if (redirectCount > maxRedirects) {
+        throw new ApiClientError(0, "Network error: too many redirects");
+      }
 
       // Attempt token refresh on 401 when a refresh token is available.
       // This covers both expired-access-token (token was sent) and

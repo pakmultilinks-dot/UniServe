@@ -13,7 +13,7 @@
  * - Empty state keeps the original design-spec presentation
  */
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, RefreshControl } from "react-native";
+import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -81,7 +81,15 @@ export default function FavoritesScreen() {
           </Text>
         </View>
 
-        {items.length === 0 ? (
+        {isLoading && items.length === 0 ? (
+          // Loading state — show spinner while fetching
+          <View style={styles.emptyContainer}>
+            <ActivityIndicator size="large" color={brand} />
+            <Text style={[styles.emptyDesc, { color: tcMuted, marginTop: 12 }]}>
+              Loading favorites...
+            </Text>
+          </View>
+        ) : items.length === 0 ? (
           // Empty state — original design-spec presentation
           <View style={styles.emptyContainer}>
             <View style={[styles.iconContainer, { backgroundColor: brand + "15" }]}>
@@ -91,6 +99,12 @@ export default function FavoritesScreen() {
             <Text style={[styles.emptyDesc, { color: tcMuted }]}>
               Tap the heart icon on any menu item to save it here for quick reordering.
             </Text>
+            <Pressable
+              onPress={() => router.push("/(app)/(tabs)")}
+              style={[styles.browseButton, { backgroundColor: brand }]}
+            >
+              <Text style={styles.browseButtonText}>Browse Menu</Text>
+            </Pressable>
           </View>
         ) : (
           <View style={styles.gridContainer}>
@@ -149,6 +163,17 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 18, fontWeight: "600", marginBottom: 8 },
   emptyDesc: { fontSize: 14, textAlign: "center", lineHeight: 20 },
+  browseButton: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  browseButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
 
   // Grid — matches home menu layout
   gridContainer: {

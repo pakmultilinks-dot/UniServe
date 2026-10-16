@@ -28,7 +28,7 @@ export function Header({ title, actions, onMenuToggle }: HeaderProps) {
       } catch { /* ignore */ }
     };
     fetchCount();
-    const interval = setInterval(fetchCount, 30000);
+    const interval = setInterval(fetchCount, 5000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [user]);
 

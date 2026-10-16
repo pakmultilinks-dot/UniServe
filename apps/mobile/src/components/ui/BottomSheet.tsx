@@ -21,6 +21,7 @@ import {
   PanResponder,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../contexts/ThemeContext";
 import { bgColor, textColor, borderColor, brandGreen } from "../../theme";
 
@@ -42,6 +43,10 @@ export function BottomSheet({
   maxHeight = SCREEN_HEIGHT * 0.5,
 }: BottomSheetProps) {
   const { resolvedTheme } = useTheme();
+  const insets = useSafeAreaInsets();
+  // Bottom padding clears the Android gesture/nav bar: base 16 + the
+  // actual bottom safe-area inset so rows are never clipped.
+  const sheetPaddingBottom = 16 + Math.max(insets.bottom, 0);
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
   const tcMuted = textColor(resolvedTheme, "muted");
@@ -112,6 +117,7 @@ export function BottomSheet({
               backgroundColor: bg,
               borderTopColor: bc,
               maxHeight,
+              paddingBottom: sheetPaddingBottom,
               transform: [{ translateY }],
             },
           ]}
@@ -215,7 +221,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 8,
-    paddingBottom: 32,
+    // paddingBottom is set dynamically from the safe-area inset.
   },
   dragIndicator: {
     alignItems: "center",

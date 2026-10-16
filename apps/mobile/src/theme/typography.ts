@@ -154,6 +154,15 @@ export function brandGreen(theme: "light" | "dark"): string {
 }
 
 /**
+ * Brand color for TEXT on light backgrounds. Uses a darker gold (#8A6A1F
+ * approx, gold[700]) to meet 4.5:1 contrast on cream/white. In dark mode
+ * the lighter gold[300] is fine.
+ */
+export function brandText(theme: "light" | "dark"): string {
+  return theme === "dark" ? colors.gold[300] : colors.gold[700];
+}
+
+/**
  * Get a functional color for the current theme.
  */
 export function functionalColor(

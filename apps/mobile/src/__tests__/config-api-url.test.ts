@@ -53,6 +53,6 @@ describe("API base URL selection (src/config.ts)", () => {
     const { API_BASE_URL, APP_ENV } = loadConfig();
 
     expect(APP_ENV).toBe("production");
-    expect(API_BASE_URL).toBe("https://api.uniserve.app/api/v1");
+    expect(API_BASE_URL).toBe("https://uniserve-api.onrender.com/api/v1");
   });
 });

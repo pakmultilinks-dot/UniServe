@@ -199,8 +199,9 @@ class TestCartCRUD:
             f"/api/v1/cafeterias/{cafeteria.id}/cart/items/{cart_item_id}",
             json={"quantity": 0},
         )
-        # Should return 404 since the item is deleted
-        assert resp.status_code == 404
+        # Quantity zero is a successful removal (204), not a 404 —
+        # the item is deleted, so there is nothing to return.
+        assert resp.status_code == 204
 
     async def test_remove_item(self, student_client: AsyncClient, student_user, db: AsyncSession):
         """Explicitly removing an item from the cart."""

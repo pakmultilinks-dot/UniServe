@@ -27,8 +27,11 @@ RUN pip install --no-cache-dir --no-deps -r requirements.lock.txt \
 # Application code
 COPY . .
 
+# Startup script runs migrations, then starts the API
+RUN chmod +x /app/start.sh
+
 EXPOSE 8000
 
 # uvicorn runs 2 worker processes; the in-process pickup-expiry worker is
 # safe under multiple workers (SELECT ... FOR UPDATE SKIP LOCKED).
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["/app/start.sh"]

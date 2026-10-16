@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, NotFoundException, ValidationError
@@ -339,7 +340,16 @@ class PaymentService:
             idempotency_key=idempotency_key,
         )
         self.db.add(payment)
-        await self.db.flush()
+        try:
+            # Savepoint: a concurrent initiation with the same idempotency key
+            # may win the race — return the existing payment, not a 500.
+            async with self.db.begin_nested():
+                await self.db.flush()
+        except IntegrityError:
+            existing_retry = await self._get_payment_by_idempotency_key(idempotency_key)
+            if existing_retry is not None:
+                return existing_retry, None
+            raise
 
         # Create first attempt
         attempt = PaymentAttempt(
@@ -441,12 +451,14 @@ class PaymentService:
             if provider_metadata:
                 attempt.provider_response_json = json.dumps(provider_metadata)
 
-        # Reserve inventory for online immediate orders
+        # Reserve inventory for online immediate orders.
+        # B20: uses InventoryService directly — payments must not import
+        # OrderService (that was the orders <-> payments cycle).
         if order.order_type == OrderType.IMMEDIATE and not order.inventory_reserved:
-            from app.modules.orders.service import OrderService
+            from app.modules.inventory.service import InventoryService
 
-            order_service = OrderService(self.db)
-            await order_service._reserve_inventory_for_online_payment(order)
+            inventory_service = InventoryService(self.db)
+            await inventory_service.reserve_for_order(order)
 
         # Record payment event on the order
         event = OrderEvent(

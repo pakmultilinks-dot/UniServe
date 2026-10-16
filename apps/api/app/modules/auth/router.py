@@ -31,6 +31,7 @@ from app.modules.auth.schemas import (
 )
 from app.modules.auth.service import AuthService
 from app.modules.users.models import CafeteriaAssignment, Role, User
+from app.core.rate_limit import check_auth_rate_limit
 
 router = APIRouter()
 
@@ -42,10 +43,39 @@ def _get_client_info(request: Request) -> tuple[str | None, str | None]:
     return ip, ua
 
 
+# ---- IP rate-limit guards (B15) ----
+# Applied as dependencies so they run before the handler. Each returns
+# None; they raise RateLimitError (429) when the IP is over the limit.
+
+async def _limit_register(request: Request) -> None:
+    check_auth_rate_limit(request, "otp_request")
+
+
+async def _limit_otp_verify(request: Request) -> None:
+    check_auth_rate_limit(request, "otp_verify")
+
+
+async def _limit_otp_resend(request: Request) -> None:
+    check_auth_rate_limit(request, "otp_request")
+
+
+async def _limit_login(request: Request) -> None:
+    check_auth_rate_limit(request, "login")
+
+
+async def _limit_pin_login(request: Request) -> None:
+    check_auth_rate_limit(request, "pin_login")
+
+
+async def _limit_password_reset(request: Request) -> None:
+    check_auth_rate_limit(request, "password_reset")
+
+
 # ---- Registration ----
 
 
-@router.post("/register", response_model=RegisterResponse, status_code=201)
+@router.post("/register", response_model=RegisterResponse, status_code=201,
+             dependencies=[Depends(_limit_register)])
 async def register(
     body: RegisterRequest,
     request: Request,
@@ -73,7 +103,8 @@ async def register(
 # ---- OTP ----
 
 
-@router.post("/otp/verify", response_model=OTPResponse)
+@router.post("/otp/verify", response_model=OTPResponse,
+             dependencies=[Depends(_limit_otp_verify)])
 async def verify_otp(
     body: OTPVerifyRequest,
     request: Request,
@@ -92,7 +123,8 @@ async def verify_otp(
     return OTPResponse(message=result["message"])
 
 
-@router.post("/otp/resend", response_model=OTPResponse)
+@router.post("/otp/resend", response_model=OTPResponse,
+             dependencies=[Depends(_limit_otp_resend)])
 async def resend_otp(
     body: OTPResendRequest,
     request: Request,
@@ -116,7 +148,8 @@ async def resend_otp(
 # ---- Login ----
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse,
+             dependencies=[Depends(_limit_login)])
 async def login(
     body: LoginRequest,
     request: Request,
@@ -137,7 +170,8 @@ async def login(
     )
 
 
-@router.post("/pin/login", response_model=LoginResponse)
+@router.post("/pin/login", response_model=LoginResponse,
+             dependencies=[Depends(_limit_pin_login)])
 async def pin_login(
     body: PINLoginRequest,
     request: Request,
@@ -321,7 +355,8 @@ async def change_password(
     return AuthResponse(message=result["message"])
 
 
-@router.post("/password/reset/request", response_model=AuthResponse)
+@router.post("/password/reset/request", response_model=AuthResponse,
+             dependencies=[Depends(_limit_password_reset)])
 async def request_password_reset(
     body: PasswordResetRequest,
     request: Request,
@@ -338,7 +373,8 @@ async def request_password_reset(
     return AuthResponse(message=result["message"])
 
 
-@router.post("/password/reset/confirm", response_model=AuthResponse)
+@router.post("/password/reset/confirm", response_model=AuthResponse,
+             dependencies=[Depends(_limit_password_reset)])
 async def confirm_password_reset(
     body: PasswordResetConfirm,
     request: Request,
@@ -355,9 +391,12 @@ async def confirm_password_reset(
     )
     user = user_result.scalar_one_or_none()
     if not user:
-        from app.core.exceptions import ValidationError
-
-        raise ValidationError("Invalid email address")
+        # Anti-enumeration: the request endpoint always returns a generic
+        # message, so the confirm endpoint must not reveal whether the email
+        # exists either. Return the same generic shape without doing anything.
+        return AuthResponse(
+            message="If your email is registered and the code is valid, your password has been reset."
+        )
 
     service = AuthService(db)
     reset_result = await service.reset_password(

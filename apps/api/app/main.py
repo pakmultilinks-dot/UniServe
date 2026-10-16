@@ -189,6 +189,18 @@ def create_application() -> FastAPI:
     # API routes
     application.include_router(api_router, prefix="/api/v1")
 
+    # Friendly root response (instead of {"detail":"Not Found"})
+    @application.get("/", include_in_schema=False)
+    async def root():
+        return {
+            "service": "UniServe API",
+            "university": "Lahore Garrison University",
+            "status": "running",
+            "docs": "/docs",
+            "health": "/api/v1/health",
+            "dashboard": "https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app",
+        }
+
     # Static files — food images served from app/static/food/
     import os as _os
     _static_dir = _os.path.join(_os.path.dirname(__file__), "static")

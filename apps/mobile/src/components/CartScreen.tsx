@@ -294,8 +294,9 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: "flex-start",
     alignItems: "center",
+    paddingTop: 80,
   },
   emptyDescription: {
     fontSize: 14,
@@ -310,10 +311,11 @@ const styles = StyleSheet.create({
   },
   browseBtn: {
     height: 48,
-    borderRadius: 10,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
+    paddingHorizontal: 24,
   },
   browseBtnText: {
     color: "#ffffff",

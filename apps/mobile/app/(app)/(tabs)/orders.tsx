@@ -19,7 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { getOrders, getCafeterias } from "../../../src/services/data";
-import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
+import { textColor, bgColor, borderColor, brandGreen, brandText, functionalColor } from "../../../src/theme";
 import type { Order, OrderStatus, Cafeteria } from "@uniserve/shared-types";
 
 // ── Helpers ──
@@ -84,28 +84,44 @@ export default function OrdersScreen() {
   const [error, setError] = useState("");
   // id → name, so each card can show which cafeteria the order was from.
   const [cafeteriaNames, setCafeteriaNames] = useState<Record<string, string>>({});
+  // Lookback window in days (backend supports 1-90). The scope is explicit
+  // in the UI so the 7-day default is never a silent limit.
+  const [days, setDays] = useState(7);
+  // Status filter — null means "All". Backend accepts status param.
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | null>(null);
 
   const brand = brandGreen(resolvedTheme);
+  const brandTxt = brandText(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
   const tcMuted = textColor(resolvedTheme, "muted");
   const bg = bgColor(resolvedTheme, "primary");
-  const bgSec = bgColor(resolvedTheme, "secondary");
   const bc = borderColor(resolvedTheme, "default");
   const bcSub = borderColor(resolvedTheme, "subtle");
 
   const loadOrders = useCallback(async () => {
     try {
       setError("");
-      // Backend returns orders from the last 7 days (no limit param).
-      const data = await getOrders();
+      const data = await getOrders({ days, status: statusFilter ?? undefined });
       setOrders(data);
     } catch {
       setError("Failed to load order history.");
     }
-  }, []);
+  }, [days, statusFilter]);
 
   useEffect(() => {
-    loadOrders().finally(() => setIsLoading(false));
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      setIsLoading(false);
+      setError("Request timed out. Please try again.");
+    }, 15000);
+    loadOrders().finally(() => {
+      if (!timedOut) {
+        clearTimeout(timeoutId);
+        setIsLoading(false);
+      }
+    });
+    return () => clearTimeout(timeoutId);
   }, [loadOrders]);
 
   // Load the id → name map used for the per-card cafeteria label. Best-effort:
@@ -133,7 +149,7 @@ export default function OrdersScreen() {
   }, [loadOrders]);
 
   return (
-    <SafeAreaView edges={["top"]} style={[styles.screen, { backgroundColor: bgSec }]}>
+    <SafeAreaView edges={["top"]} style={[styles.screen, { backgroundColor: bg }]}>
       <ScrollView
         contentContainerStyle={styles.list}
         refreshControl={
@@ -147,9 +163,59 @@ export default function OrdersScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.screenHeader}>
-          <Text style={[styles.screenTitle, { color: tc }]}>Order history</Text>
-          <Text style={[styles.screenSubtitle, { color: tcMuted }]}>UniServe · your recent orders</Text>
+          <Text style={[styles.screenTitle, { color: tc }]}>Orders</Text>
         </View>
+        {/* Lookback scope — explicit so the default window is never silent */}
+        <View style={styles.scopeRow}>
+          {([7, 30, 90] as const).map((d) => {
+            const selected = days === d;
+            return (
+              <Pressable
+                key={d}
+                accessibilityRole="button"
+                accessibilityLabel={`Show orders from the last ${d} days`}
+                accessibilityState={{ selected }}
+                onPress={() => setDays(d)}
+                style={[
+                  styles.scopeChip,
+                  { borderColor: selected ? brand : bc, backgroundColor: selected ? brand + "14" : "transparent" },
+                ]}
+              >
+                <Text style={[styles.scopeChipText, { color: selected ? brandTxt : tcMuted }]}>
+                  {d === 90 ? "3 months" : `${d} days`}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {/* Status filter — makes it explicit the list can be filtered by status */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statusRow}
+        >
+          {([null, "pending", "preparing", "ready", "completed", "cancelled"] as const).map((s) => {
+            const selected = statusFilter === s;
+            const label = s === null ? "All" : STATUS_STYLE[s as OrderStatus].label;
+            return (
+              <Pressable
+                key={s ?? "all"}
+                accessibilityRole="button"
+                accessibilityLabel={s === null ? "Show all statuses" : `Filter by ${label}`}
+                accessibilityState={{ selected }}
+                onPress={() => setStatusFilter(s)}
+                style={[
+                  styles.scopeChip,
+                  { borderColor: selected ? brand : bc, backgroundColor: selected ? brand + "14" : "transparent" },
+                ]}
+              >
+                <Text style={[styles.scopeChipText, { color: selected ? brandTxt : tcMuted }]}>
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
         {isLoading ? (
           <>
             <OrderSkeleton bg={bg} bc={bc} />
@@ -177,18 +243,30 @@ export default function OrdersScreen() {
           orders.map((order) => {
             const orderStatus = order.status as OrderStatus;
             const statusCfg = STATUS_STYLE[orderStatus] ?? STATUS_STYLE.pending;
-            const statusColor = functionalColor(resolvedTheme, statusCfg.colorKey);
             // A pending order that staff have confirmed is a distinct sub-state.
             // Fold it into the single status pill (label + icon) rather than
             // rendering a second "Confirmed" chip, so each card shows exactly
             // one status.
             const isConfirmedPending =
               orderStatus === "pending" && !!order.confirmed_at;
-            const pillLabel = isConfirmedPending
-              ? "Confirmed"
-              : statusCfg.label;
-            const pillIcon: keyof typeof Ionicons.glyphMap =
-              isConfirmedPending ? "shield-checkmark-outline" : statusCfg.icon;
+            // A completed order that was never collected is a distinct
+            // terminal sub-state ("completed-with-uncollected" in the
+            // backend). Show "Not Collected" so the card agrees with the
+            // order_uncollected notification — one source of truth.
+            const isUncollected =
+              orderStatus === "completed" && !!order.uncollected_at;
+            const effectiveColorKey = isUncollected ? "warning" : statusCfg.colorKey;
+            const statusColor = functionalColor(resolvedTheme, effectiveColorKey);
+            const pillLabel = isUncollected
+              ? "Not Collected"
+              : isConfirmedPending
+                ? "Confirmed"
+                : statusCfg.label;
+            const pillIcon: keyof typeof Ionicons.glyphMap = isUncollected
+              ? "bag-handle-outline"
+              : isConfirmedPending
+                ? "shield-checkmark-outline"
+                : statusCfg.icon;
             const cafeteriaName = cafeteriaNames[order.cafeteria_id];
 
             return (
@@ -247,9 +325,18 @@ export default function OrdersScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32 },
-  screenHeader: { marginBottom: 22 },
+  screenHeader: { marginBottom: 12 },
   screenTitle: { fontSize: 28, fontWeight: "700", lineHeight: 34 },
   screenSubtitle: { fontSize: 13, marginTop: 4 },
+  scopeRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
+  statusRow: { flexDirection: "row", gap: 8, paddingRight: 20, marginBottom: 18 },
+  scopeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  scopeChipText: { fontSize: 13, fontWeight: "600" },
 
   // Empty
   emptyContainer: {

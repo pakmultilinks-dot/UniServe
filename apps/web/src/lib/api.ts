@@ -80,10 +80,16 @@ function writeRefreshToken(token: string | null): void {
  */
 function setSessionCookie(active: boolean): void {
   if (typeof document === "undefined") return;
+  // Secure only on HTTPS: always sending it would stop the cookie being set
+  // on plain-http localhost during development.
+  const secure =
+    typeof window !== "undefined" && window.location.protocol === "https:"
+      ? "; secure"
+      : "";
   if (active) {
-    document.cookie = `${SESSION_COOKIE}=1; path=/; samesite=lax; max-age=${7 * 24 * 60 * 60}`;
+    document.cookie = `${SESSION_COOKIE}=1; path=/; samesite=lax; max-age=${7 * 24 * 60 * 60}${secure}`;
   } else {
-    document.cookie = `${SESSION_COOKIE}=; path=/; samesite=lax; max-age=0`;
+    document.cookie = `${SESSION_COOKIE}=; path=/; samesite=lax; max-age=0${secure}`;
   }
 }
 
@@ -104,6 +110,9 @@ const webTokenProvider: TokenProvider = {
 
 // ---- Client Initialization ----
 
+// Production builds fail loudly in next.config.js when NEXT_PUBLIC_API_URL
+// is unset, so the localhost fallback below only ever applies in development
+// (`next dev`). Never rely on it in a production bundle.
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 

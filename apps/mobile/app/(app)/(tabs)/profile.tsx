@@ -4,7 +4,7 @@
  * User profile info organized into sections: Account, Security, Support.
  * Uses Ionicons for all icons, no emojis.
  */
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -13,8 +13,9 @@ import { useTheme } from "../../../src/contexts/ThemeContext";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomSheet, Button, ConfirmDialog, PasswordInput, Toast } from "../../../src/components/ui";
+import { SecureStorage } from "../../../src/services/secure-storage";
 import * as authApi from "../../../src/services/auth";
-import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../../src/theme";
+import { textColor, bgColor, borderColor, brandGreen, brandText, functionalColor } from "../../../src/theme";
 
 // ── Helpers ──
 
@@ -49,7 +50,9 @@ function SectionRow({ icon, label, value, onPress, color, isLast, theme }: Secti
       <Text style={[styles.rowLabel, { color: color ?? tc }]}>{label}</Text>
       <View style={styles.rowRight}>
         {value && <Text style={[styles.rowValue, { color: tcMuted }]}>{value}</Text>}
-        <Ionicons name="chevron-forward" size={16} color={tcMuted} style={{ opacity: 0.5 }} />
+        {onPress && (
+          <Ionicons name="chevron-forward" size={16} color={tcMuted} style={{ opacity: 0.5 }} />
+        )}
       </View>
     </View>
   );
@@ -64,14 +67,14 @@ function SectionRow({ icon, label, value, onPress, color, isLast, theme }: Secti
 
 export default function ProfileScreen() {
   const { user, logout, logoutAll } = useAuth();
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme, themePreference, setThemePreference } = useTheme();
   const theme = resolvedTheme as "light" | "dark";
 
   const brand = brandGreen(resolvedTheme);
+  const brandTxt = brandText(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
   const tcMuted = textColor(resolvedTheme, "muted");
   const bg = bgColor(resolvedTheme, "primary");
-  const bgSec = bgColor(resolvedTheme, "secondary");
   const bc = borderColor(resolvedTheme, "default");
 
   const initials = [user?.first_name?.[0], user?.last_name?.[0]]
@@ -96,6 +99,7 @@ export default function ProfileScreen() {
 
   // Phase 58 — Workstream F: change-password self-service (POST /auth/password/change).
   const [passwordSheet, setPasswordSheet] = useState(false);
+  const [themeSheetVisible, setThemeSheetVisible] = useState(false);
   const [pwdCurrent, setPwdCurrent] = useState("");
   const [pwdNew, setPwdNew] = useState("");
   const [pwdConfirm, setPwdConfirm] = useState("");
@@ -106,6 +110,15 @@ export default function ProfileScreen() {
   // pin_enabled flag in any response, so these forms never claim a PIN is
   // currently active — server error/success messages are surfaced verbatim.
   const [pinSheet, setPinSheet] = useState(false);
+  // Local PIN-enabled flag (backend exposes no pin_enabled field). Stored in
+  // secure storage so the row can show On/Off.
+  const [pinEnabled, setPinEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    SecureStorage.getItemAsync("uniserve_pin_enabled").then((v) => {
+      setPinEnabled(v === "1");
+    });
+  }, []);
   const [pinMode, setPinMode] = useState<"enable" | "change" | "disable">("enable");
   const [pinCurrentPassword, setPinCurrentPassword] = useState("");
   const [pinCurrent, setPinCurrent] = useState("");
@@ -182,6 +195,8 @@ export default function ProfileScreen() {
         });
         setPinSheet(false);
         resetPinForm();
+        await SecureStorage.setItemAsync("uniserve_pin_enabled", "1");
+        setPinEnabled(true);
         setToast({ message: res.message || "PIN enabled", type: "success" });
       } catch (err) {
         setPinError(err instanceof Error ? err.message : "Could not enable PIN.");
@@ -214,6 +229,8 @@ export default function ProfileScreen() {
         const res = await authApi.disablePin({ current_password: pinCurrentPassword });
         setPinSheet(false);
         resetPinForm();
+        await SecureStorage.deleteItemAsync("uniserve_pin_enabled");
+        setPinEnabled(false);
         setToast({ message: res.message || "PIN disabled", type: "success" });
       } catch (err) {
         setPinError(err instanceof Error ? err.message : "Could not disable PIN.");
@@ -251,7 +268,7 @@ export default function ProfileScreen() {
           logoutAll();
         }}
       />
-    <SafeAreaView edges={["top"]} style={[styles.screen, { backgroundColor: bgSec }]}>
+    <SafeAreaView edges={["top"]} style={[styles.screen, { backgroundColor: bg }]}>
     <ScrollView
       style={{ flex: 1 }}
       contentContainerStyle={styles.content}
@@ -266,25 +283,40 @@ export default function ProfileScreen() {
           {user?.first_name} {user?.last_name}
         </Text>
         <Text style={[styles.email, { color: tcMuted }]}>{user?.university_email}</Text>
-        <View style={[styles.roleBadge, { backgroundColor: brand + "15" }]}>
-          <Text style={[styles.roleText, { color: brand }]}>
-            {formatRole(user?.role)}
-          </Text>
+        <View style={styles.badgeRow}>
+          <View style={[styles.roleBadge, { backgroundColor: brand + "15" }]}>
+            <Text style={[styles.roleText, { color: brandTxt }]}>
+              {formatRole(user?.role)}
+            </Text>
+          </View>
+          {user?.email_verified && (
+            <View style={[styles.verifiedBadge, { backgroundColor: functionalColor(resolvedTheme, "success") + "15" }]}>
+              <Ionicons name="checkmark-circle" size={12} color={functionalColor(resolvedTheme, "success")} />
+              <Text style={[styles.verifiedText, { color: functionalColor(resolvedTheme, "success") }]}>
+                Verified
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
       {/* ── Account Section ── */}
       <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
         <Text style={[styles.sectionTitle, { color: tcMuted }]}>ACCOUNT</Text>
-        <SectionRow icon="person-outline" label="University ID" value={user?.university_id ?? "—"} theme={theme} />
+        <SectionRow icon="person-outline" label="University ID" value={user?.university_id ?? "—"} isLast theme={theme} />
+      </View>
+
+      {/* ── Appearance Section — single row opening a picker ── */}
+      <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
+        <Text style={[styles.sectionTitle, { color: tcMuted }]}>APPEARANCE</Text>
         <SectionRow
-          icon={user?.email_verified ? "checkmark-circle-outline" : "alert-circle-outline"}
-          label="Email Verified"
-          value={user?.email_verified ? "Verified" : "Not verified"}
-          color={user?.email_verified ? functionalColor(resolvedTheme, "success") : functionalColor(resolvedTheme, "error")}
+          icon="contrast-outline"
+          label="Theme"
+          value={themePreference === "system" ? "System" : themePreference === "light" ? "Light" : "Dark"}
+          onPress={() => setThemeSheetVisible(true)}
+          isLast
           theme={theme}
         />
-        <SectionRow icon="school-outline" label="Category" value={user?.category ?? "—"} isLast theme={theme} />
       </View>
 
       {/* ── Security Section ── */}
@@ -299,6 +331,7 @@ export default function ProfileScreen() {
         <SectionRow
           icon="key-outline"
           label="PIN Login"
+          value={pinEnabled === null ? undefined : pinEnabled ? "On" : "Off"}
           onPress={openPinSheet}
           theme={theme}
         />
@@ -324,6 +357,37 @@ export default function ProfileScreen() {
       </View>
       </ScrollView>
       </SafeAreaView>
+
+      {/* Theme picker sheet */}
+      <BottomSheet
+        visible={themeSheetVisible}
+        onClose={() => setThemeSheetVisible(false)}
+        title="Choose Theme"
+      >
+        {(["system", "light", "dark"] as const).map((option) => (
+          <Pressable
+            key={option}
+            onPress={() => {
+              setThemePreference(option);
+              setThemeSheetVisible(false);
+            }}
+          >
+            <View style={[styles.row, { borderBottomColor: borderColor(theme, "subtle"), borderBottomWidth: StyleSheet.hairlineWidth }]}>
+              <Ionicons
+                name={option === "system" ? "phone-portrait-outline" : option === "light" ? "sunny-outline" : "moon-outline"}
+                size={20}
+                color={tcMuted}
+              />
+              <Text style={[styles.rowLabel, { color: tc }]}>
+                {option === "system" ? "System default" : option === "light" ? "Light" : "Dark"}
+              </Text>
+              <View style={styles.rowRight}>
+                {themePreference === option && <Ionicons name="checkmark-circle" size={20} color={brand} />}
+              </View>
+            </View>
+          </Pressable>
+        ))}
+      </BottomSheet>
 
       {/* Phase 58 — Change Password sheet */}
       <BottomSheet
@@ -374,10 +438,10 @@ export default function ProfileScreen() {
         visible={pinSheet}
         onClose={() => setPinSheet(false)}
         title="PIN Login"
-        maxHeight={700}
+        maxHeight={520}
       >
         <Text style={[styles.sheetHelper, { color: tcMuted }]}>
-          A 4-digit PIN lets you sign in quickly on this device. The server decides whether a PIN is active — if a change fails, the server message appears below.
+          Set a 4-digit PIN to sign in quickly on this device.
         </Text>
         <View style={styles.pinModeRow}>
           {(["enable", "change", "disable"] as const).map((m) => (
@@ -521,9 +585,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    marginTop: 8,
   },
   roleText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+  },
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  verifiedText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
 
   // Sections
   section: {

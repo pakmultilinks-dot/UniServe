@@ -13,8 +13,7 @@
       "channel": "staging"
     },
     "production": {
-      "channel": "production",
-      "autoIncrement": true
+      "channel": "production"
     }
   },
   "submit": {
@@ -22,10 +21,6 @@
       "android": {
         "serviceAccountKeyPath": "./google-service-account.json",
         "track": "internal"
-      },
-      "ios": {
-        "appleId": "",
-        "ascAppId": ""
       }
     }
   }

@@ -1,6 +1,6 @@
 """Cart module — API endpoints for shopping cart management."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -83,7 +83,7 @@ async def update_cart_item(
     body: CartUpdateQuantityRequest,
     auth: AuthContext = Depends(RequireCafeteriaScope()),
     db: AsyncSession = Depends(get_db),
-) -> CartItemResponse:
+) -> CartItemResponse | Response:
     """Update the quantity of a cart item."""
     service = CartService(db)
     cart = await service.get_or_create_cart(user_id=auth.user.id, cafeteria_id=cafeteria_id)
@@ -93,6 +93,9 @@ async def update_cart_item(
         quantity=body.quantity,
         user_id=auth.user.id,
     )
+    if cart_item is None:
+        # Quantity zero removed the item — a successful removal, not a 404.
+        return Response(status_code=204)
     items = await service.get_cart_items_with_details(cart.id)
     detail = next((i for i in items if i["id"] == cart_item.id), None)
     return (

@@ -387,7 +387,11 @@ async def test_delete_menu_item_soft_deletes(admin_client: AsyncClient, db):
 
 @pytest.mark.asyncio
 async def test_delete_menu_item_manager_forbidden(manager_client: AsyncClient, db):
-    """Menu item DELETE is admin-only (RequireRole UNIVERSITY_ADMIN)."""
+    """Menu item DELETE allows managers within their cafeteria scope (B21).
+
+    Aligned with create/update: managers may soft-delete in their own
+    cafeteria. Deletion is a soft-delete (is_active=False), recoverable.
+    """
     caf = await create_test_cafeteria(db)
     mgr = await _get_manager_user(db)
     await assign_user_to_cafeteria(db, mgr.id, caf.id)
@@ -395,10 +399,11 @@ async def test_delete_menu_item_manager_forbidden(manager_client: AsyncClient, d
     await db.flush()
 
     resp = await manager_client.delete(f"/api/v1/cafeterias/{caf.id}/menu-items/{item.id}")
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 204, resp.text
 
     row = (await db.execute(select(MenuItem).where(MenuItem.id == item.id))).scalar_one()
-    assert row.is_active is True
+    await db.refresh(row)
+    assert row.is_active is False
 
 
 @pytest.mark.asyncio

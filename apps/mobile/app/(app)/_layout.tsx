@@ -28,7 +28,7 @@ function BackButton({ onPress }: { onPress: () => void }) {
 
 export default function AppLayout() {
   const { resolvedTheme } = useTheme();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isEmailVerified, user } = useAuth();
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
   const brand = brandGreen(resolvedTheme);
@@ -39,6 +39,18 @@ export default function AppLayout() {
     return <Redirect href="/login" />;
   }
 
+  // Defense in depth: an authenticated but unverified account must complete
+  // email verification before entering the app. (The backend also rejects
+  // unverified logins; this keeps the client from ever showing app content
+  // to an unverified session.)
+  if (!isLoading && isAuthenticated && !isEmailVerified && user) {
+    const params = new URLSearchParams({
+      user_id: user.id,
+      email: user.university_email,
+    });
+    return <Redirect href={`/verify-email?${params.toString()}`} />;
+  }
+
   return (
     <Stack
       screenOptions={{
@@ -47,6 +59,18 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen
+        name="notifications"
+        options={{
+          headerShown: true,
+          title: "Notifications",
+          headerStyle: { backgroundColor: bg },
+          headerTintColor: brand,
+          headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
+          headerShadowVisible: false,
+          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+        }}
+      />
       <Stack.Screen
         name="item/[id]"
         options={{

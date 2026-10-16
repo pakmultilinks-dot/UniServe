@@ -17,11 +17,18 @@ import { CartProvider } from "../src/contexts/CartContext";
 import { FavoritesProvider } from "../src/contexts/FavoritesContext";
 import { NotificationsProvider } from "../src/contexts/NotificationsContext";
 import WebDashboardGate from "../src/components/WebDashboardGate";
+import { assertApiConfigured, APP_ENV } from "../src/config";
+
+// Fail fast on placeholder production API origins (see config.ts).
+// Development (localhost/LAN) is unaffected.
+if (APP_ENV !== "development") {
+  assertApiConfigured();
+}
 
 /**
  * Roles allowed in the mobile ordering app.
  * The mobile app is for students and faculty only — cafeteria staff and
- * university admins use the web dashboard (localhost:3000) instead.
+ * university admins use the web dashboard instead.
  */
 const MOBILE_ROLES = ["student", "faculty"];
 

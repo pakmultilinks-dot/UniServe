@@ -7,13 +7,16 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "uniserve",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.uniserve.mobile"
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#f6efdf"
       },
       "package": "com.uniserve.mobile"
@@ -23,9 +26,24 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#f6efdf"
+          "backgroundColor": "#f6efdf",
+          "image": "./assets/icon.png",
+          "imageWidth": 200
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "811d39ba-29fe-4ca7-aaa7-3c3a9335095b"
+      }
+    },
+    "owner": "kominman",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/811d39ba-29fe-4ca7-aaa7-3c3a9335095b"
+    }
   }
 }
