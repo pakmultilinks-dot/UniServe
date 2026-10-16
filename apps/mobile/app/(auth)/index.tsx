@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT,
   },
   gradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   content: {
     flex: 1,
