@@ -184,6 +184,14 @@ export default function CartScreen({ onBrowseMenu }: CartScreenProps) {
 
   return (
     <View style={[styles.screen, { backgroundColor: bgSec }]}>
+      <View style={styles.header}>
+        <Text style={[styles.headerTitle, { color: tc }]}>Cart</Text>
+        {items.length > 0 && (
+          <Text style={[styles.headerSubtitle, { color: tcMuted }]}>
+            {items.length} item{items.length !== 1 ? "s" : ""}
+          </Text>
+        )}
+      </View>
       {items.length === 0 ? (
         <View style={styles.emptyContainer}>
           <EmptyState
@@ -291,6 +299,19 @@ export default function CartScreen({ onBrowseMenu }: CartScreenProps) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
   },
   emptyContainer: {
     flex: 1,
