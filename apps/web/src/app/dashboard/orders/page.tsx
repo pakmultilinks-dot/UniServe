@@ -236,6 +236,23 @@ export default function OrdersPage() {
     }
   };
 
+  // Order Details modal actions — same transitions as the queue cards, but
+  // also refresh the open modal so the status badge and timestamps update
+  // without closing and reopening the dialog.
+  const handleModalAction = async (orderId: string, action: () => Promise<any>) => {
+    setActionLoading(orderId);
+    try {
+      await action();
+      await loadOrders();
+      await reloadDetails(orderId);
+    } catch (err: any) {
+      toast(err?.message ?? "Action failed", "error");
+      await loadOrders();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   // Collect is terminal — backend is authoritative for collectability
   // (ready state, cafeteria assignment, already-collected conflicts).
   // Surface the server message and refresh on success AND error so the
@@ -952,7 +969,84 @@ export default function OrdersPage() {
               </div>
             ) : null}
 
-            <div className="flex justify-end mt-5">
+            <div className="flex flex-wrap justify-end gap-2 mt-5">
+              {detailsModal.detail && (isStaff || isManager) && (
+                <>
+                  {detailsModal.detail.status === "pending" && (
+                    <>
+                      {!detailsModal.detail.confirmed_at && (
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          loading={actionLoading === detailsModal.orderId}
+                          onClick={() => handleModalAction(detailsModal.orderId, () => confirmOrder(detailsModal.orderId))}
+                        >
+                          Confirm
+                        </Button>
+                      )}
+                      {isManager && (
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          loading={actionLoading === detailsModal.orderId}
+                          onClick={() => setRejectModal({ orderId: detailsModal.orderId, orderNumber: detailsModal.orderNumber, reason: "", notes: "" })}
+                        >
+                          Reject
+                        </Button>
+                      )}
+                    </>
+                  )}
+                  {detailsModal.detail.status === "pending" && !!detailsModal.detail.confirmed_at && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={actionLoading === detailsModal.orderId}
+                      onClick={() => handleModalAction(detailsModal.orderId, () => prepareOrder(detailsModal.orderId))}
+                    >
+                      Prepare
+                    </Button>
+                  )}
+                  {detailsModal.detail.status === "preparing" && (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={actionLoading === detailsModal.orderId}
+                      onClick={() => handleModalAction(detailsModal.orderId, () => readyOrder(detailsModal.orderId))}
+                    >
+                      Ready
+                    </Button>
+                  )}
+                  {detailsModal.detail.status === "ready" && (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={actionLoading === detailsModal.orderId}
+                      onClick={() => setCollectModal({ orderId: detailsModal.orderId, orderNumber: detailsModal.orderNumber })}
+                    >
+                      Collect
+                    </Button>
+                  )}
+                  {(detailsModal.detail.status === "preparing" || detailsModal.detail.status === "ready") && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setDelayModal({ orderId: detailsModal.orderId, minutes: "" })}
+                    >
+                      Delay
+                    </Button>
+                  )}
+                </>
+              )}
+              {detailsModal.detail && isManager && canManagerCancel(detailsModal.detail.status) && (
+                <Button
+                  size="sm"
+                  variant="danger"
+                  loading={actionLoading === detailsModal.orderId}
+                  onClick={() => setCancelModal({ orderId: detailsModal.orderId, orderNumber: detailsModal.orderNumber })}
+                >
+                  Cancel
+                </Button>
+              )}
               <Button size="sm" variant="ghost" onClick={() => setDetailsModal(null)}>Close</Button>
             </div>
           </div>
