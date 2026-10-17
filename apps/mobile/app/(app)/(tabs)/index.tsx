@@ -594,7 +594,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 4,
-    paddingBottom: 4,
+    paddingBottom: 12,
   },
   // Solid background + subtle shadow for the sticky search/chips block so
   // scrolling menu content never shows through with a hard cut.
@@ -631,11 +631,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     flexShrink: 1,
+    lineHeight: 18,
   },
   cafeteriaInlineLoc: {
     fontSize: 12,
     fontWeight: "400",
     marginTop: 1,
+    lineHeight: 16,
   },
   statusDot: {
     width: 8,
