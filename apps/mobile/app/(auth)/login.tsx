@@ -111,6 +111,8 @@ export default function LoginScreen() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Login failed";
       setError(message);
+      // Clear password on failure for security (audit recommendation)
+      setPassword("");
     } finally {
       setIsLoading(false);
     }
