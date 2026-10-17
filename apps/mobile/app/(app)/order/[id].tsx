@@ -583,7 +583,7 @@ export default function OrderDetailScreen() {
                       { color: functionalColor(resolvedTheme, "error") },
                     ]}
                   >
-                    Cancel
+                    Cancel item
                   </Text>
                 </Pressable>
               )}
@@ -709,7 +709,13 @@ export default function OrderDetailScreen() {
           <View style={[styles.cancelCard, { backgroundColor: bg, borderColor: bc }]}>
             {confirmCancel ? (
               <>
-                <Text style={[styles.cancelTitle, { color: tc }]}>Cancel this order?</Text>
+                <Text style={[styles.cancelTitle, { color: tc }]}>Cancel entire order?</Text>
+                <Text style={[styles.cancelSubtitle, { color: tcMuted }]}>
+                  This will cancel all items in the order.
+                  {order.payment_method === "cash"
+                    ? " No payment was collected."
+                    : " Any paid amount can be refunded from the order details."}
+                </Text>
                 <View style={styles.cancelActions}>
                   <Pressable
                     style={[
@@ -1163,6 +1169,7 @@ const styles = StyleSheet.create({
   cancelRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 2 },
   cancelLabel: { fontSize: 14, fontWeight: "600" },
   cancelTitle: { fontSize: 15, fontWeight: "600" },
+  cancelSubtitle: { fontSize: 13, marginTop: 4, marginBottom: 12 },
   cancelActions: { flexDirection: "row", gap: 10 },
   cancelBtn: {
     flex: 1,
