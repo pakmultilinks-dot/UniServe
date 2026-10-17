@@ -343,5 +343,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: "auto",
     textAlign: "center",
+    paddingBottom: 24,
   },
 });
