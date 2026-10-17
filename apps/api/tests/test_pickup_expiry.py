@@ -586,6 +586,8 @@ class TestProcessExpiredPickupsNoEligible:
 
         # Phase 44 (P3-14 Phase 2) extended the stats dict with scheduled
         # expiry counters — empty state keeps all of them at zero.
+        # ORDER_AUTO_ACCEPT added an auto_accepted counter (0 when the
+        # flag is off or there is nothing to accept).
         assert stats == {
             "examined": 0,
             "processed": 0,
@@ -593,6 +595,7 @@ class TestProcessExpiredPickupsNoEligible:
             "failed": 0,
             "scheduled_examined": 0,
             "scheduled_expired": 0,
+            "auto_accepted": 0,
         }
 
     @pytest.mark.asyncio

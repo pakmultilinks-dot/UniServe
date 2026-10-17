@@ -82,6 +82,13 @@ class Settings(BaseSettings):
     DEFAULT_PREPARATION_TIME_MINUTES: int = 15
     DEFAULT_CAPACITY: int = 10
 
+    # Auto-acceptance: when true, immediate cash orders are confirmed and
+    # moved to PREPARING automatically at checkout, and a background sweep
+    # picks up online orders once payment succeeds (plus any stragglers).
+    # Default false so tests keep the manual staff workflow; production
+    # enables it via ORDER_AUTO_ACCEPT=true (render.yaml).
+    ORDER_AUTO_ACCEPT: bool = False
+
     # No-show policy
     NOSHOW_STUDENT_THRESHOLD: int = 3
     NOSHOW_STUDENT_WINDOW_DAYS: int = 30

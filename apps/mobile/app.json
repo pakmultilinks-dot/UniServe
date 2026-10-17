@@ -45,15 +45,12 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "811d39ba-29fe-4ca7-aaa7-3c3a9335095b"
+        "projectId": "5ccaa275-f901-42a7-b608-b56a63d25a25"
       }
     },
-    "owner": "kominman",
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "url": "https://u.expo.dev/811d39ba-29fe-4ca7-aaa7-3c3a9335095b"
-    }
+    "owner": "venomtech"
   }
 }

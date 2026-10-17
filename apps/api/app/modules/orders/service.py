@@ -273,6 +273,20 @@ class OrderService:
                 self.db.add(event_pending)
         # Scheduled: inventory reserved when preparation starts (not at checkout)
 
+        # 10b. Auto-acceptance (ORDER_AUTO_ACCEPT): immediate cash orders are
+        # confirmed and start preparation right away so the customer sees the
+        # order progress immediately instead of waiting for staff. Online
+        # orders are picked up by the background sweep once payment succeeds.
+        if (
+            settings.ORDER_AUTO_ACCEPT
+            and parsed_order_type == OrderType.IMMEDIATE
+            and PaymentMethod(payment_method) == PaymentMethod.CASH
+        ):
+            await self.auto_accept_order(
+                order_id=order.id,
+                notes="Auto-accepted at checkout",
+            )
+
         # 11. Expire the cart
         cart.status = CartStatus.EXPIRED
 
@@ -737,6 +751,53 @@ class OrderService:
     # ===================================================================
     # Phase 6: Manager order confirmation / rejection
     # ===================================================================
+
+    async def auto_accept_order(
+        self,
+        *,
+        order_id: str,
+        notes: str | None = None,
+    ) -> Order:
+        """Auto-confirm and start preparation (ORDER_AUTO_ACCEPT).
+
+        PENDING → PREPARING in one step: sets confirmed_at (with a
+        CONFIRMED_BY_STAFF event), then delegates to start_preparation so
+        the PREPARING invariants (ETA, events, scheduled reservation) are
+        identical to the manual staff path. actor_id=None marks a system
+        action. Online orders whose payment has not succeeded yet are left
+        PENDING — the background sweep retries after payment confirms.
+        """
+        order = await self._get_order_for_update(order_id)
+
+        if order.status != OrderStatus.PENDING:
+            return order
+
+        if order.payment_method == PaymentMethod.ONLINE:
+            from app.modules.payments.models import Payment, PaymentStatus
+
+            result = await self.db.execute(
+                select(Payment).where(Payment.order_id == order.id)
+            )
+            payment = result.scalar_one_or_none()
+            if payment is None or payment.status != PaymentStatus.SUCCEEDED:
+                return order  # awaiting payment — sweep will retry
+
+        if order.confirmed_at is None:
+            order.confirmed_at = datetime.now(UTC)
+            event = OrderEvent(
+                order_id=order.id,
+                event_type=OrderEventType.CONFIRMED_BY_STAFF,
+                actor_id=None,
+                notes=notes or "Auto-accepted",
+            )
+            self.db.add(event)
+            await self._emit_notification(order, event)
+
+        return await self.start_preparation(
+            order_id=order.id,
+            actor_id=None,
+            notes=notes or "Auto-accepted",
+        )
 
     async def confirm_order(
         self,
@@ -1672,6 +1733,7 @@ class OrderService:
             "failed": 0,
             "scheduled_examined": 0,
             "scheduled_expired": 0,
+            "auto_accepted": 0,
         }
         now = datetime.now(UTC)
 
@@ -1793,6 +1855,46 @@ class OrderService:
                     order_id=order.id,
                 )
                 continue
+
+        # ------------------------------------------------------------------
+        # Phase 3: auto-acceptance backstop (ORDER_AUTO_ACCEPT)
+        # ------------------------------------------------------------------
+        # Immediate orders still PENDING (online orders whose payment just
+        # succeeded, or any order missed at checkout) are confirmed and
+        # moved to PREPARING so they never sit invisible in the queue.
+        if settings.ORDER_AUTO_ACCEPT:
+            auto_stmt = select(Order).where(
+                Order.status == OrderStatus.PENDING,
+                Order.order_type == OrderType.IMMEDIATE,
+            )
+            if dialect_name == "postgresql":
+                auto_stmt = auto_stmt.with_for_update(skip_locked=True)
+            auto_result = await self.db.execute(auto_stmt)
+            auto_orders = list(auto_result.scalars().all())
+
+            for order in auto_orders:
+                try:
+                    if order.status != OrderStatus.PENDING:
+                        stats["skipped"] += 1
+                        continue
+                    accepted = await self.auto_accept_order(
+                        order_id=order.id,
+                        notes="Auto-accepted",
+                    )
+                    if accepted.status == OrderStatus.PREPARING:
+                        stats["auto_accepted"] += 1
+                        logger.info(
+                            "order_auto_accepted",
+                            order_id=order.id,
+                            order_number=order.order_number,
+                        )
+                except Exception:
+                    stats["failed"] += 1
+                    logger.exception(
+                        "failed_to_auto_accept_order",
+                        order_id=order.id,
+                    )
+                    continue
 
         # Flush all changes — caller is responsible for commit.
         # (Consistent with the rest of the service pattern; the background

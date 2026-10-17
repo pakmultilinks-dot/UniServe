@@ -25,6 +25,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../../../src/contexts/AuthContext";
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
 import { useFavorites } from "../../../src/contexts/FavoritesContext";
@@ -68,6 +69,7 @@ interface ToastState {
 export default function HomeScreen() {
   const { resolvedTheme } = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
   const {
     selectedCafeteria,
     selectCafeteria,
@@ -91,6 +93,14 @@ export default function HomeScreen() {
       refreshUnreadCount();
     }, [refreshUnreadCount]),
   );
+
+  // Time-aware greeting with the signed-in user's first name. Falls back
+  // to a plain greeting while the profile is still loading.
+  const firstName = user?.first_name?.trim() ?? "";
+  const hour = new Date().getHours();
+  const partOfDay =
+    hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const greetingText = firstName ? `${partOfDay}, ${firstName}` : partOfDay;
 
   const brand = brandGreen(resolvedTheme);
   const tc = textColor(resolvedTheme, "primary");
@@ -273,7 +283,13 @@ export default function HomeScreen() {
       {/* ── Zone 2: Header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.greeting, { color: tc }]}>UniServe</Text>
+          <Text
+            style={[styles.greeting, { color: tc }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {greetingText}
+          </Text>
           {selectedCafeteria ? (
             <Pressable
               onPress={() => setCafeteriaSheetVisible(true)}
