@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 100 },
 
   // Header
-  header: { alignItems: "center", marginBottom: 24, paddingVertical: 16 },
+  header: { alignItems: "center", marginBottom: 16, paddingVertical: 8 },
   avatar: {
     width: 72,
     height: 72,
