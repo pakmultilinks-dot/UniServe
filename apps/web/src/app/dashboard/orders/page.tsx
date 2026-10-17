@@ -573,9 +573,9 @@ export default function OrdersPage() {
                   >
                     Details
                   </Button>
-                  {(isStaff || isManager) && (
+                  {(isStaff || isManager || isAdmin) && (
                     <>
-                      {order.status === "pending" && (isManager || isStaff) && (
+                      {order.status === "pending" && (isManager || isStaff || isAdmin) && (
                         <>
                           {!order.confirmed_at && (
                             <Button
@@ -636,7 +636,7 @@ export default function OrdersPage() {
                       )}
                       {/* P3-9: delay control mirrors backend rules — manager or
                           staff on PREPARING/READY orders (PUT /orders/{id}/delay). */}
-                      {(order.status === "preparing" || order.status === "ready") && (isManager || isStaff) && (
+                      {(order.status === "preparing" || order.status === "ready") && (isManager || isStaff || isAdmin) && (
                         <Button
                           size="sm"
                           variant="secondary"
@@ -970,7 +970,7 @@ export default function OrdersPage() {
             ) : null}
 
             <div className="flex flex-wrap justify-end gap-2 mt-5">
-              {detailsModal.detail && (isStaff || isManager) && (
+              {detailsModal.detail && (isStaff || isManager || isAdmin) && (
                 <>
                   {detailsModal.detail.status === "pending" && (
                     <>
