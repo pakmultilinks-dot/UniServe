@@ -916,7 +916,7 @@ export default function OrdersPage() {
                         </span>
                       )}
                       <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
-                        Live backend calculation (GET /orders/eta) for open orders.
+                        Estimated pickup time based on current queue.
                       </p>
                     </div>
                   )}
@@ -959,8 +959,8 @@ export default function OrdersPage() {
                     {detailsModal.detail.collection_token && (
                       <p className="text-[var(--text-muted)]">
                         Collection token:{" "}
-                        <span className="font-mono text-[var(--text-secondary)] break-all">
-                          {detailsModal.detail.collection_token}
+                        <span className="font-mono text-[var(--text-secondary)]" title="Full token hidden for security">
+                          {String(detailsModal.detail.collection_token).slice(0, 8)}…
                         </span>
                       </p>
                     )}

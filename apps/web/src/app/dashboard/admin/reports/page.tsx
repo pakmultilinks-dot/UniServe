@@ -56,7 +56,7 @@ const addDays = (d: Date, n: number): Date =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
 const formatCurrency = (amount: number): string =>
-  `Rs. ${(amount / 100).toLocaleString("en-PK", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  `PKR ${(amount / 100).toLocaleString("en-PK", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 const formatPct = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
 
