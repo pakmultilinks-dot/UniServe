@@ -19,6 +19,7 @@ import {
   StyleSheet,
   RefreshControl,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -109,6 +110,8 @@ export default function HomeScreen() {
   const [toast, setToast] = useState<ToastState>({ visible: false, message: "", type: "success" });
   const [cafeteriaSheetVisible, setCafeteriaSheetVisible] = useState(false);
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
+  const [cafeteriasLoading, setCafeteriasLoading] = useState(true);
+  const [cafeteriasError, setCafeteriasError] = useState("");
 
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
   const cartItemMap = (cart?.items ?? []).reduce<Record<string, { cartItemId: string; quantity: number }>>(
@@ -123,6 +126,8 @@ export default function HomeScreen() {
 
   // Load cafeterias for bottom sheet
   useEffect(() => {
+    setCafeteriasLoading(true);
+    setCafeteriasError("");
     getCafeterias()
       .then((data) => {
         setCafeterias(data);
@@ -133,7 +138,11 @@ export default function HomeScreen() {
           setCafeteriaSheetVisible(true);
         }
       })
-      .catch(() => setError("Failed to load cafeterias. Pull to retry."));
+      .catch(() => {
+        setCafeteriasError("Failed to load cafeterias. Please try again.");
+        setError("Failed to load cafeterias. Pull to retry.");
+      })
+      .finally(() => setCafeteriasLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -520,13 +529,46 @@ export default function HomeScreen() {
             onPress={() => handleCafeteriaSelect(caf)}
           />
         ))}
-        {cafeterias.length === 0 && (
+        {cafeteriasLoading ? (
           <View style={styles.emptySheet}>
-            <Text style={{ color: tcMuted, textAlign: "center", paddingVertical: 20 }}>
-              No cafeterias available
+            <ActivityIndicator size="large" color={brand} />
+            <Text style={{ color: tcMuted, textAlign: "center", paddingVertical: 12 }}>
+              Loading cafeterias...
             </Text>
           </View>
-        )}
+        ) : cafeteriasError ? (
+          <View style={styles.emptySheet}>
+            <Text style={{ color: tcMuted, textAlign: "center", paddingVertical: 12 }}>
+              {cafeteriasError}
+            </Text>
+            <Pressable
+              onPress={() => {
+                setCafeteriasLoading(true);
+                setCafeteriasError("");
+                getCafeterias()
+                  .then((data) => {
+                    setCafeterias(data);
+                    if (data.length > 0 && !selectedCafeteria) {
+                      setCafeteriaSheetVisible(true);
+                    }
+                  })
+                  .catch(() => setCafeteriasError("Failed to load cafeterias. Please try again."))
+                  .finally(() => setCafeteriasLoading(false));
+              }}
+              style={{ paddingVertical: 8 }}
+            >
+              <Text style={{ color: brand, textAlign: "center", fontWeight: "600" }}>
+                Try Again
+              </Text>
+            </Pressable>
+          </View>
+        ) : cafeterias.length === 0 ? (
+          <View style={styles.emptySheet}>
+            <Text style={{ color: tcMuted, textAlign: "center", paddingVertical: 20 }}>
+              No cafeterias available at the moment. Please check back later.
+            </Text>
+          </View>
+        ) : null}
       </BottomSheet>
     </SafeAreaView>
   );
