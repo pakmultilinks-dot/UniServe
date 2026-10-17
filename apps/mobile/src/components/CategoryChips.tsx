@@ -58,7 +58,7 @@ export default function CategoryChips({
   return (
     <ScrollView
       horizontal
-      showsHorizontalScrollIndicator={false}
+      showsHorizontalScrollIndicator={true}
       contentContainerStyle={styles.container}
     >
       {categories.map((cat) => {

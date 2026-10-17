@@ -191,7 +191,7 @@ export default function OrdersScreen() {
         {/* Status filter — makes it explicit the list can be filtered by status */}
         <ScrollView
           horizontal
-          showsHorizontalScrollIndicator={false}
+          showsHorizontalScrollIndicator={true}
           contentContainerStyle={styles.statusRow}
         >
           {([null, "pending", "preparing", "ready", "completed", "cancelled"] as const).map((s) => {
