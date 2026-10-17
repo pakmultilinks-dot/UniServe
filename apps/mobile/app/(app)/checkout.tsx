@@ -282,7 +282,7 @@ export default function CheckoutScreen() {
             <View style={styles.paymentOptionInfo}>
               <Text style={[styles.paymentOptionLabel, { color: tc }]}>Online Payment</Text>
               <Text style={[styles.paymentOptionSub, { color: tcMuted }]}>
-                Secure payment through the configured provider
+                Pay securely with JazzCash or card
               </Text>
             </View>
             {paymentMethod === "online" && (

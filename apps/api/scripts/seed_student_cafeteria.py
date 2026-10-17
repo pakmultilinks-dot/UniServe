@@ -51,7 +51,7 @@ MENU_ITEMS = [
         "category": MenuCategory.MAIN_COURSE,
         "price": 28000,
         "preparation_time_minutes": 15,
-        "image_url": "https://images.unsplash.com/photo-1589302168068-964664d93dc0?auto=format&fit=crop&w=800&q=85",
+        "image_url": "https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=800&q=85",
     },
     {
         "name": "Chicken Karahi",

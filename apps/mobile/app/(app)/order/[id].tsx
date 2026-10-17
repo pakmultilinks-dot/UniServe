@@ -338,9 +338,15 @@ export default function OrderDetailScreen() {
   const openRefundForm = useCallback(() => {
     setRefundError("");
     setRefundSuccess("");
+    // For cash/pay-at-counter orders where no payment was collected, explain
+    // clearly instead of the generic "no refundable amount" message.
+    const isCashOrder = order?.payment_method === "cash";
+    const noRefundMsg = isCashOrder
+      ? "No payment was collected for this order. No refund is required."
+      : "This order has no refundable amount left.";
     if (refundInfo) {
       if (refundInfo.refundable.refundable_amount <= 0) {
-        setRefundCheckError("This order has no refundable amount left.");
+        setRefundCheckError(noRefundMsg);
         return;
       }
       setRefundCheckError("");
@@ -358,7 +364,7 @@ export default function OrderDetailScreen() {
         ]);
         setRefundInfo({ refundable, refunds });
         if (refundable.refundable_amount <= 0) {
-          setRefundCheckError("This order has no refundable amount left.");
+          setRefundCheckError(noRefundMsg);
         } else {
           setRefundCheckError("");
           setRefundAmount((refundable.refundable_amount / 100).toFixed(2));
@@ -372,7 +378,7 @@ export default function OrderDetailScreen() {
         );
       }
     })();
-  }, [id, refundInfo]);
+  }, [id, refundInfo, order?.payment_method]);
 
   /** Submit the refund request — backend is authoritative for eligibility. */
   const handleSubmitRefund = useCallback(async () => {
