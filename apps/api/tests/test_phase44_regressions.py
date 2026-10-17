@@ -21,9 +21,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationError
-from app.modules.cafeterias.models import CafeteriaType, OperationalStatus
+from app.modules.cafeterias.models import CafeteriaType
 from app.modules.inventory.models import InventoryItem, InventoryUnit
-from app.modules.menus.models import DailyMenuStatus
 from app.modules.orders.models import (
     Order,
     OrderEvent,
@@ -44,7 +43,6 @@ from tests.conftest import (
     create_test_daily_menu,
     create_test_menu_item,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

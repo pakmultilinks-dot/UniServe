@@ -10,7 +10,6 @@ from app.core.deps import (
     AuthContext,
     RequireCafeteriaScope,
     RequireCafeteriaWriteScope,
-    RequireRole,
     get_current_user,
     verify_resource_cafeteria,
 )

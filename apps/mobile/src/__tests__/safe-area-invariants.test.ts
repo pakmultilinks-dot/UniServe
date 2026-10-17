@@ -45,11 +45,13 @@ const TAB_SCREENS = fs
 
 describe("tab screens honour the top safe-area inset", () => {
   it("is applied to every tab screen (and none are added/removed silently)", () => {
+    // notifications.tsx moved out of the tab bar (reachable from the header
+    // bell) — it now lives at app/(app)/notifications.tsx and is covered by
+    // the body-truncation invariant below.
     expect(TAB_SCREENS).toEqual([
       "cart.tsx",
       "favorites.tsx",
       "index.tsx",
-      "notifications.tsx",
       "orders.tsx",
       "profile.tsx",
     ]);
@@ -96,7 +98,9 @@ describe("BottomSheet content cannot be silently clipped", () => {
 
 describe("notification bodies stay fully readable", () => {
   it("does not truncate the body (there is no detail screen to recover it)", () => {
-    const src = read(path.join("app", "(app)", "(tabs)", "notifications.tsx"));
+    // The notifications screen moved from the tab bar to a stack route
+    // (header bell) — the invariant follows it to its new home.
+    const src = read(path.join("app", "(app)", "notifications.tsx"));
 
     expect(src).not.toContain("numberOfLines={2}");
   });

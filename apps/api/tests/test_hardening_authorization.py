@@ -14,8 +14,9 @@ Each test uses real HTTP requests via httpx.AsyncClient against the
 FastAPI app with an in-memory SQLite database.
 """
 
-import pytest
 from datetime import date
+
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +33,6 @@ from app.modules.menus.models import (
 )
 from app.modules.orders.models import Order, OrderStatus, OrderType, PaymentMethod
 from app.modules.users.models import (
-    AccountStatus,
     CafeteriaAssignment,
     Role,
     User,

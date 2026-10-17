@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.core.rate_limit import SlidingWindowLimiter, check_auth_rate_limit
 from app.core.exceptions import RateLimitError
+from app.core.rate_limit import SlidingWindowLimiter, check_auth_rate_limit
 
 
 class TestSlidingWindowLimiter:

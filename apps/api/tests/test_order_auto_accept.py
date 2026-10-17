@@ -101,7 +101,6 @@ class TestOrderAutoAccept:
         """Flag on: the background sweep auto-accepts a PENDING order
         that was created while the flag was off (e.g. online order whose
         payment just succeeded)."""
-        from app.modules.orders.service import OrderService
 
         monkeypatch.setattr(settings, "ORDER_AUTO_ACCEPT", False)
         data = await _create_pending_order(

@@ -17,7 +17,6 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,7 +38,6 @@ from app.modules.payments.models import (
 from app.modules.payments.providers.base import WebhookVerificationResult
 from app.modules.payments.service import PaymentService, reconcile_stale_payments
 from app.modules.users.models import User, UserSession
-
 from tests.conftest import create_test_cafeteria, create_test_user
 
 _order_numbers = itertools.count(900_000)

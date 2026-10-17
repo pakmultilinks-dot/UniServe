@@ -12,6 +12,7 @@
 import React from "react";
 import { ScrollView, Text } from "react-native";
 import { render } from "@testing-library/react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 jest.mock("../contexts/ThemeContext", () => ({
   useTheme: () => ({ resolvedTheme: "light" }),
@@ -19,9 +20,27 @@ jest.mock("../contexts/ThemeContext", () => ({
 
 import { BottomSheet } from "../components/ui/BottomSheet";
 
+// BottomSheet reads useSafeAreaInsets() for its bottom padding, so the
+// render must be wrapped in a SafeAreaProvider. In jest the native
+// onInsetsChange event never fires, so initialMetrics is required —
+// without it the provider renders no children at all.
+const renderSheet = (ui: React.ReactElement) =>
+  render(ui, {
+    wrapper: ({ children }) => (
+      <SafeAreaProvider
+        initialMetrics={{
+          insets: { top: 47, left: 0, right: 0, bottom: 34 },
+          frame: { x: 0, y: 0, width: 390, height: 844 },
+        }}
+      >
+        {children}
+      </SafeAreaProvider>
+    ),
+  });
+
 describe("BottomSheet content clipping", () => {
   it("renders its children when visible", () => {
-    const { getByText } = render(
+    const { getByText } = renderSheet(
       <BottomSheet visible onClose={jest.fn()} title="Select Cafeteria">
         <Text>Main Cafeteria</Text>
       </BottomSheet>,
@@ -31,7 +50,7 @@ describe("BottomSheet content clipping", () => {
   });
 
   it("keeps capped content scrollable rather than clipped", () => {
-    const { UNSAFE_queryAllByType } = render(
+    const { UNSAFE_queryAllByType } = renderSheet(
       <BottomSheet visible onClose={jest.fn()} title="Change Password">
         <Text>Overflowing content</Text>
       </BottomSheet>,
@@ -41,7 +60,7 @@ describe("BottomSheet content clipping", () => {
   });
 
   it("renders nothing while closed", () => {
-    const { queryByText } = render(
+    const { queryByText } = renderSheet(
       <BottomSheet visible={false} onClose={jest.fn()} title="PIN Login">
         <Text>Hidden content</Text>
       </BottomSheet>,

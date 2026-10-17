@@ -1347,12 +1347,11 @@ class TestScheduledCancellationTimezone:
         """A collection time already past in cafeteria-local time must reject."""
         from datetime import datetime as dt
         from datetime import timedelta
+        from zoneinfo import ZoneInfo
 
         from app.core.exceptions import ValidationError
         from app.modules.orders.models import Order
         from app.modules.orders.service import OrderService
-
-        from zoneinfo import ZoneInfo
 
         caf = await create_test_cafeteria(db, name="TZ Cafeteria Midway")
         caf.timezone = "Pacific/Midway"  # UTC-11
@@ -1381,11 +1380,10 @@ class TestScheduledCancellationTimezone:
         """A collection time still future in cafeteria-local time must pass."""
         from datetime import datetime as dt
         from datetime import timedelta
+        from zoneinfo import ZoneInfo
 
         from app.modules.orders.models import Order
         from app.modules.orders.service import OrderService
-
-        from zoneinfo import ZoneInfo
 
         caf = await create_test_cafeteria(db, name="TZ Cafeteria Karachi")
         caf.timezone = "Asia/Karachi"  # UTC+5

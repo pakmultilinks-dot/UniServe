@@ -12,24 +12,13 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, UTC
-from typing import AsyncGenerator
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import hash_password
-from tests.conftest import (
-    assign_user_to_cafeteria,
-    create_test_cafeteria,
-    create_test_menu_item,
-    create_test_user,
-    create_user_session,
-)
-
-from app.modules.cafeterias.models import Cafeteria, CafeteriaType, OperationalStatus
+from app.modules.cafeterias.models import Cafeteria
 from app.modules.orders.models import (
     Order,
     OrderItem,
@@ -41,12 +30,15 @@ from app.modules.payments.models import Payment, PaymentStatus
 from app.modules.refunds.models import Refund, RefundReason, RefundStatus
 from app.modules.users.models import (
     AccountStatus,
-    CafeteriaAssignment,
     Role,
     User,
     UserCategory,
 )
-
+from tests.conftest import (
+    assign_user_to_cafeteria,
+    create_test_menu_item,
+    create_test_user,
+)
 
 # ---------------------------------------------------------------------------
 # Seed helpers

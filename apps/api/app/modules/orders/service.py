@@ -465,14 +465,17 @@ class OrderService:
         """
         order = await self.get_order(order_id)
 
-        if not is_manager:
+        if (
+            not is_manager
             # Verify ownership BEFORE any status validation so that the
             # response cannot be used as an order-status oracle (Phase 8 D8).
             # Non-owners get the same "Order not found" answer as GET /orders/{id}.
-            if user_id and order.user_id != user_id:
-                from app.core.exceptions import AuthorizationError
+            and user_id
+            and order.user_id != user_id
+        ):
+            from app.core.exceptions import AuthorizationError
 
-                raise AuthorizationError("Order not found")
+            raise AuthorizationError("Order not found")
 
         # Already cancelled or completed
         if order.status == OrderStatus.CANCELLED:
@@ -1022,7 +1025,6 @@ class OrderService:
                 from zoneinfo import ZoneInfo
 
                 tz = ZoneInfo(cafeteria.timezone)
-                from datetime import date as dt_date
 
                 # The cafeteria-local date is the product-correct "today": the
                 # closing time is cafeteria-local, so combining it with the

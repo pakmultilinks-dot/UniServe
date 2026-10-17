@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import AuthContext, get_current_user
+from app.core.rate_limit import check_auth_rate_limit
 from app.modules.auth.schemas import (
     AuthResponse,
     LoginRequest,
@@ -31,7 +32,6 @@ from app.modules.auth.schemas import (
 )
 from app.modules.auth.service import AuthService
 from app.modules.users.models import CafeteriaAssignment, Role, User
-from app.core.rate_limit import check_auth_rate_limit
 
 router = APIRouter()
 

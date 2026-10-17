@@ -38,7 +38,10 @@ describe("data service — cafeterias", () => {
 
     const result = await getCafeterias();
 
-    expect(apiMock.get).toHaveBeenCalledWith("/cafeterias?is_active=true");
+    // The backend route is GET /cafeterias/ (trailing slash) — FastAPI
+    // 307-redirects the non-slash form, but the client hits the canonical
+    // path directly to avoid the extra round-trip.
+    expect(apiMock.get).toHaveBeenCalledWith("/cafeterias/?is_active=true");
     expect(result).toEqual([{ id: "c1" }]);
   });
 

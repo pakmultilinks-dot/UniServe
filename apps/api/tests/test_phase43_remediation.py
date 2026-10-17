@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.cafeterias.models import Cafeteria, CafeteriaType, OperationalStatus
 from app.modules.inventory.models import InventoryItem, InventoryUnit
 from app.modules.inventory.service import backfill_missing_inventory_records
-from app.modules.menus.models import DailyMenuStatus, DailyMenuItem, MenuCategory
+from app.modules.menus.models import DailyMenuItem, DailyMenuStatus, MenuCategory
 from app.modules.orders.models import (
     Order,
     OrderStatus,

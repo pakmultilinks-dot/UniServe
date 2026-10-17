@@ -17,7 +17,6 @@ Covers:
 
 import uuid
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +33,6 @@ from tests.conftest import (
     create_test_user,
     create_user_session,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

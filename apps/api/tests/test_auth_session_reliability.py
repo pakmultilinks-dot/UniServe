@@ -16,8 +16,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.core.security import create_access_token, create_refresh_token, decode_token
+from app.core.security import create_access_token, create_refresh_token
 from app.modules.users.models import AccountStatus, Role, UserCategory
 from tests.conftest import create_test_user, create_user_session
 

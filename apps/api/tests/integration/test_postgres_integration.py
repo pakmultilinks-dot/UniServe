@@ -150,13 +150,13 @@ async def test_unique_refresh_token_jti_enforced_on_pg(pg_db):
 
 
 async def test_payment_reconciliation_on_real_pg(pg_db):
+    from sqlalchemy import select
+
+    from app.modules.orders.models import OrderStatus
+    from app.modules.payments.models import Payment, PaymentStatus
+    from app.modules.payments.service import reconcile_stale_payments
     from tests.conftest import create_test_cafeteria, create_test_user
     from tests.test_phase60_maintenance import _seed_order, _seed_payment
-    from app.modules.payments.models import PaymentStatus
-    from app.modules.payments.service import reconcile_stale_payments
-    from app.modules.orders.models import OrderStatus
-    from sqlalchemy import select
-    from app.modules.payments.models import Payment
 
     suffix = _uid()
     user = await create_test_user(
@@ -192,6 +192,11 @@ async def test_payment_reconciliation_on_real_pg(pg_db):
 
 
 async def test_webhook_idempotency_on_real_pg(pg_db):
+    from sqlalchemy import func, select
+
+    from app.modules.orders.models import OrderEvent, OrderEventType, PaymentMethod
+    from app.modules.payments.models import PaymentStatus, WebhookEvent
+    from app.modules.payments.service import PaymentService
     from tests.conftest import create_test_cafeteria, create_test_user
     from tests.test_phase60_maintenance import (
         _seed_order,
@@ -199,12 +204,6 @@ async def test_webhook_idempotency_on_real_pg(pg_db):
         _verification,
         _WebhookStubProvider,
     )
-    from app.modules.payments.models import PaymentStatus, WebhookEvent
-    from app.modules.payments.service import PaymentService
-    from app.modules.orders.models import OrderEventType, PaymentMethod
-    from sqlalchemy import select
-    from sqlalchemy import func
-    from app.modules.orders.models import OrderEvent
 
     suffix = _uid()
     user = await create_test_user(

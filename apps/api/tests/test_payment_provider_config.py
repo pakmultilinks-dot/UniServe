@@ -27,7 +27,6 @@ from app.modules.payments.providers import (
 from app.modules.payments.providers.test_provider import TestPaymentProvider
 from tests.test_payments import _add_cart_item, _checkout, _setup_test_data
 
-
 # ---------------------------------------------------------------------------
 # Provider factory — selection & fail-closed behavior
 # ---------------------------------------------------------------------------

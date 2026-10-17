@@ -15,10 +15,12 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 from threading import Lock
-
-from fastapi import Request
+from typing import TYPE_CHECKING
 
 from app.core.exceptions import RateLimitError
+
+if TYPE_CHECKING:
+    from fastapi import Request
 
 
 class SlidingWindowLimiter:

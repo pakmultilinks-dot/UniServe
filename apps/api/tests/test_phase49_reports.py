@@ -27,7 +27,7 @@ orders, items, payments, and refunds within the test.
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
 import pytest

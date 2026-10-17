@@ -5,12 +5,12 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "prestart": "npm run build --workspace=packages/shared-types",
+    "prestart": "cd ../.. && npm run build --workspace=packages/shared-types",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest",
-    "pretest": "npm run build --workspace=packages/shared-types",
+    "pretest": "cd ../.. && npm run build --workspace=packages/shared-types",
     "lint": "eslint . --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
     "postinstall": "cd ../.. && npm run build --workspace=packages/shared-types"
