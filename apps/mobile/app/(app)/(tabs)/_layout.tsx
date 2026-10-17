@@ -78,23 +78,7 @@ export default function TabsLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, focused }) => (
-            <View>
-              <TabBarIcon name="home" outline="home-outline" color={color} focused={focused} />
-              {cartItemCount > 0 && (
-                <View
-                  style={[
-                    styles.badge,
-                    {
-                      backgroundColor: colors.error,
-                    },
-                  ]}
-                >
-                  <Text style={styles.badgeText}>
-                    {cartItemCount > 99 ? "99+" : cartItemCount}
-                  </Text>
-                </View>
-              )}
-            </View>
+            <TabBarIcon name="home" outline="home-outline" color={color} focused={focused} />
           ),
         }}
       />
