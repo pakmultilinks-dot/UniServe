@@ -43,7 +43,7 @@ services:
       - key: ORDER_AUTO_ACCEPT
         value: "true"
       - key: CORS_ORIGINS
-        value: '["https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard.vercel.app"]'
+        value: '["https://uniserve-web-dashboard-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard.vercel.app"]'
 
 databases:
   - name: uniserve-db
