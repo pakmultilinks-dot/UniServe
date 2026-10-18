@@ -6,9 +6,10 @@
  * add/update/remove operations with optimistic UI updates.
  */
 
-import React, { createContext, useContext, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import type { CartResponse, CartItemResponse, Cafeteria } from "@uniserve/shared-types";
 import { SecureStorage } from "../services/secure-storage";
+import { useAuth } from "./AuthContext";
 import {
   getCart,
   addCartItem as apiAddCartItem,
@@ -53,6 +54,11 @@ export function useCart(): CartContextValue {
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
+  // Persisted tokens are read asynchronously on launch; every fetch below
+  // must wait for auth to settle or it fires unauthenticated and 401s.
+  // isAuthenticated (not just authReady) so a signed-out session never
+  // fetches cafeterias/cart at all.
+  const { isAuthenticated } = useAuth();
   const [selectedCafeteria, setSelectedCafeteria] = useState<Cafeteria | null>(null);
   const [isCafeteriaLoading, setIsCafeteriaLoading] = useState(true);
   const [cart, setCart] = useState<CartResponse | null>(null);
@@ -67,11 +73,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
      selection the user made on the home screen. */
   const CAFETERIA_STORAGE_KEY = "uniserve_selected_cafeteria";
 
-  /** Auto-select the remembered cafeteria (or the first one) on mount */
-  React.useEffect(() => {
+  /** Auto-select the remembered cafeteria (or the first one) once signed in */
+  useEffect(() => {
+    if (!isAuthenticated) return;
     (async () => {
-      // Wait a tick for AuthContext to load persisted tokens
-      await new Promise((r) => setTimeout(r, 150));
       try {
         const cafeterias = await getCafeterias();
         if (cafeterias.length > 0) {
@@ -94,7 +99,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsCafeteriaLoading(false);
       }
     })();
-  }, []);
+  }, [isAuthenticated]);
 
   /** Load cart when cafeteria is selected */
   const loadCart = useCallback(async (cafeteriaId: string) => {

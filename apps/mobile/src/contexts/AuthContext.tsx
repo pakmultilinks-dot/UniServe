@@ -20,6 +20,15 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /**
+   * True once persisted tokens have been read from storage — whether or
+   * not a session exists. Data providers must wait for this before their
+   * first fetch: firing earlier sends unauthenticated requests that 401
+   * (and, when a refresh token does exist, trigger a needless refresh
+   * round-trip), which surfaced on cold start as a "Choose a cafeteria"
+   * flash and a burst of console errors.
+   */
+  authReady: boolean;
   isEmailVerified: boolean;
   /**
    * True when the previous session ended because token refresh failed
@@ -213,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     isAuthenticated: !!user && !!accessToken,
     isLoading,
+    authReady: !isLoading,
     isEmailVerified: user?.email_verified ?? false,
     sessionExpired,
     login,

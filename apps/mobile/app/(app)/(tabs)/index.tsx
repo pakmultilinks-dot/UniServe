@@ -69,7 +69,7 @@ interface ToastState {
 export default function HomeScreen() {
   const { resolvedTheme } = useTheme();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const {
     selectedCafeteria,
     selectCafeteria,
@@ -134,8 +134,12 @@ export default function HomeScreen() {
 
   const isCafeteriaOpen = selectedCafeteria?.operational_status === "open";
 
-  // Load cafeterias for bottom sheet
+  // Load cafeterias for bottom sheet. Gated on isAuthenticated: on cold start
+  // the persisted token may not be in memory yet, and fetching anyway sent an
+  // unauthenticated request that 401'd and flashed the cafeteria picker with
+  // a "Failed to load cafeterias" error before auth settled.
   useEffect(() => {
+    if (!isAuthenticated) return;
     setCafeteriasLoading(true);
     setCafeteriasError("");
     getCafeterias()
@@ -154,7 +158,7 @@ export default function HomeScreen() {
       })
       .finally(() => setCafeteriasLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAuthenticated]);
 
   // Load menu items
   const loadMenu = useCallback(async () => {
