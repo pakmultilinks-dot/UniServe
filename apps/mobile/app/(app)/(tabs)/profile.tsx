@@ -566,7 +566,9 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: { padding: 16, paddingBottom: 100 },
+  // 132 clears the fixed tab bar (56 + bottom inset) with room to spare so
+  // the footer/version line is never the thing hiding behind the nav.
+  content: { padding: 16, paddingBottom: 132 },
 
   // Header
   header: { alignItems: "center", marginBottom: 16, paddingVertical: 8 },

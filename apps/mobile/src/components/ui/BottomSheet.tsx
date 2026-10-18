@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Modal,
   ScrollView,
+  Pressable,
   TouchableWithoutFeedback,
   Dimensions,
   Animated,
@@ -161,12 +162,15 @@ export function BottomSheet({
 export function BottomSheetRow({
   label,
   subtitle,
+  subtitleColor,
   selected,
   onPress,
   icon,
 }: {
   label: string;
   subtitle?: string;
+  /** Optional override for the subtitle tint (e.g. open/closed status). */
+  subtitleColor?: string;
   selected?: boolean;
   onPress: () => void;
   icon?: string;
@@ -176,28 +180,35 @@ export function BottomSheetRow({
   const tcMuted = textColor(resolvedTheme, "muted");
   const brand = brandGreen(resolvedTheme);
 
+  // Pressable (not TouchableWithoutFeedback) so the WHOLE row is the touch
+  // target and gives visible press feedback — the old wrapper made the row
+  // feel inert and left users unsure a tap registered.
   return (
-    <TouchableWithoutFeedback onPress={onPress}>
-      <View style={styles.row}>
-        {icon && (
-          <Ionicons
-            name={icon as any}
-            size={20}
-            color={selected ? brand : tcMuted}
-            style={styles.rowIcon}
-          />
-        )}
-        <View style={styles.rowText}>
-          <Text style={[styles.rowLabel, { color: tc }]}>{label}</Text>
-          {subtitle && (
-            <Text style={[styles.rowSubtitle, { color: tcMuted }]}>{subtitle}</Text>
-          )}
-        </View>
-        {selected && (
-          <Ionicons name="checkmark-circle" size={22} color={brand} />
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!selected }}
+      accessibilityLabel={subtitle ? `${label}, ${subtitle}` : label}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+    >
+      {icon && (
+        <Ionicons
+          name={icon as any}
+          size={20}
+          color={selected ? brand : tcMuted}
+          style={styles.rowIcon}
+        />
+      )}
+      <View style={styles.rowText}>
+        <Text style={[styles.rowLabel, { color: tc }]}>{label}</Text>
+        {subtitle && (
+          <Text style={[styles.rowSubtitle, { color: subtitleColor ?? tcMuted }]}>{subtitle}</Text>
         )}
       </View>
-    </TouchableWithoutFeedback>
+      {selected && (
+        <Ionicons name="checkmark-circle" size={22} color={brand} />
+      )}
+    </Pressable>
   );
 }
 
@@ -252,6 +263,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 4,
+    borderRadius: 10,
+  },
+  // Visible press feedback so a whole-row tap feels responsive.
+  rowPressed: {
+    opacity: 0.6,
   },
   rowIcon: {
     marginRight: 12,

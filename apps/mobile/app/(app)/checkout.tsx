@@ -13,6 +13,8 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -162,9 +164,17 @@ export default function CheckoutScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: bgSec }]}>
+      {/* Keep the note field + primary button reachable when the keyboard opens.
+          iOS uses padding; Android already resizes via windowSoftInputMode. */}
+      <KeyboardAvoidingView
+        style={styles.kbd}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+      {/* paddingTop so the first card isn't tucked under the custom stack header */}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* ── Collection Type ── */}
         <Text style={[styles.sectionTitle, { color: tc }]}>Collection</Text>
@@ -364,7 +374,7 @@ export default function CheckoutScreen() {
           </View>
         ) : null}
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: 24 }} />
       </ScrollView>
 
       {/* ── Bottom Bar ── */}
@@ -386,11 +396,14 @@ export default function CheckoutScreen() {
             {isPlacing ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text style={styles.placeOrderBtnText}>Place Order</Text>
+              <Text style={styles.placeOrderBtnText}>
+                {paymentMethod === "online" ? `Pay ${formatPrice(cartTotal)}` : "Place Order"}
+              </Text>
             )}
           </Pressable>
         </View>
       </SafeAreaView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -399,6 +412,9 @@ export default function CheckoutScreen() {
 
 const styles = StyleSheet.create({
   screen: {
+    flex: 1,
+  },
+  kbd: {
     flex: 1,
   },
   emptyState: {
@@ -416,6 +432,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   scrollContent: {
+    // Top inset keeps the first card clear of the translucent stack header.
+    paddingTop: 16,
     padding: 16,
   },
 

@@ -345,6 +345,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    // Clear the fixed checkout bar pinned to the bottom of this screen.
+    paddingBottom: 110,
   },
 
   // Cafeteria header

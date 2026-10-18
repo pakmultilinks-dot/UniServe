@@ -6,7 +6,7 @@
  * item detail, and order detail are pushed on top (hiding the tab bar).
  */
 import React from "react";
-import { Redirect, Stack } from "expo-router";
+import { Redirect, Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TouchableOpacity } from "react-native";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -29,6 +29,13 @@ function BackButton({ onPress }: { onPress: () => void }) {
 export default function AppLayout() {
   const { resolvedTheme } = useTheme();
   const { isAuthenticated, isLoading, isEmailVerified, user } = useAuth();
+  const router = useRouter();
+
+  /* Expo Router SDK 57's native-stack header does NOT pass `onPress` into
+     headerLeft on Android (the JS-header path does, native-stack does not),
+     so a BackButton wired to the prop's onPress is silently inert. Call
+     router.back() directly — works on both header implementations. */
+  const headerBack = () => <BackButton onPress={() => router.back()} />;
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
   const brand = brandGreen(resolvedTheme);
@@ -68,7 +75,7 @@ export default function AppLayout() {
           headerTintColor: brand,
           headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
           headerShadowVisible: false,
-          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+          headerLeft: headerBack,
         }}
       />
       <Stack.Screen
@@ -87,7 +94,7 @@ export default function AppLayout() {
           headerTintColor: brand,
           headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
           headerShadowVisible: false,
-          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+          headerLeft: headerBack,
         }}
       />
       <Stack.Screen
@@ -99,7 +106,7 @@ export default function AppLayout() {
           headerTintColor: brand,
           headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
           headerShadowVisible: false,
-          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+          headerLeft: headerBack,
         }}
       />
       <Stack.Screen
@@ -111,7 +118,7 @@ export default function AppLayout() {
           headerTintColor: brand,
           headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
           headerShadowVisible: false,
-          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+          headerLeft: headerBack,
         }}
       />
     </Stack>

@@ -232,20 +232,22 @@ export default function ItemDetailScreen() {
             borderRadius={0}
           />
 
-          {/* Back button overlay */}
-          <SafeAreaView style={styles.backOverlay} edges={["top"]}>
+          {/* Overlay controls — one safe-area-aware row so both buttons
+              clear the status bar/notch on every device (the old fixed
+              top:56 favorite button collided with tall status bars). */}
+          <SafeAreaView style={styles.overlayBar} edges={["top"]}>
             <Pressable
               style={[styles.circleBtn, { backgroundColor: bg + "CC" }]}
               onPress={() => router.back()}
               hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
             >
               <Ionicons name="chevron-back" size={22} color={tc} />
             </Pressable>
-          </SafeAreaView>
 
-          {/* Favorite button overlay */}
-          <Pressable
-            style={[styles.favBtn, { backgroundColor: bg + "CC" }]}
+            <Pressable
+              style={[styles.circleBtn, { backgroundColor: bg + "CC" }]}
             onPress={() => {
               // Optimistic heart via FavoritesContext; server rejection reverts.
               toggleFavorite(item.id).catch(() => {});
@@ -259,7 +261,8 @@ export default function ItemDetailScreen() {
               size={20}
               color={isFavorite ? functionalColor(resolvedTheme, "error") : tc}
             />
-          </Pressable>
+            </Pressable>
+          </SafeAreaView>
         </View>
 
         {/* ── Content ── */}
@@ -421,22 +424,18 @@ const styles = StyleSheet.create({
   },
 
   // Overlays
-  backOverlay: {
+  overlayBar: {
     position: "absolute",
-    top: 8,
-    left: 12,
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingTop: 8,
   },
   circleBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  favBtn: {
-    position: "absolute",
-    top: 56,
-    right: 16,
     width: 40,
     height: 40,
     borderRadius: 20,

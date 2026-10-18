@@ -98,6 +98,9 @@ const TERMINAL_ORDER_STATUSES: readonly OrderStatus[] = ["completed", "cancelled
 interface TimelineProps {
   currentStatus: OrderStatus;
   theme: "light" | "dark";
+  /** Staff confirmation timestamp — a cancelled order that was never
+   *  confirmed only ever sat in "Pending", so later stages must not render. */
+  confirmedAt?: string | null;
   /** Staff rejection reason/note, surfaced so a cancelled order never shows a
    *  vague "cancelled" with no explanation (fixes contradictory notifications). */
   rejectionReason?: string | null;
@@ -107,6 +110,7 @@ interface TimelineProps {
 function OrderStatusTimeline({
   currentStatus,
   theme,
+  confirmedAt,
   rejectionReason,
   rejectionNote,
 }: TimelineProps) {
@@ -119,12 +123,21 @@ function OrderStatusTimeline({
   const currentIdx = STATUS_ORDER.indexOf(currentStatus as any);
   const isCancelled = currentStatus === "cancelled";
 
+  /* A cancelled order never traversed the remaining stages — showing greyed
+     "Preparing/Ready/Completed" steps implies progress that did not happen.
+     confirmed_at is the only client-visible marker of forward progress: no
+     confirmation → the order was killed while still Pending. */
+  const reachedIdx = isCancelled ? (confirmedAt ? 1 : 0) : currentIdx;
+  const visibleSteps = STATUS_ORDER.filter(
+    (_, idx) => !isCancelled || idx <= reachedIdx,
+  );
+
   return (
     <View style={[styles.timelineCard, { backgroundColor: bg, borderColor: bc }]}>
-      {STATUS_ORDER.map((status, idx) => {
+      {visibleSteps.map((status, idx) => {
         const config = STATUS_CONFIG[status];
-        const isActive = idx === currentIdx;
-        const isPast = !isCancelled && idx < currentIdx;
+        const isActive = idx === reachedIdx;
+        const isPast = !isCancelled ? idx < currentIdx : idx < reachedIdx;
 
         return (
           <View key={status} style={styles.timelineStep}>
@@ -145,7 +158,7 @@ function OrderStatusTimeline({
                   color={isPast || isActive ? "#ffffff" : tcMuted}
                 />
               </View>
-              {idx < STATUS_ORDER.length - 1 && (
+              {idx < visibleSteps.length - 1 && (
                 <View
                   style={[
                     styles.timelineLine,
@@ -531,6 +544,7 @@ export default function OrderDetailScreen() {
         <OrderStatusTimeline
           currentStatus={order.status}
           theme={resolvedTheme as "light" | "dark"}
+          confirmedAt={order.confirmed_at}
           rejectionReason={order.rejection_reason}
           rejectionNote={order.rejection_note}
         />
@@ -779,8 +793,11 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
-        {/* ── Refunds (Phase 58, Workstream B) ── */}
-        {isTerminal && (
+        {/* ── Refunds (Phase 58, Workstream B) ──
+            Online payments only: a cash order collects nothing at the
+            counter, so a Refunds panel there is pure noise — there is no
+            money to return. */}
+        {isTerminal && order.payment_method === "online" && (
           <View style={[styles.refundCard, { backgroundColor: bg, borderColor: bc }]}>
             <Text style={[styles.refundTitle, { color: tc }]}>Refunds</Text>
 

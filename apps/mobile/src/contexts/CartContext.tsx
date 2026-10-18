@@ -8,6 +8,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useRef } from "react";
 import type { CartResponse, CartItemResponse, Cafeteria } from "@uniserve/shared-types";
+import { SecureStorage } from "../services/secure-storage";
 import {
   getCart,
   addCartItem as apiAddCartItem,
@@ -61,7 +62,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // Prevent concurrent cart operations
   const cartLockRef = useRef(false);
 
-  /** Auto-select the first student cafeteria on mount */
+  /* The user's last choice survives app restarts — without this the app
+     silently reset to the first cafeteria on every launch, discarding the
+     selection the user made on the home screen. */
+  const CAFETERIA_STORAGE_KEY = "uniserve_selected_cafeteria";
+
+  /** Auto-select the remembered cafeteria (or the first one) on mount */
   React.useEffect(() => {
     (async () => {
       // Wait a tick for AuthContext to load persisted tokens
@@ -69,7 +75,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       try {
         const cafeterias = await getCafeterias();
         if (cafeterias.length > 0) {
-          setSelectedCafeteria(cafeterias[0]);
+          let preferredId: string | null = null;
+          try {
+            preferredId = await SecureStorage.getItemAsync(CAFETERIA_STORAGE_KEY);
+          } catch {
+            // Storage unavailable — fall back to the first cafeteria
+          }
+          // The stored id may reference a cafeteria that was removed or
+          // deactivated — only honour it when it is still in the list.
+          const remembered = preferredId
+            ? cafeterias.find((c) => c.id === preferredId)
+            : undefined;
+          setSelectedCafeteria(remembered ?? cafeterias[0]);
         }
       } catch {
         // Silent — cafeteria selection will be manual
@@ -102,6 +119,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const selectCafeteria = useCallback((cafeteria: Cafeteria) => {
     setSelectedCafeteria(cafeteria);
+    // Remember the choice across launches (best-effort — a storage failure
+    // must never block the selection itself).
+    SecureStorage.setItemAsync(CAFETERIA_STORAGE_KEY, cafeteria.id).catch(() => {});
   }, []);
 
   const refreshCart = useCallback(async () => {

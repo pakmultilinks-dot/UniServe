@@ -40,7 +40,16 @@ declare module "expo-router" {
     headerTintColor?: string;
     headerTitleStyle?: Record<string, unknown>;
     headerShadowVisible?: boolean;
-    headerLeft?: (props: { onPress?: () => void }) => ReactNode;
+    /**
+     * Expo Router SDK 57 native-stack headers pass ONLY tint/canGoBack —
+     * they never pass `onPress` (the JS-header path does, native-stack does
+     * not). A headerLeft that wires its button to `props.onPress` renders a
+     * dead button on Android. Always navigate explicitly (router.back()).
+     */
+    headerLeft?: (props: {
+      canGoBack?: boolean;
+      tintColor?: string;
+    }) => ReactNode;
   }
 
   interface TabScreenOptions {

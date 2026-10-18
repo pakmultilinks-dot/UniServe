@@ -29,7 +29,7 @@ import {
   Pressable,
   ActivityIndicator,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -127,6 +127,7 @@ function apiErrorMessage(err: unknown): string {
 
 export default function NotificationsScreen() {
   const { resolvedTheme } = useTheme();
+  const router = useRouter();
   // Single source of truth for the unread badge: the NotificationsContext.
   // The list endpoint (GET /notifications) already returns `unread_count`, so
   // every local change here is mirrored into the context instead of triggering
@@ -244,18 +245,22 @@ export default function NotificationsScreen() {
       <Pressable
         key={n.id}
         onPress={() => {
-          // Mirror web: tapping an unread row marks it read; read
-          // rows are inert.
+          // Tap opens the order the notification is about (deep-linking to
+          // the same order the web notification center links to) and marks
+          // an unread row as read on the way through.
           if (isUnread) handleMarkRead(n);
+          if (n.order_id) router.push(`/order/${n.order_id}`);
         }}
         style={({ pressed }) => [
           styles.row,
           {
             backgroundColor: isUnread ? brand + "10" : "transparent",
             borderBottomColor: resolvedTheme === "dark" ? "#233044" : "#e5e7eb",
-            opacity: pressed && isUnread ? 0.8 : 1,
+            opacity: pressed ? 0.7 : 1,
           },
         ]}
+        accessibilityRole="button"
+        accessibilityLabel={n.title}
       >
         <View style={styles.iconColumn}>
           <Ionicons
@@ -271,7 +276,6 @@ export default function NotificationsScreen() {
               styles.rowTitle,
               { color: tc, fontWeight: isUnread ? "700" : "600" },
             ]}
-            numberOfLines={1}
           >
             {n.title}
           </Text>
@@ -413,7 +417,7 @@ const styles = StyleSheet.create({
   },
   subHeaderText: { fontSize: 13 },
 
-  list: { paddingBottom: 32, paddingTop: 4, paddingHorizontal: 16 },
+  list: { paddingBottom: 56, paddingTop: 4, paddingHorizontal: 16 },
 
   // One card per order group (was: one card per status change).
   groupCard: {

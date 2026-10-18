@@ -5,7 +5,7 @@
  * Headers shown for verify-email, forgot-password, reset-password.
  */
 import React from "react";
-import { Redirect, Stack } from "expo-router";
+import { Redirect, Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TouchableOpacity } from "react-native";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -28,6 +28,11 @@ function BackButton({ onPress }: { onPress: () => void }) {
 export default function AuthLayout() {
   const { resolvedTheme } = useTheme();
   const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+
+  /* Same fix as (app)/_layout.tsx: the SDK 57 native-stack header passes no
+     `onPress` to headerLeft on Android, so navigate explicitly. */
+  const headerBack = () => <BackButton onPress={() => router.back()} />;
   const bg = bgColor(resolvedTheme, "primary");
   const tc = textColor(resolvedTheme, "primary");
   const brand = brandGreen(resolvedTheme);
@@ -67,7 +72,7 @@ export default function AuthLayout() {
           headerTintColor: brand,
           headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
           headerShadowVisible: false,
-          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+          headerLeft: headerBack,
         }}
       />
       <Stack.Screen
@@ -79,7 +84,7 @@ export default function AuthLayout() {
           headerTintColor: brand,
           headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
           headerShadowVisible: false,
-          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+          headerLeft: headerBack,
         }}
       />
       <Stack.Screen
@@ -91,7 +96,7 @@ export default function AuthLayout() {
           headerTintColor: brand,
           headerTitleStyle: { fontWeight: "600", fontSize: 16, color: tc },
           headerShadowVisible: false,
-          headerLeft: ({ onPress }) => <BackButton onPress={onPress!} />,
+          headerLeft: headerBack,
         }}
       />
     </Stack>

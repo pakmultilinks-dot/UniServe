@@ -474,7 +474,9 @@ export default function HomeScreen() {
           style={styles.scrollContent}
           contentContainerStyle={[
             styles.scrollContainer,
-            { paddingBottom: cartItemCount > 0 ? 140 : 100 },
+            // Room for the tab bar (56) + inset + floating CartBar (52 + gap),
+            // so the last row is never hidden behind the bar.
+            { paddingBottom: cartItemCount > 0 ? 168 : 92 },
           ]}
           refreshControl={
             <RefreshControl
@@ -535,16 +537,35 @@ export default function HomeScreen() {
         onClose={() => setCafeteriaSheetVisible(false)}
         title="Select Cafeteria"
       >
-        {cafeterias.map((caf) => (
-          <BottomSheetRow
-            key={caf.id}
-            label={caf.name}
-            subtitle={caf.location ?? undefined}
-            icon="restaurant-outline"
-            selected={caf.id === selectedCafeteria?.id}
-            onPress={() => handleCafeteriaSelect(caf)}
-          />
-        ))}
+        {cafeterias.map((caf) => {
+          const statusLabel =
+            caf.operational_status === "open"
+              ? "Open now"
+              : caf.operational_status === "closing_soon"
+                ? "Closing soon"
+                : caf.operational_status === "maintenance"
+                  ? "Temporarily paused"
+                  : "Closed";
+          const statusColor =
+            caf.operational_status === "open"
+              ? functionalColor(resolvedTheme, "success")
+              : caf.operational_status === "closing_soon"
+                ? functionalColor(resolvedTheme, "warning")
+                : tcMuted;
+          return (
+            <BottomSheetRow
+              key={caf.id}
+              label={caf.name}
+              subtitle={
+                caf.location ? `${caf.location} · ${statusLabel}` : statusLabel
+              }
+              subtitleColor={statusColor}
+              icon="restaurant-outline"
+              selected={caf.id === selectedCafeteria?.id}
+              onPress={() => handleCafeteriaSelect(caf)}
+            />
+          );
+        })}
         {cafeteriasLoading ? (
           <View style={styles.emptySheet}>
             <ActivityIndicator size="large" color={brand} />
@@ -609,20 +630,18 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 4,
-    paddingBottom: 12,
+    paddingTop: 6,
+    paddingBottom: 14,
   },
-  // Solid background + subtle shadow for the sticky search/chips block so
-  // scrolling menu content never shows through with a hard cut.
+  // Solid background for the search/chips block so scrolling menu content
+  // never shows through with a hard cut. No elevation/zIndex: on Android,
+  // elevation promotes the view's paint layer ABOVE the header above it and
+  // the shadow overlaps the café row ("Student Cafeteria" appeared sliced by
+  // this panel). The block already sits outside the ScrollView, so it is
+  // effectively fixed without any elevation trickery.
   stickySearchWrap: {
     paddingHorizontal: 20,
-    paddingBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-    zIndex: 1,
+    paddingBottom: 10,
   },
   headerLeft: {
     flex: 1,

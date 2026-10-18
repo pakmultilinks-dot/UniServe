@@ -56,6 +56,12 @@ export function PasswordInput({ showToggle = true, ...props }: PasswordInputProp
   return (
     <LguInput
       {...props}
+      /* Android keeps rendering the old mask when secureTextEntry flips on a
+         mounted TextInput — the field only re-masks after blur. Remounting
+         the input on toggle forces the new secure state to apply instantly.
+         (`key` on a sibling wrapper would not help; it must wrap the
+         TextInput itself.) */
+      key={visible ? "pwd-visible" : "pwd-masked"}
       secureTextEntry={!visible}
       rightIcon={
         showToggle ? (

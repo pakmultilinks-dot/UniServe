@@ -62,9 +62,6 @@ export default function CartBar({ itemCount, total, onPress }: CartBarProps) {
             </Animated.View>
           )}
         </View>
-        <Text style={styles.itemsLabel}>
-          {itemCount} {itemCount === 1 ? "item" : "items"}
-        </Text>
       </View>
       <View style={styles.right}>
         <Text style={styles.total}>{formatPrice(total)}</Text>
@@ -121,11 +118,6 @@ const styles = StyleSheet.create({
     color: "#302116",
     fontSize: 11,
     fontWeight: "700",
-  },
-  itemsLabel: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "600",
   },
   right: {
     flexDirection: "row",
