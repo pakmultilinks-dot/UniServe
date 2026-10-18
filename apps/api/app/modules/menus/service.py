@@ -1,5 +1,6 @@
 """Menus service — business logic for menu items, daily menus, and favorites."""
 
+import base64
 import contextlib
 import os
 import uuid
@@ -247,6 +248,8 @@ class MenuService:
             item.currency = currency
         if image_url is not None:
             item.image_url = image_url
+            # Bytes in image_data belong to the previous file only.
+            item.image_data = None
         if dietary_info is not None:
             item.dietary_info = dietary_info
         if allergens is not None:
@@ -344,6 +347,10 @@ class MenuService:
 
         old_url = item.image_url
         item.image_url = f"{MENU_IMAGE_URL_PREFIX}{filename}"
+        # Persist the bytes in the DB as a data URI: Render's free plan has an
+        # ephemeral filesystem, so the disk copy alone is wiped on redeploy.
+        # The disk copy is still written (kept for local dev and tests).
+        item.image_data = f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"
         try:
             await self.db.flush()
             # Old file is removed only when no other menu item references it.
@@ -364,6 +371,7 @@ class MenuService:
         item = await self.get_menu_item(menu_item_id)
         old_url = item.image_url
         item.image_url = None
+        item.image_data = None
         await self.db.flush()
         await self._cleanup_orphan_image(old_url)
         logger.info("menu_item_image_removed", item_id=menu_item_id)

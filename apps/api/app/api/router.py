@@ -15,6 +15,7 @@ from app.modules.menus.router import (
     favorites_router,
     menu_items_router,
     search_router,
+    static_images_router,
 )
 from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import router as orders_router
@@ -63,6 +64,11 @@ api_router.include_router(favorites_router, prefix="/favorites", tags=["favorite
 
 # Menu search (standalone)
 api_router.include_router(search_router, prefix="/menu-search", tags=["menu-search"])
+
+# Menu images — DB-backed so they survive Render's ephemeral filesystem.
+# Registered before the StaticFiles mount in main.py, so this route wins
+# for /api/v1/static/food/*.
+api_router.include_router(static_images_router, tags=["menu-images"])
 
 # Carts (user-scoped, cafeteria-scoped)
 api_router.include_router(

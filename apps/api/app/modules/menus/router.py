@@ -1,8 +1,11 @@
 """Menus module — API endpoints for menu items, daily menus, and favorites."""
 
+import base64
+import os
 from datetime import date
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,7 +16,7 @@ from app.core.deps import (
     get_current_user,
     verify_resource_cafeteria,
 )
-from app.modules.menus.models import DailyMenuStatus, MenuCategory
+from app.modules.menus.models import DailyMenuStatus, MenuCategory, MenuItem
 from app.modules.menus.schemas import (
     CopyDailyMenuRequest,
     DailyMenuAddItemRequest,
@@ -28,7 +31,7 @@ from app.modules.menus.schemas import (
     MenuItemResponse,
     MenuItemUpdateRequest,
 )
-from app.modules.menus.service import MenuService
+from app.modules.menus.service import MenuService, resolve_static_image_path
 from app.modules.users.models import Role
 
 # ---- Menu Items Router (nested under cafeterias) ----
@@ -46,6 +49,61 @@ favorites_router = APIRouter()
 # ---- Search Router (standalone) ----
 
 search_router = APIRouter()
+
+# ---- Static food images (DB-backed, survives Render redeploys) ----
+
+static_images_router = APIRouter()
+
+_EXT_CONTENT_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+
+
+@static_images_router.get("/static/food/{filename}", include_in_schema=False)
+async def serve_food_image(filename: str, db: AsyncSession = Depends(get_db)) -> Response:
+    """Serve a menu image from the DB (disk fallback).
+
+    Registered in api_router, so this route is matched BEFORE the
+    StaticFiles mount at /api/v1/static. Render's free plan has an
+    ephemeral filesystem — the DB copy is authoritative; the disk file is
+    only a fallback for images uploaded before migration 0014.
+    """
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    url = f"/api/v1/static/food/{filename}"
+    result = await db.execute(select(MenuItem).where(MenuItem.image_url == url).limit(1))
+    item = result.scalar_one_or_none()
+    if item is not None and item.image_data:
+        header, _, b64 = item.image_data.partition(",")
+        try:
+            raw = base64.b64decode(b64)
+        except (ValueError, TypeError):
+            raw = b""
+        if raw:
+            mime = header.partition(":")[2].partition(";")[0] or "application/octet-stream"
+            return Response(
+                content=raw,
+                media_type=mime,
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+
+    path = resolve_static_image_path(url)
+    if path is not None and os.path.isfile(path):
+        ext = os.path.splitext(path)[1].lower()
+        with open(path, "rb") as f:
+            raw = f.read()
+        return Response(
+            content=raw,
+            media_type=_EXT_CONTENT_TYPES.get(ext, "application/octet-stream"),
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 def _can_view_all_cafeterias(auth: AuthContext) -> bool:

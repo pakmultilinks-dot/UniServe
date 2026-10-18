@@ -85,6 +85,12 @@ class MenuItem(Base):
     )  # Price in smallest currency unit (paisa)
     currency: Mapped[str] = mapped_column(String(3), default="PKR", nullable=False)
     image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Image bytes as a data URI ("data:image/png;base64,...").
+    # Render's free plan has an EPHEMERAL filesystem: files written under
+    # app/static/food at runtime are wiped on every redeploy, so uploaded
+    # images must live in the database. image_url keeps its host-independent
+    # "/api/v1/static/food/<file>" form and is served by the API route.
+    image_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     dietary_info: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )  # JSON: vegetarian, halal, etc.
