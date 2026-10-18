@@ -175,33 +175,26 @@ async def cancel_order(
 async def update_order_status(
     order_id: str,
     body: OrderStatusUpdateRequest,
-    auth: AuthContext = Depends(RequireRole(Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)),
+    auth: AuthContext = Depends(
+        RequireRole(
+            Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF
+        )
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
-    """Update order status (manager/staff only).
+    """Update order status (admin/manager/staff).
 
-    Verifies the user is assigned to the order's cafeteria.
+    Admin has platform-wide oversight; manager/staff must be assigned to the
+    order's cafeteria.
     """
     service = OrderService(db)
 
     # Resolve order to get cafeteria_id for assignment check
     order = await service.get_order(order_id)
 
-    # Verify manager/staff is assigned to this order's cafeteria
-    from sqlalchemy import select as sa_select
-
-    from app.modules.users.models import CafeteriaAssignment
-
-    result = await db.execute(
-        sa_select(CafeteriaAssignment).where(
-            CafeteriaAssignment.user_id == auth.user.id,
-            CafeteriaAssignment.cafeteria_id == order.cafeteria_id,
-        )
+    await _verify_cafeteria_assignment(
+        db, auth.user.id, order.cafeteria_id, auth.user.role
     )
-    if result.scalar_one_or_none() is None:
-        from app.core.exceptions import AuthorizationError
-
-        raise AuthorizationError("You are not assigned to this cafeteria")
 
     order = await service.update_status(
         order_id=order_id,
@@ -215,7 +208,11 @@ async def update_order_status(
 @router.post("/collect", response_model=OrderResponse)
 async def collect_order(
     body: OrderCollectRequest,
-    auth: AuthContext = Depends(RequireRole(Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)),
+    auth: AuthContext = Depends(
+        RequireRole(
+            Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF
+        )
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
     """Collect an order by order number or QR token (staff/manager only).
@@ -234,22 +231,11 @@ async def collect_order(
 
         raise ValidationError("Provide either order_number or collection_token")
 
-    # Verify manager/staff is assigned to this order's cafeteria
+    # Admin has platform oversight; manager/staff must be assigned
     cafeteria_id = order.cafeteria_id
-    from sqlalchemy import select as sa_select
-
-    from app.modules.users.models import CafeteriaAssignment
-
-    result = await db.execute(
-        sa_select(CafeteriaAssignment).where(
-            CafeteriaAssignment.user_id == auth.user.id,
-            CafeteriaAssignment.cafeteria_id == cafeteria_id,
-        )
+    await _verify_cafeteria_assignment(
+        db, auth.user.id, cafeteria_id, auth.user.role
     )
-    if result.scalar_one_or_none() is None:
-        from app.core.exceptions import AuthorizationError
-
-        raise AuthorizationError("You are not assigned to this cafeteria")
 
     order = await service.collect_order(
         order_id=order.id,
@@ -264,33 +250,24 @@ async def collect_order(
 async def manager_cancel_order(
     order_id: str,
     body: OrderCancelRequest,
-    auth: AuthContext = Depends(RequireRole(Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
-    """Manager cancels an order in their cafeteria.
+    """Manager (or admin) cancels an order in their cafeteria.
 
-    Verifies the manager is assigned to the order's cafeteria.
+    Admin has platform-wide oversight; manager must be assigned to the
+    order's cafeteria.
     """
     service = OrderService(db)
 
     # Resolve order to get cafeteria_id for assignment check
     order = await service.get_order(order_id)
 
-    # Verify manager is assigned to this order's cafeteria
-    from sqlalchemy import select as sa_select
-
-    from app.modules.users.models import CafeteriaAssignment
-
-    result = await db.execute(
-        sa_select(CafeteriaAssignment).where(
-            CafeteriaAssignment.user_id == auth.user.id,
-            CafeteriaAssignment.cafeteria_id == order.cafeteria_id,
-        )
+    await _verify_cafeteria_assignment(
+        db, auth.user.id, order.cafeteria_id, auth.user.role
     )
-    if result.scalar_one_or_none() is None:
-        from app.core.exceptions import AuthorizationError
-
-        raise AuthorizationError("You are not assigned to this cafeteria")
 
     order = await service.cancel_order(
         order_id=order_id,
@@ -310,15 +287,21 @@ async def manager_cancel_order(
 async def confirm_order(
     order_id: str,
     body: OrderConfirmRequest,
-    auth: AuthContext = Depends(RequireRole(Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)),
+    auth: AuthContext = Depends(
+        RequireRole(
+            Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF
+        )
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
     """Manager/staff confirms an order for preparation."""
     service = OrderService(db)
     order = await service.get_order(order_id)
 
-    # Verify cafeteria assignment
-    await _verify_cafeteria_assignment(db, auth.user.id, order.cafeteria_id)
+    # Verify cafeteria assignment (admin bypasses)
+    await _verify_cafeteria_assignment(
+        db, auth.user.id, order.cafeteria_id, auth.user.role
+    )
 
     order = await service.confirm_order(
         order_id=order_id,
@@ -332,15 +315,19 @@ async def confirm_order(
 async def reject_order(
     order_id: str,
     body: OrderRejectRequest,
-    auth: AuthContext = Depends(RequireRole(Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
-    """Manager rejects an order."""
+    """Manager (or admin) rejects an order."""
     service = OrderService(db)
     order = await service.get_order(order_id)
 
-    # Verify cafeteria assignment
-    await _verify_cafeteria_assignment(db, auth.user.id, order.cafeteria_id)
+    # Verify cafeteria assignment (admin bypasses)
+    await _verify_cafeteria_assignment(
+        db, auth.user.id, order.cafeteria_id, auth.user.role
+    )
 
     order = await service.reject_order(
         order_id=order_id,
@@ -355,15 +342,21 @@ async def reject_order(
 async def start_preparation(
     order_id: str,
     body: OrderPrepareRequest,
-    auth: AuthContext = Depends(RequireRole(Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)),
+    auth: AuthContext = Depends(
+        RequireRole(
+            Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF
+        )
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
     """Staff starts preparing an order."""
     service = OrderService(db)
     order = await service.get_order(order_id)
 
-    # Verify cafeteria assignment
-    await _verify_cafeteria_assignment(db, auth.user.id, order.cafeteria_id)
+    # Verify cafeteria assignment (admin bypasses)
+    await _verify_cafeteria_assignment(
+        db, auth.user.id, order.cafeteria_id, auth.user.role
+    )
 
     order = await service.start_preparation(
         order_id=order_id,
@@ -377,15 +370,21 @@ async def start_preparation(
 async def mark_ready(
     order_id: str,
     body: OrderReadyRequest,
-    auth: AuthContext = Depends(RequireRole(Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)),
+    auth: AuthContext = Depends(
+        RequireRole(
+            Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF
+        )
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
     """Staff marks an order as ready for collection."""
     service = OrderService(db)
     order = await service.get_order(order_id)
 
-    # Verify cafeteria assignment
-    await _verify_cafeteria_assignment(db, auth.user.id, order.cafeteria_id)
+    # Verify cafeteria assignment (admin bypasses)
+    await _verify_cafeteria_assignment(
+        db, auth.user.id, order.cafeteria_id, auth.user.role
+    )
 
     order = await service.mark_ready(
         order_id=order_id,
@@ -399,15 +398,21 @@ async def mark_ready(
 async def mark_delayed(
     order_id: str,
     body: OrderDelayRequest,
-    auth: AuthContext = Depends(RequireRole(Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF)),
+    auth: AuthContext = Depends(
+        RequireRole(
+            Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF
+        )
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
     """Staff marks an order as delayed."""
     service = OrderService(db)
     order = await service.get_order(order_id)
 
-    # Verify cafeteria assignment
-    await _verify_cafeteria_assignment(db, auth.user.id, order.cafeteria_id)
+    # Verify cafeteria assignment (admin bypasses)
+    await _verify_cafeteria_assignment(
+        db, auth.user.id, order.cafeteria_id, auth.user.role
+    )
 
     order = await service.mark_delayed(
         order_id=order_id,
@@ -496,12 +501,16 @@ async def partial_item_cancel(
 async def cafeteria_sudden_close(
     cafeteria_id: str,
     body: CafeteriaCloseRequest,
-    auth: AuthContext = Depends(RequireRole(Role.CAFETERIA_MANAGER)),
+    auth: AuthContext = Depends(
+        RequireRole(Role.UNIVERSITY_ADMIN, Role.CAFETERIA_MANAGER)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> OrderListResponse:
-    """Manager closes a cafeteria suddenly, cancelling affected orders."""
-    # Verify cafeteria assignment
-    await _verify_cafeteria_assignment(db, auth.user.id, cafeteria_id)
+    """Manager/admin closes a cafeteria suddenly, cancelling affected orders."""
+    # Verify cafeteria assignment (admin bypasses)
+    await _verify_cafeteria_assignment(
+        db, auth.user.id, cafeteria_id, auth.user.role
+    )
 
     service = OrderService(db)
     cancelled_orders = await service.cafeteria_sudden_close(
@@ -522,12 +531,21 @@ async def _verify_cafeteria_assignment(
     db: AsyncSession,
     user_id: str,
     cafeteria_id: str,
+    role: Role | None = None,
 ) -> None:
-    """Verify a user is assigned to a cafeteria. Raises AuthorizationError if not."""
+    """Verify a user may act on a cafeteria. Raises AuthorizationError if not.
+
+    University admins have platform-wide oversight and bypass the assignment
+    check (they are not tied to a single cafeteria). Managers and staff must
+    have an explicit CafeteriaAssignment row for the target cafeteria.
+    """
     from sqlalchemy import select as sa_select
 
     from app.core.exceptions import AuthorizationError
     from app.modules.users.models import CafeteriaAssignment
+
+    if role == Role.UNIVERSITY_ADMIN:
+        return
 
     result = await db.execute(
         sa_select(CafeteriaAssignment).where(
