@@ -39,41 +39,35 @@ export default function OnboardingScreen() {
         style={styles.hero}
         resizeMode="cover"
       >
-        {/* Soft gradient fade from transparent (top) to background (bottom) */}
+        {/* Dark scrim from the top so white text stays readable over any
+            photo, then a soft fade into the page background at the bottom. */}
         <LinearGradient
           colors={[
-            "transparent",
-            isDark ? "rgba(20,14,8,0.35)" : "rgba(255,253,248,0.25)",
+            "rgba(10,7,3,0.82)",
+            "rgba(10,7,3,0.55)",
+            "rgba(10,7,3,0.35)",
             isDark ? "#14100a" : "#fffdf8",
           ]}
-          locations={[0.35, 0.62, 0.88]}
+          locations={[0, 0.35, 0.62, 0.92]}
           style={styles.gradient}
         />
 
-        <SafeAreaView style={styles.content} edges={["bottom"]}>
+        <SafeAreaView style={styles.content} edges={["top", "bottom"]}>
+          <View style={styles.logoWrap}>
+            <Image
+              source={require("../../assets/lgu-logo.jpg")}
+              style={styles.logo}
+              resizeMode="contain"
+              accessibilityLabel="Lahore Garrison University logo"
+            />
+          </View>
+
           <View style={styles.textBlock}>
-            <Text
-              style={[
-                styles.brand,
-                { color: isDark ? colors.gold[300] : colors.gold[700] },
-              ]}
-            >
-              UniServe
-            </Text>
-            <Text
-              style={[
-                styles.title,
-                { color: textColor(resolvedTheme, "primary") },
-              ]}
-            >
+            <Text style={styles.brand}>UniServe</Text>
+            <Text style={styles.title}>
               Campus Food{"\n"}Made Easy
             </Text>
-            <Text
-              style={[
-                styles.subtitle,
-                { color: textColor(resolvedTheme, "secondary") },
-              ]}
-            >
+            <Text style={styles.subtitle}>
               Order your favorite meals in seconds, made for speed and
               simplicity.
             </Text>
@@ -97,21 +91,12 @@ export default function OnboardingScreen() {
             onPress={() => router.push("/login")}
             style={styles.loginLink}
           >
-            <Text
-              style={[
-                styles.loginLinkText,
-                { color: textColor(resolvedTheme, "primary") },
-              ]}
-            >
+            <Text style={styles.loginLinkText}>
               Already have an account? <Text style={styles.loginLinkBold}>Log in</Text>
             </Text>
           </Pressable>
 
-          <Text
-            style={[styles.footer, { color: textColor(resolvedTheme, "muted") }]}
-          >
-            Lahore Garrison University
-          </Text>
+          <Text style={styles.footer}>Lahore Garrison University</Text>
         </SafeAreaView>
       </ImageBackground>
     </View>
@@ -137,6 +122,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingBottom: 36,
   },
+  logoWrap: {
+    position: "absolute",
+    top: 56,
+    alignSelf: "center",
+  },
+  logo: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+  },
   textBlock: {
     marginBottom: 28,
   },
@@ -146,18 +141,27 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     textTransform: "uppercase",
     marginBottom: 10,
+    color: "#e8c07a",
   },
   title: {
     fontSize: 48,
     lineHeight: 52,
     fontWeight: "900",
     letterSpacing: -0.5,
+    color: "#ffffff",
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
     marginTop: 12,
     maxWidth: 300,
+    color: "rgba(255,255,255,0.92)",
+    textShadowColor: "rgba(0,0,0,0.4)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
   button: {
     height: 58,
@@ -186,6 +190,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 16,
     fontWeight: "500",
+    color: "rgba(255,255,255,0.75)",
   },
   loginLink: {
     alignItems: "center",
@@ -195,6 +200,7 @@ const styles = StyleSheet.create({
   loginLinkText: {
     fontSize: 14,
     fontWeight: "500",
+    color: "rgba(255,255,255,0.92)",
   },
   loginLinkBold: {
     fontWeight: "700",

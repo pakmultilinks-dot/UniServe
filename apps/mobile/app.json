@@ -16,7 +16,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#f6efdf"
       },
       "package": "com.uniserve.mobile"
@@ -27,7 +27,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#f6efdf",
-          "image": "./assets/icon.png",
+          "image": "./assets/splash-icon.png",
           "imageWidth": 200
         }
       ],
