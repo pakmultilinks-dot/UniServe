@@ -21,6 +21,9 @@ class MenuItemCreateRequest(BaseModel):
     dietary_info: str | None = None  # JSON string
     allergens: str | None = None  # JSON string
     preparation_time_minutes: int = Field(15, ge=0)
+    # Phase 41 auto-inventory creates a record with quantity=0 ("out of
+    # stock") — let the creator set the opening stock in the same call.
+    initial_quantity: int | None = Field(None, ge=0)
 
 
 class MenuItemUpdateRequest(BaseModel):

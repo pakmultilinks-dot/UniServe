@@ -139,6 +139,7 @@ class MenuService:
         dietary_info: str | None = None,
         allergens: str | None = None,
         preparation_time_minutes: int = 15,
+        initial_quantity: int | None = None,
     ) -> MenuItem:
         """Create a menu item within a cafeteria."""
         item = MenuItem(
@@ -171,7 +172,10 @@ class MenuService:
                 InventoryItem(
                     cafeteria_id=cafeteria_id,
                     menu_item_id=item.id,
-                    quantity=0,
+                    # Default 0 keeps the old behaviour, but callers can set
+                    # the opening stock so a fresh item isn't instantly
+                    # "out of stock" in the inventory table.
+                    quantity=initial_quantity if initial_quantity is not None else 0,
                     unit=InventoryUnit.PORTIONS,
                     low_threshold=10,
                 )

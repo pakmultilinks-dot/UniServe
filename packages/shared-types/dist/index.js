@@ -75,6 +75,20 @@ class ApiClient {
                     }
                     continue;
                 }
+                // Browsers (Chrome/Electron) return an OPAQUE REDIRECT for
+                // redirect:"manual" on cross-origin requests: status 0 with no
+                // readable Location header. Retry once with redirect:"follow" so
+                // the FastAPI trailing-slash 307 is actually followed — same-host
+                // HTTPS redirects preserve the Authorization header in practice.
+                if (response.status === 0) {
+                    response = await fetch(url, {
+                        method,
+                        headers,
+                        body: body != null ? JSON.stringify(body) : undefined,
+                        signal: controller.signal,
+                        redirect: "follow",
+                    });
+                }
                 break;
             }
             if (!response) {

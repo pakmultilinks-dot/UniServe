@@ -132,7 +132,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addToCart = useCallback(
     async (menuItemId: string, quantity: number = 1) => {
-      if (!selectedCafeteria || cartLockRef.current) return;
+      // Fail loudly: a silent return here made the + button look broken
+      // ("no changes occur") with no toast and no console output.
+      if (!selectedCafeteria) {
+        throw new Error("Select a cafeteria first");
+      }
+      if (cartLockRef.current) {
+        throw new Error("Still updating the cart — try again in a second");
+      }
       cartLockRef.current = true;
       try {
         await apiAddCartItem(selectedCafeteria.id, menuItemId, quantity);
@@ -146,7 +153,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const updateQuantity = useCallback(
     async (cartItemId: string, quantity: number) => {
-      if (!selectedCafeteria || cartLockRef.current) return;
+      if (!selectedCafeteria) {
+        throw new Error("Select a cafeteria first");
+      }
+      if (cartLockRef.current) {
+        throw new Error("Still updating the cart — try again in a second");
+      }
       cartLockRef.current = true;
       try {
         if (quantity <= 0) {
@@ -164,7 +176,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const removeFromCart = useCallback(
     async (cartItemId: string) => {
-      if (!selectedCafeteria || cartLockRef.current) return;
+      if (!selectedCafeteria) {
+        throw new Error("Select a cafeteria first");
+      }
+      if (cartLockRef.current) {
+        throw new Error("Still updating the cart — try again in a second");
+      }
       cartLockRef.current = true;
       try {
         await apiRemoveCartItem(selectedCafeteria.id, cartItemId);

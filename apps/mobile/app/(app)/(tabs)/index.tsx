@@ -231,18 +231,30 @@ export default function HomeScreen() {
   // Handle add to cart
   const handleAddToCart = useCallback(
     async (menuItemId: string) => {
-      if (!isCafeteriaOpen) return;
+      // Never fail silently — every blocked path tells the user why.
+      if (!selectedCafeteria) {
+        setToast({ visible: true, message: "Select a cafeteria first", type: "error" });
+        return;
+      }
+      if (!isCafeteriaOpen) {
+        setToast({ visible: true, message: `${selectedCafeteria.name} is closed right now`, type: "error" });
+        return;
+      }
       setBusyItemId(menuItemId);
       try {
         await cartAddToCart(menuItemId, 1);
         setToast({ visible: true, message: "Added to cart", type: "success" });
-      } catch {
-        setToast({ visible: true, message: "Failed to add item", type: "error" });
+      } catch (err: any) {
+        const msg =
+          typeof err?.message === "string" && err.message.trim()
+            ? err.message
+            : "Failed to add item";
+        setToast({ visible: true, message: msg, type: "error" });
       } finally {
         setBusyItemId(null);
       }
     },
-    [cartAddToCart, isCafeteriaOpen],
+    [cartAddToCart, isCafeteriaOpen, selectedCafeteria],
   );
 
   // Handle item press → navigate to detail

@@ -789,8 +789,36 @@ function MenuItemModal({
     dietary_tags: parseTags(item?.dietary_info),
     allergen_tags: parseTags(item?.allergens),
   });
+  /* Image upload lives INSIDE this modal so "Add Menu Item" is a single
+     step: pick the photo now, it uploads right after the item is created.
+     (Previously images could only be attached from the card's "Add Image"
+     link after creation — easy to miss.) */
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  /* Opening stock for the auto-created inventory record (backend
+     initial_quantity). Without it every new item starts at 0 → instantly
+     "Out of Stock" in the inventory table. */
+  const [initialQuantity, setInitialQuantity] = useState<string>(item ? "" : "50");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+
+  const handlePickImage = (file: File | null) => {
+    if (!file) {
+      setImageFile(null);
+      setImagePreview(null);
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      toast("Please choose an image file (JPG, PNG or WebP).", "error");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast("Image must be 5 MB or smaller.", "error");
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -804,17 +832,26 @@ function MenuItemModal({
         dietary_info: JSON.stringify(dietary_tags),
         allergens: JSON.stringify(allergen_tags),
       };
+      let saved: any;
       if (item) {
-        await updateMenuItem(cafeteriaId, item.id, {
+        saved = await updateMenuItem(cafeteriaId, item.id, {
           ...payload,
           price: form.price * 100,
         });
+        if (imageFile) {
+          saved = await uploadMenuItemImage(cafeteriaId, item.id, imageFile);
+        }
       } else {
-        await createMenuItem(cafeteriaId, {
+        const qty = initialQuantity.trim() === "" ? 0 : Number(initialQuantity);
+        saved = await createMenuItem(cafeteriaId, {
           ...payload,
           price: form.price * 100,
           currency: "PKR",
+          initial_quantity: Number.isInteger(qty) && qty >= 0 ? qty : 0,
         });
+        if (imageFile && saved?.id) {
+          saved = await uploadMenuItemImage(cafeteriaId, saved.id, imageFile);
+        }
       }
       onSaved();
     } catch (err: any) {
@@ -888,6 +925,69 @@ function MenuItemModal({
               min={1}
             />
           </div>
+          {/* Photo — pick it here so a new item is never image-less */}
+          <div>
+            <span className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Photo</span>
+            <div className="flex items-center gap-3">
+              {imagePreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imagePreview}
+                  alt="Selected preview"
+                  className="w-16 h-16 rounded-lg object-cover border border-[var(--border-default)]"
+                />
+              ) : item?.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={resolveApiImageUrl(item.image_url) || undefined}
+                  alt={item.name}
+                  className="w-16 h-16 rounded-lg object-cover border border-[var(--border-default)]"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-lg border border-dashed border-[var(--border-default)] flex items-center justify-center text-xs text-[var(--text-muted)]">
+                  No photo
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                <label className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] cursor-pointer">
+                  {imagePreview || item?.image_url ? "Replace image" : "Choose image"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handlePickImage(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {(imagePreview || item?.image_url) && (
+                  <button
+                    type="button"
+                    onClick={() => handlePickImage(null)}
+                    className="text-xs text-red-600 hover:text-red-500 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-1">JPG, PNG or WebP — up to 5 MB.</p>
+          </div>
+          {/* Opening stock — feeds the auto-created inventory record */}
+          {!item && (
+            <div>
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Initial Stock (portions)</label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={initialQuantity}
+                onChange={(e) => setInitialQuantity(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
+              />
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                Starting inventory for this item — 0 would show it as Out of Stock immediately.
+              </p>
+            </div>
+          )}
           {/* Phase 56 — dietary/allergen toggle chips */}
           <div>
             <span className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Dietary</span>

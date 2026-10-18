@@ -92,6 +92,7 @@ async def create_menu_item(
         dietary_info=body.dietary_info,
         allergens=body.allergens,
         preparation_time_minutes=body.preparation_time_minutes,
+        initial_quantity=body.initial_quantity,
     )
     return MenuItemResponse.model_validate(item)
 

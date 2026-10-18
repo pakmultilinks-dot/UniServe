@@ -78,10 +78,12 @@ describe("OrdersPage — queue states", () => {
 
     renderPage();
 
-    expect(await screen.findByText("No pending orders")).toBeInTheDocument();
+    // Default tab is "all" (orders auto-advance out of "pending" within
+    // seconds, so a pending default hid freshly placed mobile orders).
+    expect(await screen.findByText("No orders yet")).toBeInTheDocument();
     expect(apiMock.getCafeteriaOrders).toHaveBeenCalledWith(
       "c1",
-      expect.objectContaining({ status: "pending" }),
+      expect.objectContaining({ status: undefined }),
     );
   });
 

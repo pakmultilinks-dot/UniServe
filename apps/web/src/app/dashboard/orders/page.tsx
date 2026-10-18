@@ -14,8 +14,8 @@ import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import type { Cafeteria, Order } from "@uniserve/shared-types";
 
-const ORDER_TABS = ["pending", "preparing", "ready", "completed", "cancelled"] as const;
-const STAFF_TABS = ["pending", "preparing", "ready"] as const;
+const ORDER_TABS = ["all", "pending", "preparing", "ready", "completed", "cancelled"] as const;
+const STAFF_TABS = ["all", "pending", "preparing", "ready"] as const;
 /* Phase 58 (Workstream H) — the backend OrderRejectionReason enum
    (orders/models.py) is authoritative; the console offers exactly these
    values. Free text in the reason field previously failed the backend
@@ -57,7 +57,10 @@ export default function OrdersPage() {
 
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [selectedCafeteria, setSelectedCafeteria] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<string>("pending");
+  // Default to "all": orders auto-advance (pending → preparing) within
+  // seconds of checkout, so a default "pending" tab made freshly placed
+  // mobile orders invisible on the dashboard.
+  const [activeTab, setActiveTab] = useState<string>("all");
   /* Phase 54 — date filter (backend order_date param; empty = no filter). */
   const [orderDate, setOrderDate] = useState<string>("");
   /* Phase 54 — pagination state. */
@@ -507,10 +510,18 @@ export default function OrdersPage() {
         />
       ) : orders.length === 0 ? (
         <EmptyState
-          title={orderDate ? `No ${activeTab} orders on ${formatDate(orderDate)}` : `No ${activeTab} orders`}
+          title={
+            activeTab === "all"
+              ? "No orders yet"
+              : orderDate
+              ? `No ${activeTab} orders on ${formatDate(orderDate)}`
+              : `No ${activeTab} orders`
+          }
           description={
             orderDate
               ? `No ${activeTab} orders match this date for ${cafeteriaLabel}. Clear the date filter to see more orders.`
+              : activeTab === "all"
+              ? "Orders from the mobile app and web will appear here in real time."
               : "Orders matching this filter will appear here."
           }
           icon={
