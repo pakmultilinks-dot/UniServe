@@ -40,10 +40,14 @@ export default function AppLayout() {
   const tc = textColor(resolvedTheme, "primary");
   const brand = brandGreen(resolvedTheme);
 
-  // Unauthenticated sessions are sent to the login screen — logout and
-  // token expiry both land here cleanly (Phase 42 P2-3 symmetric guard).
+  // Unauthenticated sessions land on the landing page (hero → sign in /
+  // sign up), not directly on the login form — logout and token expiry
+  // both route through it cleanly (Phase 42 P2-3 symmetric guard).
+  // The href names the (auth) group explicitly: a bare `/` is ambiguous
+  // (both (auth)/index and (app)/(tabs)/index collapse to `/`) and bounces
+  // between the two index routes while both groups are mounted (Phase 43).
   if (!isLoading && !isAuthenticated) {
-    return <Redirect href="/login" />;
+    return <Redirect href="/landing" />;
   }
 
   // Defense in depth: an authenticated but unverified account must complete
