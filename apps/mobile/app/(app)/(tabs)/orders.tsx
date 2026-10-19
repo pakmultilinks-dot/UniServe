@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
+import { useAuth } from "../../../src/contexts/AuthContext";
 import { getOrders, getCafeterias } from "../../../src/services/data";
 import { textColor, bgColor, borderColor, brandGreen, brandText, functionalColor } from "../../../src/theme";
 import type { Order, OrderStatus, Cafeteria } from "@uniserve/shared-types";
@@ -77,6 +78,7 @@ function OrderSkeleton({ bg, bc }: { bg: string; bc: string }) {
 
 export default function OrdersScreen() {
   const { resolvedTheme } = useTheme();
+  const { isAuthenticated, authReady } = useAuth();
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,6 +111,15 @@ export default function OrdersScreen() {
   }, [days, statusFilter]);
 
   useEffect(() => {
+    // Cold start: the tab mounts while the stored session is still being
+    // restored. Firing the orders request before the token is ready produced
+    // a burst of 401s (and a misleading "Request timed out" flash). Keep the
+    // skeleton up until auth settles, then load once.
+    if (!authReady) return;
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
     let timedOut = false;
     const timeoutId = setTimeout(() => {
       timedOut = true;
@@ -122,12 +133,14 @@ export default function OrdersScreen() {
       }
     });
     return () => clearTimeout(timeoutId);
-  }, [loadOrders]);
+  }, [loadOrders, authReady, isAuthenticated]);
 
   // Load the id → name map used for the per-card cafeteria label. Best-effort:
   // if this fails the cards simply omit the name, so it never surfaces as an
-  // order-history error.
+  // order-history error. Also waits for auth so the cold-start request burst
+  // stays a single, clean round.
   useEffect(() => {
+    if (!authReady || !isAuthenticated) return;
     let mounted = true;
     getCafeterias()
       .then((list: Cafeteria[]) => {
@@ -140,7 +153,7 @@ export default function OrdersScreen() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authReady, isAuthenticated]);
 
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);

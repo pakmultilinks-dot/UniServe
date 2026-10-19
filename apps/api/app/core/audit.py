@@ -49,6 +49,7 @@ class AuditEventType(str, enum.Enum):
     ACCOUNT_ACTIVATED = "account_activated"
     ACCOUNT_RECOVERED = "account_recovered"
     ACCOUNT_DELETED = "account_deleted"
+    ORDERING_SUSPENSION_CLEARED = "ordering_suspension_cleared"
 
     # Role management
     ROLE_CHANGED = "role_changed"

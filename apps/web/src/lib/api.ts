@@ -687,6 +687,15 @@ export async function activateUser(userId: string): Promise<User> {
   return apiClient.post<User>(`/users/${userId}/activate`);
 }
 
+/**
+ * Admin lifts a no-show ordering suspension early (POST
+ * /users/{id}/clear-ordering-suspension). Account status is untouched —
+ * only ordering_suspended / _until / _reason are cleared.
+ */
+export async function clearOrderingSuspension(userId: string): Promise<User> {
+  return apiClient.post<User>(`/users/${userId}/clear-ordering-suspension`);
+}
+
 export async function changeUserRole(
   userId: string,
   role: User["role"],

@@ -1177,6 +1177,30 @@ export class ApiClientError extends Error {
 }
 
 /**
+ * Best-effort decode of a JWT's `exp` claim (seconds → ms).
+ * Returns null for non-JWT tokens or undecodable payloads — callers must
+ * treat null as "unknown expiry" and fall back to the reactive 401 path.
+ */
+function decodeJwtExpMs(token: string): number | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = parts[1]!;
+    // base64url → base64, with padding restored
+    const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const decoded = atob(padded);
+    const claims = JSON.parse(decoded) as { exp?: number };
+    if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp)) {
+      return null;
+    }
+    return claims.exp * 1000;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Typed HTTP client with automatic auth header injection,
  * request timeout, token refresh on 401, and typed responses.
  */
@@ -1215,63 +1239,39 @@ export class ApiClient {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
+      // Proactive refresh: if the access token is a JWT that is already
+      // past its expiry, refresh BEFORE the first attempt so the request
+      // never round-trips through a guaranteed 401 (which shows up as a
+      // console/network error on cold start). Non-JWT or undecodable
+      // tokens are left alone — the reactive 401 path still covers them.
+      if (token && this.tokenProvider.getRefreshToken()) {
+        const expMs = decodeJwtExpMs(token);
+        if (expMs !== null && expMs - 60_000 <= Date.now()) {
+          const refreshed = await this.handleTokenRefresh();
+          if (refreshed) {
+            headers["Authorization"] = `Bearer ${refreshed}`;
+          } else {
+            // Refresh failed — session is dead; fail fast with a clear error.
+            this.tokenProvider.clearTokens();
+            this.onAuthFailure?.();
+            throw new ApiClientError(401, "Session expired. Please log in again.");
+          }
+        }
+      }
+
       // Manual redirect handling: React Native's fetch may drop the
       // Authorization header on 307 redirects (FastAPI trailing-slash
       // redirects). We follow redirects manually, preserving headers.
-      let url = `${this.baseUrl}${endpoint}`;
-      let response: Response | null = null;
-      let redirectCount = 0;
-      const maxRedirects = 5;
-
-      while (redirectCount <= maxRedirects) {
-        response = await fetch(url, {
-          method,
-          headers,
-          body: body != null ? JSON.stringify(body) : undefined,
-          signal: controller.signal,
-          // Prevent automatic redirect following so we can preserve headers
-          redirect: "manual",
-        } as RequestInit);
-
-        // Handle redirects manually (301, 302, 303, 307, 308)
-        if (response.status >= 300 && response.status < 400) {
-          const location = response.headers.get("location");
-          if (!location) break;
-
-          // Resolve relative URLs
-          url = location.startsWith("http") ? location : new URL(location, url).href;
-          redirectCount++;
-
-          // For 303, change method to GET (per spec)
-          if (response.status === 303 && method !== "GET" && method !== "HEAD") {
-            method = "GET" as string;
-          }
-          continue;
-        }
-
-        // Browsers (Chrome/Electron) return an OPAQUE REDIRECT for
-        // redirect:"manual" on cross-origin requests: status 0 with no
-        // readable Location header. Retry once with redirect:"follow" so
-        // the FastAPI trailing-slash 307 is actually followed — same-host
-        // HTTPS redirects preserve the Authorization header in practice.
-        if (response.status === 0) {
-          response = await fetch(url, {
-            method,
-            headers,
-            body: body != null ? JSON.stringify(body) : undefined,
-            signal: controller.signal,
-            redirect: "follow",
-          } as RequestInit);
-        }
-        break;
-      }
+      let response = await this.fetchWithRedirects(
+        `${this.baseUrl}${endpoint}`,
+        method,
+        headers,
+        body != null ? JSON.stringify(body) : undefined,
+        controller.signal,
+      );
 
       if (!response) {
         throw new ApiClientError(0, "Network error: no response received");
-      }
-
-      if (redirectCount > maxRedirects) {
-        throw new ApiClientError(0, "Network error: too many redirects");
       }
 
       // Attempt token refresh on 401 when a refresh token is available.
@@ -1281,18 +1281,25 @@ export class ApiClient {
         const newToken = await this.handleTokenRefresh();
         if (newToken) {
           headers["Authorization"] = `Bearer ${newToken}`;
-          response = await fetch(`${this.baseUrl}${endpoint}`, {
+          // Retry through the same redirect-following path — a bare fetch
+          // here lost the manual 307 handling and dropped auth headers.
+          response = await this.fetchWithRedirects(
+            `${this.baseUrl}${endpoint}`,
             method,
             headers,
-            body: body != null ? JSON.stringify(body) : undefined,
-            signal: controller.signal,
-          });
+            body != null ? JSON.stringify(body) : undefined,
+            controller.signal,
+          );
         } else {
           // Refresh failed — clear auth and notify
           this.tokenProvider.clearTokens();
           this.onAuthFailure?.();
           throw new ApiClientError(401, "Session expired. Please log in again.");
         }
+      }
+
+      if (!response) {
+        throw new ApiClientError(0, "Network error: no response received");
       }
 
       return await this.handleResponse<T>(response);
@@ -1396,6 +1403,77 @@ export class ApiClient {
   }
 
   // ---- Internal helpers ----
+
+  /**
+   * fetch() with manual redirect following (301/302/303/307/308).
+   *
+   * React Native's fetch may drop the Authorization header on FastAPI's
+   * trailing-slash 307 redirects, so redirects are followed manually with
+   * headers preserved. Browsers return an OPAQUE REDIRECT (status 0) for
+   * redirect:"manual" on cross-origin requests — in that case we retry once
+   * with redirect:"follow" (same-host HTTPS redirects preserve auth headers
+   * in practice). Used for BOTH the initial attempt and the post-refresh
+   * retry so behaviour is identical.
+   */
+  private async fetchWithRedirects(
+    startUrl: string,
+    initialMethod: string,
+    headers: Record<string, string>,
+    body: BodyInit | undefined,
+    signal: AbortSignal,
+  ): Promise<Response | null> {
+    let url = startUrl;
+    let method = initialMethod;
+    let response: Response | null = null;
+    let redirectCount = 0;
+    const maxRedirects = 5;
+
+    while (redirectCount <= maxRedirects) {
+      response = await fetch(url, {
+        method,
+        headers,
+        body,
+        signal,
+        // Prevent automatic redirect following so we can preserve headers
+        redirect: "manual",
+      } as RequestInit);
+
+      // Handle redirects manually (301, 302, 303, 307, 308)
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location) break;
+
+        // Resolve relative URLs
+        url = location.startsWith("http") ? location : new URL(location, url).href;
+        redirectCount++;
+
+        // For 303, change method to GET (per spec)
+        if (response.status === 303 && method !== "GET" && method !== "HEAD") {
+          method = "GET";
+        }
+        continue;
+      }
+
+      // Opaque redirect (browser, cross-origin, redirect:"manual"):
+      // status 0 with no readable Location — retry once with follow.
+      if (response.status === 0) {
+        response = await fetch(url, {
+          method,
+          headers,
+          body,
+          signal,
+          redirect: "follow",
+        } as RequestInit);
+      }
+      break;
+    }
+
+    if (redirectCount > maxRedirects) {
+      throw new ApiClientError(0, "Network error: too many redirects");
+    }
+
+    return response;
+  }
 
   private async handleResponse<T>(response: Response): Promise<T> {
     if (response.status === 204) return undefined as T;

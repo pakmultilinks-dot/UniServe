@@ -67,7 +67,9 @@ export async function getTodaysMenu(cafeteriaId: string): Promise<DailyMenu | nu
 
 /** Get the active cart for a cafeteria. */
 export async function getCart(cafeteriaId: string): Promise<CartResponse> {
-  return apiClient.get<CartResponse>(`/cafeterias/${cafeteriaId}/cart`);
+  // Trailing slash: the route is mounted at "/" under the cart prefix —
+  // without it FastAPI answers 307 and the client has to follow a redirect.
+  return apiClient.get<CartResponse>(`/cafeterias/${cafeteriaId}/cart/`);
 }
 
 /** Add an item to the cart. Returns the new cart item. */
@@ -152,7 +154,8 @@ export async function getOrders(params?: OrderParams): Promise<Order[]> {
   if (params?.status) queryParams.append("status", params.status);
   if (params?.days) queryParams.append("days", String(params.days));
   const qs = queryParams.toString();
-  const data = await apiClient.get<OrderListResponse>(`/orders${qs ? `?${qs}` : ""}`);
+  // Trailing slash: GET /orders/ is the mounted route (no 307 redirect).
+  const data = await apiClient.get<OrderListResponse>(`/orders/${qs ? `?${qs}` : ""}`);
   return data.orders ?? [];
 }
 
@@ -336,13 +339,14 @@ interface FavoriteListResponse {
 
 /** List the current user's favorite menu items (user-scoped server-side). */
 export async function getFavorites(): Promise<FavoriteResponse[]> {
-  const data = await apiClient.get<FavoriteListResponse>("/favorites");
+  // Trailing slash: mounted at "/" — avoids the 307 redirect on every fetch.
+  const data = await apiClient.get<FavoriteListResponse>("/favorites/");
   return data.favorites ?? [];
 }
 
 /** Add a menu item to the current user's favorites. */
 export async function addFavorite(menuItemId: string): Promise<FavoriteResponse> {
-  return apiClient.post<FavoriteResponse>("/favorites", { menu_item_id: menuItemId });
+  return apiClient.post<FavoriteResponse>("/favorites/", { menu_item_id: menuItemId });
 }
 
 /** Remove a menu item from the current user's favorites. */

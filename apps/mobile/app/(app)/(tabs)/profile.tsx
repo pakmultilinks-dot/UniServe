@@ -353,7 +353,7 @@ export default function ProfileScreen() {
       {/* ── About ── */}
       <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
         <Text style={[styles.sectionTitle, { color: tcMuted }]}>ABOUT</Text>
-        <SectionRow icon="information-circle-outline" label="App version" value="v0.1.2" isLast theme={theme} />
+          <SectionRow icon="information-circle-outline" label="App version" value="v0.1.4" isLast theme={theme} />
       </View>
 
       {/* ── Footer ── */}

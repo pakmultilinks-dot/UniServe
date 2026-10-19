@@ -420,6 +420,51 @@ async def activate_user(
     return summary
 
 
+# ---- Clear Ordering Suspension (Admin only) ----
+
+
+@router.post("/{user_id}/clear-ordering-suspension", response_model=UserSummary)
+async def clear_ordering_suspension(
+    request: Request,
+    user_id: str,
+    auth: AuthContext = Depends(RequireRole(Role.UNIVERSITY_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lift a no-show ordering suspension (admin only).
+
+    The no-show policy suspends ordering automatically; this endpoint lets a
+    university admin lift it early (e.g. before a demo or after resolving a
+    dispute). Account status is untouched — only the ordering-suspension
+    fields are cleared.
+    """
+    ip, ua = _get_client_info(request)
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise NotFoundException("User", user_id)
+
+    user.ordering_suspended = False
+    user.ordering_suspended_until = None
+    user.ordering_suspension_reason = None
+
+    await log_audit_event(
+        session=db,
+        event_type=AuditEventType.ORDERING_SUSPENSION_CLEARED,
+        user_id=user_id,
+        description=(
+            f"Ordering suspension cleared by {auth.user.role.value} "
+            f"(was no_show_count={user.no_show_count})"
+        ),
+        ip_address=ip,
+        user_agent=ua,
+    )
+
+    summary = UserSummary.model_validate(user)
+    await _attach_cafeteria_info([summary], db)
+    return summary
+
+
 # ---- Delete Account (Self) ----
 
 

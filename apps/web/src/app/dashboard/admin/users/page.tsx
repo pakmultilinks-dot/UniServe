@@ -8,6 +8,7 @@ import {
   getCafeterias,
   suspendUser,
   activateUser,
+  clearOrderingSuspension,
   recoverUser,
   getApiErrorInfo,
 } from "@/lib/api";
@@ -153,6 +154,21 @@ export default function UsersPage() {
       await activateUser(userId);
       await loadUsers();
       toast("Member activated.", "success");
+    } catch (err) {
+      toast(getApiErrorInfo(err).message, "error");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  /* Lift a no-show ordering suspension (the mobile app blocks checkout with
+     "ordering is temporarily suspended" until this is cleared or it expires). */
+  const handleClearSuspension = async (userId: string) => {
+    setActionLoading(userId);
+    try {
+      await clearOrderingSuspension(userId);
+      await loadUsers();
+      toast("Ordering suspension cleared.", "success");
     } catch (err) {
       toast(getApiErrorInfo(err).message, "error");
     } finally {
@@ -368,6 +384,16 @@ export default function UsersPage() {
                                   Activate
                                 </Button>
                               ) : null}
+                              {u.ordering_suspended && (
+                                <Button
+                                  size="sm"
+                                  variant="primary"
+                                  loading={actionLoading === u.id}
+                                  onClick={() => handleClearSuspension(u.id)}
+                                >
+                                  Clear suspension
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="secondary"
