@@ -62,6 +62,7 @@ export default function OnboardingScreen() {
               Order your favorite meals in seconds, made for speed and
               simplicity.
             </Text>
+            <Text style={styles.audience}>For LGU students and staff</Text>
           </View>
 
           <Pressable
@@ -87,7 +88,9 @@ export default function OnboardingScreen() {
             </Text>
           </Pressable>
 
-          <Text style={styles.footer}>Lahore Garrison University</Text>
+          <Text style={[styles.footer, { color: isDark ? "rgba(255,255,255,0.75)" : "rgba(26,18,8,0.65)" }]}>
+            Lahore Garrison University
+          </Text>
         </SafeAreaView>
       </ImageBackground>
     </View>
@@ -140,6 +143,16 @@ const styles = StyleSheet.create({
     marginTop: 12,
     maxWidth: 300,
     color: "rgba(255,255,255,0.92)",
+    textShadowColor: "rgba(0,0,0,0.4)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  audience: {
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    marginTop: 10,
+    color: "#e8c07a",
     textShadowColor: "rgba(0,0,0,0.4)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,

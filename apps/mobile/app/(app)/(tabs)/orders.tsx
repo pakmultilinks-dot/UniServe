@@ -189,6 +189,7 @@ export default function OrdersScreen() {
           })}
         </View>
         {/* Status filter — makes it explicit the list can be filtered by status */}
+        <Text style={[styles.filterLabel, { color: tcMuted }]}>Filter by status</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={true}
@@ -302,6 +303,28 @@ export default function OrdersScreen() {
                   {itemNamesSummary(order)}
                 </Text>
 
+                {/* Pickup details for orders still in the flow */}
+                {(orderStatus === "pending" ||
+                  orderStatus === "preparing" ||
+                  orderStatus === "ready") && (
+                  <View style={[styles.pickupRow, { backgroundColor: statusColor + "12" }]}>
+                    <Ionicons
+                      name={orderStatus === "ready" ? "bag-check-outline" : "time-outline"}
+                      size={14}
+                      color={statusColor}
+                    />
+                    <Text style={[styles.pickupText, { color: statusColor }]}>
+                      {orderStatus === "ready"
+                        ? "Ready — collect now at the counter"
+                        : order.scheduled_collection_time
+                          ? `Pickup scheduled ${formatOrderDate(order.scheduled_collection_time)}`
+                          : order.ready_at
+                            ? `Estimated ready ${formatOrderDate(order.ready_at)}`
+                            : "In progress — watch this card for the ready signal"}
+                    </Text>
+                  </View>
+                )}
+
                 {/* Footer row */}
                 <View style={[styles.orderFooter, { borderTopColor: bcSub }]}>
                   <Text style={[styles.orderTotal, { color: tc }]}>
@@ -324,12 +347,31 @@ export default function OrdersScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32 },
+  list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 96 },
   screenHeader: { marginBottom: 12 },
   screenTitle: { fontSize: 28, fontWeight: "700", lineHeight: 34 },
   screenSubtitle: { fontSize: 13, marginTop: 4 },
   scopeRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
   statusRow: { flexDirection: "row", gap: 8, paddingRight: 20, marginBottom: 18 },
+  pickupRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  pickupText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+  },
   scopeChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,

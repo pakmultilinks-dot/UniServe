@@ -306,51 +306,6 @@ export default function HomeScreen() {
           >
             {greetingText}
           </Text>
-          {selectedCafeteria ? (
-            <Pressable
-              onPress={() => setCafeteriaSheetVisible(true)}
-              style={styles.cafeteriaInline}
-              accessibilityLabel={`Current cafeteria: ${selectedCafeteria.name}. Tap to change.`}
-              accessibilityRole="button"
-            >
-              <Ionicons name="location-outline" size={14} color={brand} />
-              <View style={styles.cafeteriaTextCol}>
-                <View style={styles.cafeteriaNameRow}>
-                  <Text
-                    style={[styles.cafeteriaInlineName, { color: tcSec }]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {selectedCafeteria.name}
-                  </Text>
-                  <View style={[styles.statusDot, { backgroundColor: functionalColor(resolvedTheme, isCafeteriaOpen ? "success" : "error") }]} />
-                  <Ionicons name="chevron-down" size={14} color={tcMuted} />
-                </View>
-                {selectedCafeteria.location ? (
-                  <Text
-                    style={[styles.cafeteriaInlineLoc, { color: tcMuted }]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {selectedCafeteria.location}
-                  </Text>
-                ) : null}
-              </View>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() => setCafeteriaSheetVisible(true)}
-              style={styles.cafeteriaInline}
-              accessibilityLabel="No cafeteria chosen yet. Tap to choose one."
-              accessibilityRole="button"
-            >
-              <Ionicons name="location-outline" size={14} color={brand} />
-              <Text style={[styles.cafeteriaInlineName, { color: tcSec }]}>
-                Choose a cafeteria
-              </Text>
-              <Ionicons name="chevron-down" size={14} color={tcMuted} />
-            </Pressable>
-          )}
         </View>
         <Pressable
           style={styles.headerIcon}
@@ -372,6 +327,79 @@ export default function HomeScreen() {
             </View>
           )}
         </Pressable>
+      </View>
+
+      {/* ── Café selector: its own row so the name never sits clipped
+          under the greeting or behind the sticky search block ── */}
+      <View style={[styles.cafeteriaRow, { backgroundColor: bg }]}>
+        {selectedCafeteria ? (
+          <Pressable
+            onPress={() => setCafeteriaSheetVisible(true)}
+            style={styles.cafeteriaInline}
+            accessibilityLabel={`Current cafeteria: ${selectedCafeteria.name}. Tap to change.`}
+            accessibilityRole="button"
+          >
+            <Ionicons name="location-outline" size={16} color={brand} />
+            <View style={styles.cafeteriaTextCol}>
+              <View style={styles.cafeteriaNameRow}>
+                <Text
+                  style={[styles.cafeteriaInlineName, { color: tcSec }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {selectedCafeteria.name}
+                </Text>
+                <View
+                  style={[
+                    styles.statusDot,
+                    {
+                      backgroundColor: functionalColor(
+                        resolvedTheme,
+                        isCafeteriaOpen ? "success" : "error",
+                      ),
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.cafeteriaStatusText,
+                    {
+                      color: functionalColor(
+                        resolvedTheme,
+                        isCafeteriaOpen ? "success" : "error",
+                      ),
+                    },
+                  ]}
+                >
+                  {isCafeteriaOpen ? "Open now" : "Closed"}
+                </Text>
+                <Ionicons name="chevron-down" size={14} color={tcMuted} />
+              </View>
+              {selectedCafeteria.location ? (
+                <Text
+                  style={[styles.cafeteriaInlineLoc, { color: tcMuted }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {selectedCafeteria.location}
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => setCafeteriaSheetVisible(true)}
+            style={styles.cafeteriaInline}
+            accessibilityLabel="No cafeteria chosen yet. Tap to choose one."
+            accessibilityRole="button"
+          >
+            <Ionicons name="location-outline" size={16} color={brand} />
+            <Text style={[styles.cafeteriaInlineName, { color: tcSec }]}>
+              Choose a cafeteria
+            </Text>
+            <Ionicons name="chevron-down" size={14} color={tcMuted} />
+          </Pressable>
+        )}
       </View>
 
       {/* ── Zone 3+4: Search + Category Chips (solid background so the
@@ -663,10 +691,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   greeting: { fontSize: 27, fontWeight: "800", lineHeight: 32, letterSpacing: -0.7 },
+  cafeteriaRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
   cafeteriaInline: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 7,
     flex: 1,
     paddingRight: 8,
   },
@@ -696,6 +727,11 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginLeft: 7,
     marginRight: 2,
+  },
+  cafeteriaStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginRight: 4,
   },
   headerIcon: {
     width: 40,

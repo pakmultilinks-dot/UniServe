@@ -256,6 +256,12 @@ class UserSummary(BaseModel):
     cafeteria_id: str | None = None
     cafeteria_name: str | None = None
     updated_at: datetime | None = None
+    # No-show ordering suspension (Phase 6 policy). Surfaced so clients can
+    # disable checkout up-front instead of discovering the restriction only
+    # after the backend rejects Place Order.
+    ordering_suspended: bool = False
+    ordering_suspended_until: datetime | None = None
+    no_show_count: int = 0
 
     model_config = {"from_attributes": True}
 

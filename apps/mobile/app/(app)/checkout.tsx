@@ -21,6 +21,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../src/contexts/ThemeContext";
+import { useAuth } from "../../src/contexts/AuthContext";
 import { useCart } from "../../src/contexts/CartContext";
 import { checkoutCart, initiatePayment } from "../../src/services/data";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../src/theme";
@@ -75,6 +76,7 @@ function getCollectionSlots(operatingHours?: string, timezone?: string): string[
 export default function CheckoutScreen() {
   const { resolvedTheme } = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
   const { cart, cartItemCount, cartTotal, selectedCafeteria, refreshCart } = useCart();
 
   const brand = brandGreen(resolvedTheme);
@@ -99,6 +101,27 @@ export default function CheckoutScreen() {
     () => `mobile-checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
 
+  // No-show ordering suspension: the backend rejects checkout with
+  // AccountSuspendedError, so the button must agree with that truth up-front
+  // instead of letting the student reach the last step and fail.
+  const isSuspended = !!user?.ordering_suspended;
+  const suspendedUntil = user?.ordering_suspended_until
+    ? new Date(user.ordering_suspended_until)
+    : null;
+  const suspendedUntilText = suspendedUntil
+    ? suspendedUntil.toLocaleString(undefined, {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  // The button must agree with what the backend will accept: a scheduled
+  // order needs a chosen slot, and a suspended account can't order at all.
+  const canPlaceOrder =
+    !isSuspended && (orderType !== "scheduled" || !!scheduledTime);
+
   const items = cart?.items ?? [];
   const collectionSlots = getCollectionSlots(
     selectedCafeteria?.operating_hours,
@@ -107,6 +130,12 @@ export default function CheckoutScreen() {
 
   const handlePlaceOrder = useCallback(async () => {
     if (!selectedCafeteria) return;
+    if (isSuspended) {
+      setError(
+        "Ordering is suspended on your account. Contact the cafeteria to resolve it.",
+      );
+      return;
+    }
     if (orderType === "scheduled" && !scheduledTime) {
       setError("Choose a collection time for your scheduled order.");
       return;
@@ -146,7 +175,7 @@ export default function CheckoutScreen() {
     } finally {
       setIsPlacing(false);
     }
-  }, [selectedCafeteria, paymentMethod, orderType, scheduledTime, note, checkoutKey, refreshCart, router]);
+  }, [selectedCafeteria, paymentMethod, orderType, scheduledTime, note, checkoutKey, refreshCart, router, isSuspended]);
 
   if (!cart || items.length === 0) {
     return (
@@ -212,7 +241,7 @@ export default function CheckoutScreen() {
                 </Text>
                 <Text style={[styles.paymentOptionSub, { color: tcMuted }]}>
                   {type === "immediate"
-                    ? "The cafeteria will prepare it now"
+                    ? "Prepared now — usually ready in 10–20 min"
                     : scheduledDisabled
                       ? "Not available right now — cafeteria hours are not published"
                       : "Choose a time during cafeteria hours"}
@@ -242,6 +271,18 @@ export default function CheckoutScreen() {
             ) : (
               <Text style={[styles.noSlotsText, { color: tcMuted }]}>No future collection times are available today.</Text>
             )}
+            {scheduledTime ? (
+              <View style={[styles.slotConfirmed, { backgroundColor: bg, borderColor: brand }]}>
+                <Ionicons name="checkmark-circle" size={16} color={brand} />
+                <Text style={[styles.slotConfirmedText, { color: tc }]}>
+                  Collecting at {scheduledTime}
+                </Text>
+              </View>
+            ) : collectionSlots.length > 0 ? (
+              <Text style={[styles.noSlotsText, { color: tcMuted }]}>
+                Tap a time above to confirm your collection slot.
+              </Text>
+            ) : null}
           </View>
         )}
 
@@ -292,13 +333,27 @@ export default function CheckoutScreen() {
             <View style={styles.paymentOptionInfo}>
               <Text style={[styles.paymentOptionLabel, { color: tc }]}>Online Payment</Text>
               <Text style={[styles.paymentOptionSub, { color: tcMuted }]}>
-                Pay securely with JazzCash or card
+                JazzCash or card — you'll continue to the secure payment page
               </Text>
             </View>
             {paymentMethod === "online" && (
               <Ionicons name="checkmark-circle" size={20} color={brand} />
             )}
           </Pressable>
+        </View>
+
+        {/* ── Amount due now vs at pickup ── */}
+        <View style={[styles.dueRow, { backgroundColor: bg, borderColor: bc }]}>
+          <Ionicons
+            name={paymentMethod === "online" ? "card" : "cash-outline"}
+            size={16}
+            color={brand}
+          />
+          <Text style={[styles.dueText, { color: tcSec }]}>
+            {paymentMethod === "online"
+              ? `${formatPrice(cartTotal)} due now online · nothing to pay at pickup`
+              : `${formatPrice(cartTotal)} due at pickup · nothing charged now`}
+          </Text>
         </View>
 
         {/* ── Order Note ── */}
@@ -366,6 +421,23 @@ export default function CheckoutScreen() {
           </View>
         )}
 
+        {/* ── Ordering Suspension (must agree with the disabled button) ── */}
+        {isSuspended ? (
+          <View style={[styles.errorBanner, { backgroundColor: errorBg, borderColor: errorBorder }]}>
+            <Ionicons name="pause-circle" size={16} color={errorColor} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.errorText, { color: errorColor, fontWeight: "700" }]}>
+                Ordering is temporarily suspended
+              </Text>
+              <Text style={[styles.errorText, { color: errorColor }]}>
+                Repeated uncollected orders triggered a temporary restriction.
+                {suspendedUntilText ? ` Expected to lift ${suspendedUntilText}.` : ""}
+                {" "}Contact the cafeteria to appeal or collect your pending orders.
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         {/* ── Error ── */}
         {error ? (
           <View style={[styles.errorBanner, { backgroundColor: errorBg, borderColor: errorBorder }]}>
@@ -389,15 +461,27 @@ export default function CheckoutScreen() {
             </Text>
           </View>
           <Pressable
-            style={[styles.placeOrderBtn, { backgroundColor: isPlacing ? tcMuted : brand }]}
+            style={[
+              styles.placeOrderBtn,
+              {
+                backgroundColor:
+                  isPlacing || isSuspended || !canPlaceOrder ? tcMuted : brand,
+              },
+            ]}
             onPress={handlePlaceOrder}
-            disabled={isPlacing}
+            disabled={isPlacing || isSuspended || !canPlaceOrder}
           >
             {isPlacing ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
               <Text style={styles.placeOrderBtnText}>
-                {paymentMethod === "online" ? `Pay ${formatPrice(cartTotal)}` : "Place Order"}
+                {isSuspended
+                  ? "Ordering suspended"
+                  : !canPlaceOrder
+                    ? "Choose a collection time"
+                    : paymentMethod === "online"
+                      ? `Continue to pay ${formatPrice(cartTotal)}`
+                      : `Place order · pay ${formatPrice(cartTotal)} at counter`}
               </Text>
             )}
           </Pressable>
@@ -468,6 +552,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  dueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 24,
+  },
+  dueText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+  },
   slotSection: {
     marginTop: -10,
     marginBottom: 24,
@@ -495,6 +594,21 @@ const styles = StyleSheet.create({
   noSlotsText: {
     fontSize: 13,
     lineHeight: 18,
+    marginTop: 8,
+  },
+  slotConfirmed: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 10,
+  },
+  slotConfirmedText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
 
   // Note

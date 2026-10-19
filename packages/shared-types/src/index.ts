@@ -157,6 +157,10 @@ export interface User {
   cafeteria_id?: string | null;
   cafeteria_name?: string | null;
   updated_at?: string | null;
+  // No-show ordering suspension — present on /auth/me and login responses.
+  ordering_suspended?: boolean;
+  ordering_suspended_until?: string | null;
+  no_show_count?: number;
 }
 
 export interface TokenPair {

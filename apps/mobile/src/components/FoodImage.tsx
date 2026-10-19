@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from "react";
-import { View, Image, StyleSheet, ViewStyle } from "react-native";
+import { View, Image, StyleSheet, ViewStyle, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { MenuCategory } from "@uniserve/shared-types";
 import { bgColor } from "../theme";
@@ -39,6 +39,7 @@ export default function FoodImage({
   style,
 }: FoodImageProps) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   // Persisted image references are host-independent ("/api/v1/static/…") —
   // resolve against the configured API origin before rendering; fall back
   // to the category placeholder on null, resolution failure, or load error.
@@ -55,10 +56,22 @@ export default function FoodImage({
   if (imageUri && !imageFailed) {
     return (
       <View style={containerStyle}>
+        {/* Beige placeholder + spinner sit UNDER the image so slow loads
+            never show a blank white box — the fixed container keeps the
+            card geometry stable while pixels stream in. */}
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: bgColorHex, alignItems: "center", justifyContent: "center" },
+          ]}
+        >
+          {isLoading && <ActivityIndicator size="small" color="#9ca3af" />}
+        </View>
         <Image
           source={{ uri: imageUri }}
           style={[styles.image, { borderRadius }]}
           resizeMode="cover"
+          onLoadEnd={() => setIsLoading(false)}
           onError={() => setImageFailed(true)}
         />
       </View>

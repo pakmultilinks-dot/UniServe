@@ -52,6 +52,9 @@ export interface User {
     cafeteria_id?: string | null;
     cafeteria_name?: string | null;
     updated_at?: string | null;
+    ordering_suspended?: boolean;
+    ordering_suspended_until?: string | null;
+    no_show_count?: number;
 }
 export interface TokenPair {
     access_token: string;

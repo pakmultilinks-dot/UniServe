@@ -350,10 +350,15 @@ export default function ProfileScreen() {
         <Text style={[styles.logoutText, { color: functionalColor(resolvedTheme, "error") }]}>Sign Out</Text>
       </Pressable>
 
+      {/* ── About ── */}
+      <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
+        <Text style={[styles.sectionTitle, { color: tcMuted }]}>ABOUT</Text>
+        <SectionRow icon="information-circle-outline" label="App version" value="v0.1.2" isLast theme={theme} />
+      </View>
+
       {/* ── Footer ── */}
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: tcMuted }]}>Lahore Garrison University</Text>
-        <Text style={[styles.footerVersion, { color: tcMuted }]}>UniServe v0.1.0</Text>
       </View>
       </ScrollView>
       </SafeAreaView>
@@ -566,9 +571,9 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  // 132 clears the fixed tab bar (56 + bottom inset) with room to spare so
-  // the footer/version line is never the thing hiding behind the nav.
-  content: { padding: 16, paddingBottom: 132 },
+  // 160 clears the fixed tab bar (56 + bottom inset) with generous room so
+  // the Sign Out button and footer are never hiding behind the nav.
+  content: { padding: 16, paddingBottom: 160 },
 
   // Header
   header: { alignItems: "center", marginBottom: 16, paddingVertical: 8 },

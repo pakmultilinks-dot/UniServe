@@ -142,7 +142,7 @@ export default function FavoritesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  list: { paddingBottom: 32 },
+  list: { paddingBottom: 96 },
   screenHeader: { paddingHorizontal: 20, paddingTop: 20, marginBottom: 8 },
   screenTitle: { fontSize: 28, fontWeight: "700", lineHeight: 34 },
   screenSubtitle: { fontSize: 13, marginTop: 4 },
