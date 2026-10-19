@@ -6,7 +6,6 @@
  */
 import React from "react";
 import {
-  Image,
   ImageBackground,
   Pressable,
   StyleSheet,
@@ -53,14 +52,6 @@ export default function OnboardingScreen() {
         />
 
         <SafeAreaView style={styles.content} edges={["top", "bottom"]}>
-          <View style={styles.logoWrap}>
-            <Image
-              source={require("../../assets/lgu-logo.jpg")}
-              style={styles.logo}
-              resizeMode="contain"
-              accessibilityLabel="Lahore Garrison University logo"
-            />
-          </View>
 
           <View style={styles.textBlock}>
             <Text style={styles.brand}>UniServe</Text>
@@ -121,16 +112,6 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     paddingHorizontal: 28,
     paddingBottom: 36,
-  },
-  logoWrap: {
-    position: "absolute",
-    top: 56,
-    alignSelf: "center",
-  },
-  logo: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
   },
   textBlock: {
     marginBottom: 28,
