@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
   },
   subHeaderText: { fontSize: 13 },
 
-  list: { paddingBottom: 56, paddingTop: 4, paddingHorizontal: 16 },
+  list: { paddingBottom: 96, paddingTop: 4, paddingHorizontal: 16 },
 
   // One card per order group (was: one card per status change).
   groupCard: {
