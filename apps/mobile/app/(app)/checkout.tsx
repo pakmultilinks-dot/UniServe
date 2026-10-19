@@ -474,14 +474,14 @@ export default function CheckoutScreen() {
             {isPlacing ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text style={styles.placeOrderBtnText}>
+              <Text style={styles.placeOrderBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                 {isSuspended
                   ? "Ordering suspended"
                   : !canPlaceOrder
                     ? "Choose a collection time"
                     : paymentMethod === "online"
-                      ? `Continue to pay ${formatPrice(cartTotal)}`
-                      : `Place order · pay ${formatPrice(cartTotal)} at counter`}
+                      ? `Pay online · ${formatPrice(cartTotal)}`
+                      : `Place order · ${formatPrice(cartTotal)} at counter`}
               </Text>
             )}
           </Pressable>
@@ -736,10 +736,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 1,
+    maxWidth: "72%",
   },
   placeOrderBtnText: {
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "600",
+    flexShrink: 1,
   },
 });
