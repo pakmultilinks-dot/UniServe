@@ -6,7 +6,7 @@ Provides basic health and readiness checks for the API.
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,7 +27,7 @@ async def health_check() -> dict[str, str]:
 
 
 @router.get("/ready")
-async def readiness_check(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+async def readiness_check(response: Response, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
     """Readiness check — confirms the API, database connectivity AND schema.
 
     Phase 28A rehearsal demonstrated that `SELECT 1` alone stays successful
@@ -44,6 +44,7 @@ async def readiness_check(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
         db_status = "connected"
     except Exception as exc:
         logger.error("Database readiness check failed", error=str(exc))
+        response.status_code = 503
         return {
             "status": "degraded",
             "service": "uniserve-api",
@@ -59,6 +60,9 @@ async def readiness_check(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
             "Schema readiness check failed (core tables missing)", error=str(exc)
         )
         schema_status = "missing"
+
+    if schema_status != "present":
+        response.status_code = 503
 
     return {
         "status": "ready" if schema_status == "present" else "degraded",
