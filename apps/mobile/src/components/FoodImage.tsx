@@ -5,7 +5,7 @@
  * with the category icon. When image URL exists, loads the image.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Image, StyleSheet, ViewStyle, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { MenuCategory } from "@uniserve/shared-types";
@@ -40,11 +40,31 @@ export default function FoodImage({
 }: FoodImageProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const imageTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finishLoading = () => {
+    if (imageTimeout.current) clearTimeout(imageTimeout.current);
+    imageTimeout.current = null;
+    setIsLoading(false);
+  };
   // Persisted image references are host-independent ("/api/v1/static/…") —
   // resolve against the configured API origin before rendering; fall back
   // to the category placeholder on null, resolution failure, or load error.
   const imageUri = resolveApiImageUrl(uri) || CATEGORY_IMAGES[category ?? ""];
   const bgColorHex = "#f3ead8";
+
+  // Slow/unreachable image servers previously left a perpetual spinner.
+  // Reset the state for recycled menu cards and stop trying after 12 seconds.
+  // A failed photo must never block browsing or adding food to the cart.
+  useEffect(() => {
+    setImageFailed(false);
+    setIsLoading(Boolean(imageUri));
+    if (!imageUri) return;
+    imageTimeout.current = setTimeout(() => {
+      setImageFailed(true);
+      setIsLoading(false);
+    }, 12000);
+    return () => { if (imageTimeout.current) clearTimeout(imageTimeout.current); };
+  }, [imageUri]);
 
   const containerStyle: ViewStyle[] = [
     styles.container,
@@ -65,21 +85,22 @@ export default function FoodImage({
             { backgroundColor: bgColorHex, alignItems: "center", justifyContent: "center" },
           ]}
         >
-          {isLoading && <ActivityIndicator size="small" color="#9ca3af" />}
+          {isLoading && <ActivityIndicator testID="food-image-loading" size="small" color="#9ca3af" />}
         </View>
         <Image
+          testID="food-image"
           source={{ uri: imageUri }}
           style={[styles.image, { borderRadius }]}
           resizeMode="cover"
-          onLoadEnd={() => setIsLoading(false)}
-          onError={() => setImageFailed(true)}
+          onLoadEnd={finishLoading}
+          onError={() => { setImageFailed(true); finishLoading(); }}
         />
       </View>
     );
   }
 
   return (
-    <View style={[containerStyle, { backgroundColor: bgColorHex }]}>
+    <View testID="food-image-fallback" style={[containerStyle, { backgroundColor: bgColorHex }]}>
       <Ionicons name="restaurant-outline" size={28} color="#9ca3af" />
     </View>
   );

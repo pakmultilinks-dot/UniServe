@@ -15,6 +15,7 @@ Covers:
 """
 
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
@@ -2074,8 +2075,9 @@ class TestPhase54CafeteriaQueuePagination:
         assert resp.status_code == 200
         assert resp.json()["total"] == 5
 
-        # Today's date → only the 3 today orders, page size 2
-        today = date.today().isoformat()
+        # Orders are dated in the cafeteria-local timezone, not runner UTC.
+        # Just after Pakistan midnight UTC CI can still be on the prior date.
+        today = datetime.now(ZoneInfo(cafeteria.timezone)).date().isoformat()
         resp = await manager_client.get(
             f"/api/v1/orders/cafeteria/{cafeteria.id}?order_date={today}&limit=2&offset=0"
         )

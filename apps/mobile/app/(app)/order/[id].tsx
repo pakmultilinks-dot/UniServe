@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../../src/contexts/ThemeContext";
 import { useCart } from "../../../src/contexts/CartContext";
@@ -522,7 +523,7 @@ export default function OrderDetailScreen() {
   const isTerminal = order.status === "completed" || order.status === "cancelled";
 
   return (
-    <View style={[styles.screen, { backgroundColor: bgSec }]}>
+    <SafeAreaView edges={["bottom"]} style={[styles.screen, { backgroundColor: bgSec }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -1041,9 +1042,9 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
-        <View style={{ height: 32 }} />
+        <View style={{ height: 64 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

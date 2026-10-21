@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 import structlog
 from sqlalchemy import Case, func, select
@@ -37,7 +38,10 @@ def _parse_date(d: str) -> date:
 
 def _default_date_range() -> tuple[date, date]:
     """Default: last 30 days inclusive."""
-    today = date.today()
+    # Orders use cafeteria-local order_date. LGU reporting defaults must use
+    # the campus business day, not the UTC date of the hosting provider.
+    # Otherwise payments placed after Pakistan midnight vanish from reports.
+    today = datetime.now(ZoneInfo("Asia/Karachi")).date()
     start = today - timedelta(days=29)
     return start, today
 

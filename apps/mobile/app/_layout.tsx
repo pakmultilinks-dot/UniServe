@@ -8,6 +8,7 @@
  */
 
 import React from "react";
+import { ActivityIndicator, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
@@ -42,7 +43,9 @@ const MOBILE_ROLES = ["student", "faculty"];
 function RoleGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
 
-  if (isLoading) return null;
+  // Keep the root navigator mounted to display a visible loading screen.
+  // Returning null here hid the entire app during session restoration.
+  if (isLoading) return <>{children}</>;
 
   if (isAuthenticated && user && !MOBILE_ROLES.includes(user.role)) {
     return <WebDashboardGate />;
@@ -56,7 +59,38 @@ function RootNavigator() {
   const { resolvedTheme } = useTheme();
 
   if (isLoading) {
-    return null;
+    return (
+      <View
+        accessible
+        accessibilityLabel="UniServe is restoring your session"
+        style={{
+          flex: 1,
+          backgroundColor: resolvedTheme === "dark" ? "#231d17" : "#fcfaf5",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+          padding: 24,
+        }}
+      >
+        <StatusBar style={resolvedTheme === "dark" ? "light" : "dark"} />
+        <ActivityIndicator size="large" color="#bb9a55" />
+        <Text style={{
+          color: resolvedTheme === "dark" ? "#f5f0e7" : "#302116",
+          fontSize: 17,
+          fontWeight: "600",
+          textAlign: "center",
+        }}>
+          Loading UniServe
+        </Text>
+        <Text style={{
+          color: resolvedTheme === "dark" ? "#d1c4b6" : "#766c60",
+          fontSize: 14,
+          textAlign: "center",
+        }}>
+          Checking your session…
+        </Text>
+      </View>
+    );
   }
 
   return (
