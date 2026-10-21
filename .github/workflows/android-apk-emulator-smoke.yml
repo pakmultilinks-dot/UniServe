@@ -16,7 +16,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      APK_BUILD_RUN: '39621636454'
+      APK_BUILD_RUN: '39624610785'
     steps:
       - name: Wait for actual APK build
         run: gh run watch "$APK_BUILD_RUN" --exit-status --interval 15
