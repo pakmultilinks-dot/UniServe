@@ -522,6 +522,46 @@ class TestPreparationLifecycle:
         assert data["status"] == "completed"
         assert data["collected_at"] is not None
 
+    async def test_ready_after_closing_never_gets_past_pickup_deadline(
+        self,
+        staff_client: AsyncClient,
+        student_client: AsyncClient,
+        student_user: User,
+        staff_user: User,
+        manager_user: User,
+        db: AsyncSession,
+    ):
+        """Completing a 10 PM order at an 8 PM cafeteria cannot expire it immediately."""
+        cafeteria, _, order_data = await _create_and_checkout_order(
+            student_client,
+            db,
+            student_user=student_user,
+            staff_user=staff_user,
+            manager_user=manager_user,
+        )
+        order_id = order_data["id"]
+        # Midnight belongs to the current cafeteria-local date and is already
+        # over at practically every time of day. The exceptional behavior must
+        # use the configured full pickup window, not yesterday's close.
+        cafeteria.closing_time = "00:00"
+        await db.flush()
+        assert (await staff_client.post(
+            f"/api/v1/orders/{order_id}/confirm", json={}
+        )).status_code == 200
+        assert (await staff_client.post(
+            f"/api/v1/orders/{order_id}/prepare", json={}
+        )).status_code == 200
+        response = await staff_client.put(
+            f"/api/v1/orders/{order_id}/ready", json={}
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        ready_at = datetime.fromisoformat(data["ready_at"].replace("Z", "+00:00"))
+        deadline = datetime.fromisoformat(data["pickup_deadline"].replace("Z", "+00:00"))
+        assert deadline > ready_at
+        from app.core.config import settings
+        assert (deadline - ready_at).total_seconds() <= settings.PICKUP_WINDOW_MINUTES * 60
+
     async def test_prepare_sets_eta(
         self,
         staff_client: AsyncClient,
