@@ -16,7 +16,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      APK_BUILD_RUN: '39621636454'
+      APK_BUILD_RUN: '39624610785'
       RELEASE_TAG: uniserve-android-demo-20261021
     steps:
       - name: Wait for native Android build to finish successfully
