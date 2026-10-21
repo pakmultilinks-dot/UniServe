@@ -204,7 +204,7 @@ def create_application() -> FastAPI:
             "status": "running",
             "docs": "/docs",
             "health": "/api/v1/health",
-            "dashboard": "https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app",
+            "dashboard": "https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app",
         }
 
     # Static files — food images served from app/static/food/
