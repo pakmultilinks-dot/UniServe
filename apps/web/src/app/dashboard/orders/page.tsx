@@ -163,9 +163,11 @@ export default function OrdersPage() {
     }
   }, [selectedCafeteria, isStaff, isManager]);
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (background = false) => {
     if (!selectedCafeteria) return;
-    setLoading(true);
+    // A 5-second poll must never replace the visible queue with skeletons.
+    // Foreground navigation/filter changes still show the loading state.
+    if (!background) setLoading(true);
     setAccessError(null);
     setLoadError(null);
     try {
@@ -201,16 +203,19 @@ export default function OrdersPage() {
         setLoadError(getApiErrorInfo(err));
       }
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, [selectedCafeteria, activeTab, orderDate, page, ordersReloadKey]);
 
   useEffect(() => { loadCafeterias(); }, [loadCafeterias]);
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
-  // Auto-refresh every 5s for near real-time updates (preserves cafeteria/status/date/page filters)
+  // Poll quietly without flashing skeletons or spending requests while
+  // the tab is hidden. Navigation, filters, and manual actions still refresh.
   useEffect(() => {
-    const interval = setInterval(loadOrders, 5000);
+    const interval = setInterval(() => {
+      if (!document.hidden) void loadOrders(true);
+    }, 5000);
     return () => clearInterval(interval);
   }, [loadOrders]);
 
