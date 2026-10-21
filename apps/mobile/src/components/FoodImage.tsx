@@ -79,7 +79,7 @@ export default function FoodImage({
             { backgroundColor: bgColorHex, alignItems: "center", justifyContent: "center" },
           ]}
         >
-          {isLoading && <ActivityIndicator size="small" color="#9ca3af" />}
+          {isLoading && <ActivityIndicator testID="food-image-loading" size="small" color="#9ca3af" />}
         </View>
         <Image
           source={{ uri: imageUri }}
@@ -93,7 +93,7 @@ export default function FoodImage({
   }
 
   return (
-    <View style={[containerStyle, { backgroundColor: bgColorHex }]}>
+    <View testID="food-image-fallback" style={[containerStyle, { backgroundColor: bgColorHex }]}>
       <Ionicons name="restaurant-outline" size={28} color="#9ca3af" />
     </View>
   );
