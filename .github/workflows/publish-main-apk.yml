@@ -1,0 +1,55 @@
+name: Publish fresh main APK candidate
+on:
+  push:
+    branches: [ops/publish-main-apk-20261022]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN: '39667961092'
+      SOURCE_SHA: 1cea39907145b7a0a11d530e21afc562ac5a9b3c
+      RELEASE_TAG: uniserve-main-20261022-1cea399
+    steps:
+      - name: Verify exact source and wait for new native build
+        run: |
+          test "$(gh run view "$BUILD_RUN" --json headSha --jq .headSha)" = "$SOURCE_SHA"
+          gh run watch "$BUILD_RUN" --exit-status --interval 20
+      - name: Download and validate the new native binary
+        run: |
+          mkdir dist
+          gh run download "$BUILD_RUN" --name uniserve-apk --dir dist
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from zipfile import ZipFile
+          p = Path('dist/app-release.apk')
+          assert p.stat().st_size > 1000000
+          with ZipFile(p) as z:
+              assert z.testzip() is None
+              assert {'AndroidManifest.xml', 'classes.dex', 'assets/index.android.bundle'} <= set(z.namelist())
+              assert b'example.invalid' not in z.read('assets/index.android.bundle')
+              assert b'https://uniserve-api.onrender.com/api/v1' in z.read('assets/index.android.bundle')
+          p.rename('dist/UniServe-main-1cea399.apk')
+          p = Path('dist/UniServe-main-1cea399.apk')
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          Path('dist/SHA256SUMS.txt').write_text(digest + '  ' + p.name + '\n')
+          Path('dist/provenance.json').write_text(json.dumps({'source_commit': os.environ['SOURCE_SHA'], 'native_build_run': os.environ['BUILD_RUN'], 'sha256': digest, 'bytes': p.stat().st_size}, indent=2))
+          print('New APK archive, bytecode, native bundle and production API origin verified:', digest)
+          PY
+      - name: Publish new candidate with explicit verification limits
+        run: |
+          cat > release-notes.md <<'NOTES'
+          Fresh native Android APK built from merged main commit 1cea39907145b7a0a11d530e21afc562ac5a9b3c, build run https://github.com/pakmultilinks-dot/UniServe/actions/runs/39667961092. This is a new build; no earlier release APK was reused.
+
+          Includes PR #6 screenshot repairs and the loaded-photo timeout regression fix. Full-stack CI passed on this source. Live demo API login, cart, checkout, staff queue, ready notification and collection passed without real payment.
+
+          Release remains a candidate: Render deployment and browser CORS are blocked by missing deployment connection; physical Android/emulator screen verification is outstanding. Not certified as a complete production deployment. SHA256 and source provenance are attached.
+          NOTES
+          gh release create "$RELEASE_TAG" dist/UniServe-main-1cea399.apk dist/SHA256SUMS.txt dist/provenance.json --target "$SOURCE_SHA" --title "UniServe main Android candidate — October 22, 2026" --notes-file release-notes.md --prerelease
+          gh release view "$RELEASE_TAG" --json url,assets
