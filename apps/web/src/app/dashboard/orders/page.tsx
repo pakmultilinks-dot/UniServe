@@ -136,7 +136,18 @@ export default function OrdersPage() {
       setSelectorError(null);
       if (!filtersRestored.current) {
         const stored = loadStoredFilters();
-        if (stored) {
+        // Home's recent order links include the order's cafeteria. A deep
+        // link must take priority over the queue filters kept in sessionStorage,
+        // otherwise a Student Cafeteria order looks missing under Faculty Cafe.
+        // Only accept cafeteria ids that the current user can actually access.
+        const requestedCafeteria = new URLSearchParams(window.location.search).get("cafeteria");
+        const linkedCafeteria = visible.find((c) => c.id === requestedCafeteria)?.id;
+        if (linkedCafeteria) {
+          setSelectedCafeteria(linkedCafeteria);
+          setActiveTab("all");
+          setOrderDate("");
+          setPage(1);
+        } else if (stored) {
           const allowedTabs: string[] = isStaff ? [...STAFF_TABS] : [...ORDER_TABS];
           if (typeof stored.tab === "string" && allowedTabs.includes(stored.tab)) {
             setActiveTab(stored.tab);
@@ -438,6 +449,20 @@ export default function OrdersPage() {
           </div>
         }
       />
+
+      {/* The staff queue is the operational counterpart of the student app:
+          each action writes through the API and is visible in mobile order tracking.
+          The embedded SHA helps detect old immutable Vercel deployment links. */}
+      <div role="note" className="mb-5 flex flex-col gap-2 rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-3 text-sm text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+        <p>
+          <span className="font-semibold text-[var(--text-primary)]">Order workflow:</span>{" "}
+          Pending → Confirm → Prepare → Ready for pickup → Collected.
+          {" "}Choose the correct cafeteria and status, then use the action on each order card.
+        </p>
+        <p className="shrink-0 text-xs text-[var(--text-muted)]" title="Web build revision; compare with the deployed GitHub commit">
+          Web build: {(process.env.UNISERVE_BUILD_SHA || "local").slice(0, 8)}
+        </p>
+      </div>
 
       {/* Phase 46 — cafeteria selector load failure (compact, retryable) */}
       {selectorError && (
@@ -984,6 +1009,13 @@ export default function OrdersPage() {
                 )}
               </div>
             ) : null}
+
+            {detailsModal.detail?.status === "preparing" && (isAdmin || isManager || isStaff) && (
+              <p role="status" className="mt-4 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-900/20 dark:text-brand-300">
+                Kitchen is preparing this order. When the food is ready, select{" "}
+                <strong>Ready</strong> below to notify the student that pickup is available.
+              </p>
+            )}
 
             <div className="flex flex-wrap justify-end gap-2 mt-5">
               {detailsModal.detail && (isStaff || isManager || isAdmin) && (

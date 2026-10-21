@@ -68,8 +68,36 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.clear();
+  window.history.replaceState({}, "", "/dashboard/orders");
   apiMock.getCafeterias.mockResolvedValue(CAFETERIAS);
   apiMock.getMyCafeterias.mockResolvedValue(["c1"]);
+});
+
+describe("OrdersPage — recent-order deep links", () => {
+  it("selects the linked cafeteria and clears stale filters from a prior visit", async () => {
+    apiMock.getCafeterias.mockResolvedValue([
+      ...CAFETERIAS,
+      { ...CAFETERIAS[0], id: "c2", name: "Student Cafeteria" },
+    ]);
+    apiMock.getMyCafeterias.mockResolvedValue(["c1", "c2"]);
+    apiMock.getCafeteriaOrders.mockResolvedValue({ orders: [], total: 0 });
+    window.sessionStorage.setItem("orders-console-filters", JSON.stringify({
+      cafeteria: "c1",
+      tab: "pending",
+      date: "2026-10-19",
+    }));
+    window.history.replaceState({}, "", "/dashboard/orders?cafeteria=c2");
+
+    renderPage();
+
+    expect(await screen.findByText("No orders yet")).toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toHaveValue("c2");
+    expect(apiMock.getCafeteriaOrders).toHaveBeenCalledWith(
+      "c2",
+      expect.objectContaining({ status: undefined, order_date: undefined }),
+    );
+    expect(screen.queryByText(/Date filter:/)).not.toBeInTheDocument();
+  });
 });
 
 describe("OrdersPage — queue states", () => {

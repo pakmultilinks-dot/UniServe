@@ -3,6 +3,11 @@ const { PHASE_PRODUCTION_BUILD } = require("next/constants");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Embed the source revision into every static export so operators can
+  // distinguish an immutable old Vercel preview URL from the active build.
+  env: {
+    UNISERVE_BUILD_SHA: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "local",
+  },
   // Static export — works with Caddy serving _next/static/*
   output: "export",
   // API proxy for development only — disabled in production
