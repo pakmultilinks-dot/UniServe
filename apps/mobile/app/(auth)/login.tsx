@@ -20,6 +20,7 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -119,6 +120,7 @@ export default function LoginScreen() {
   };
 
   return (
+    <SafeAreaView style={[styles.screen, { backgroundColor: bg }]} edges={["top", "bottom"]}>
     <KeyboardAvoidingView
       style={[styles.screen, { backgroundColor: bg }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -269,6 +271,7 @@ export default function LoginScreen() {
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -279,7 +282,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 140,
+    paddingTop: 36,
     paddingBottom: 32,
   },
   brandHeader: {
@@ -296,7 +299,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginTop: 4,
-    marginBottom: 42,
+    marginBottom: 28,
     fontStyle: "italic",
   },
   form: {
@@ -343,6 +346,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: "auto",
     textAlign: "center",
-    paddingBottom: 24,
+    paddingTop: 24,
   },
 });
