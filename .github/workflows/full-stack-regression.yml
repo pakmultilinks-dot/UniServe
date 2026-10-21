@@ -71,7 +71,8 @@ jobs:
       POSTGRES_PORT: '5432'
       POSTGRES_DB: uniserve_test
       POSTGRES_USER: uniserve_test
-      POSTGRES_PASSWORD: uniserve_test_password
+      # Credentials for the ephemeral postgres service stay in the test URLs.
+      # Injecting POSTGRES_PASSWORD here broke Settings' default-value tests.
       APP_SECRET_KEY: ci-nonproduction-test-only-key
       JWT_SECRET_KEY: ci-nonproduction-jwt-key-for-regression-tests-only
       CHECKOUT_CONCURRENCY_PG_URL: postgresql+asyncpg://uniserve_test:uniserve_test_password@127.0.0.1:5432/uniserve_test
