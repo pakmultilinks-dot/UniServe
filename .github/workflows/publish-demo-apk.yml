@@ -1,0 +1,53 @@
+name: Publish verified UniServe demo APK
+
+on:
+  push:
+    branches:
+      - release/publish-demo-apk-20261021
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-demo-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      APK_BUILD_RUN: '39621636454'
+      RELEASE_TAG: uniserve-android-demo-20261021
+    steps:
+      - name: Wait for native Android build to finish successfully
+        run: gh run watch "$APK_BUILD_RUN" --exit-status --interval 15
+      - name: Download actual Android APK (not web bundle)
+        run: |
+          mkdir -p dist
+          gh run download "$APK_BUILD_RUN" --name uniserve-apk --dir dist
+          test -s dist/app-release.apk
+      - name: Verify APK is a valid Android application archive
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          p = Path("dist/app-release.apk")
+          assert p.stat().st_size > 1_000_000, "APK unexpectedly small"
+          with ZipFile(p) as z:
+              assert z.testzip() is None, "Corrupt APK ZIP entry"
+              files = set(z.namelist())
+              assert "AndroidManifest.xml" in files, "Missing Android manifest"
+              assert "classes.dex" in files, "Missing Android bytecode"
+          print(f"APK validated: {p.stat().st_size:,} bytes")
+          PY
+          mv dist/app-release.apk dist/UniServe-Android-Demo.apk
+          sha256sum dist/UniServe-Android-Demo.apk
+      - name: Publish permanent GitHub prerelease download link
+        run: |
+          gh release create "$RELEASE_TAG" dist/UniServe-Android-Demo.apk \
+            --repo "$GH_REPO" \
+            --target main \
+            --title "UniServe Android Demo APK — October 2026" \
+            --notes "Android preview APK built from GitHub Actions run $APK_BUILD_RUN using the UniServe mobile Expo/Gradle release workflow. Android release backend origin defaults to https://uniserve-api.onrender.com/api/v1 unless overridden by repository variable UNISERVE_API_BASE_URL. This is a demo/pre-release APK; automated archive checks are complete, but physical Android login and ordering are not yet validated." \
+            --prerelease
+          gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json url,assets
