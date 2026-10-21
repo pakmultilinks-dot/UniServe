@@ -1,0 +1,28 @@
+name: Verify and repair Render deployment
+
+on:
+  push:
+    branches:
+      - ops/verify-and-trigger-render-20261021
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      CURRENT_WEB_ORIGIN: https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app
+      RENDER_ORIGIN: https://uniserve-api.onrender.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify current deployment and trigger Render only with configured credentials
+        run: python scripts/render_deploy_gate.py
