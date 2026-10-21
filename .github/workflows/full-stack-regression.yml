@@ -1,0 +1,106 @@
+name: Full-stack regression
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uniserve-regression-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Web, mobile and shared checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install monorepo dependencies
+        run: npm ci --legacy-peer-deps
+      - name: Build shared package
+        run: npm run build:shared
+      - name: Test shared package
+        run: npm test --workspace=packages/shared-types
+      - name: Type-check web
+        run: npm run type-check:web
+      - name: Test web
+        run: npm test --workspace=apps/web
+      - name: Lint web
+        run: npm run lint --workspace=apps/web
+      - name: Build web static export (isolated fake API origin)
+        env:
+          NEXT_PUBLIC_API_URL: https://example.invalid/api/v1
+        run: npm run build --workspace=apps/web
+      - name: Type-check mobile
+        run: npm run type-check:mobile
+      - name: Test mobile (sequential to avoid flaky cold-cache worker timeouts)
+        run: npm test --workspace=apps/mobile -- --runInBand
+      - name: Lint mobile
+        run: npm run lint --workspace=apps/mobile
+      - name: Bundle Android release JavaScript with configured API origin
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_API_BASE_URL: https://example.invalid/api/v1
+        run: npx expo export --platform android --output-dir ../../artifacts/mobile-ci-export
+
+  backend:
+    name: API tests with disposable PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: uniserve_test
+          POSTGRES_USER: uniserve_test
+          POSTGRES_PASSWORD: uniserve_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U uniserve_test -d uniserve_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      APP_ENV: testing
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: uniserve_test
+      POSTGRES_USER: uniserve_test
+      # Credentials for the ephemeral postgres service stay in the test URLs.
+      # Injecting POSTGRES_PASSWORD here broke Settings' default-value tests.
+      APP_SECRET_KEY: ci-nonproduction-test-only-key
+      JWT_SECRET_KEY: ci-nonproduction-jwt-key-for-regression-tests-only
+      CHECKOUT_CONCURRENCY_PG_URL: postgresql+asyncpg://uniserve_test:uniserve_test_password@127.0.0.1:5432/uniserve_test
+      MIGRATION_TEST_PG_URL: postgresql+asyncpg://uniserve_test:uniserve_test_password@127.0.0.1:5432/postgres
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+      - name: Install production-pinned runtime dependencies
+        run: python -m pip install -r requirements.lock.txt
+      - name: Install API with test tools
+        run: python -m pip install -e '.[dev,test]'
+      - name: Lint without auto-modifying the checkout
+        run: python -m ruff check --no-fix app migrations
+      - name: Full API regression suite
+        run: python -m pytest -q --no-header -p no:cacheprovider
+      - name: Record pre-existing mypy debt (not yet a passing gate)
+        if: always()
+        continue-on-error: true
+        run: python -m mypy app
