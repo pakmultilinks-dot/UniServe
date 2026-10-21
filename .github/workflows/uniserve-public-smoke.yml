@@ -1,0 +1,73 @@
+name: Verify UniServe live endpoints
+on:
+  push:
+    branches:
+      - ops/live-deployment-check-20261021
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Probe public web and API without credentials
+        env:
+          WEB_ORIGIN: https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app
+          API_ORIGIN: https://uniserve-api.onrender.com
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          web = os.environ["WEB_ORIGIN"]
+          api = os.environ["API_ORIGIN"]
+          checks = [
+              ("Vercel web", web + "/", False),
+              ("Render API liveness", api + "/api/v1/health", True),
+              ("Render database readiness", api + "/api/v1/health/ready", True),
+          ]
+          failures = []
+          for name, url, expect_json in checks:
+              print(f"Checking {name}: {url}", flush=True)
+              req = urllib.request.Request(url, headers={"User-Agent": "UniServe-Deployment-Smoke/1.0"})
+              try:
+                  with urllib.request.urlopen(req, timeout=115) as resp:
+                      body = resp.read(65536)
+                      print(f"{name} => HTTP {resp.status}; destination={resp.url}", flush=True)
+                      if expect_json:
+                          data = json.loads(body.decode())
+                          print(f"{name}: status={data.get('status')}; db={data.get('database')}; schema={data.get('schema')}", flush=True)
+                          required = "ready" if "readiness" in name else "healthy"
+                          if data.get("status") != required:
+                              failures.append(f"{name}: not {required}")
+              except (urllib.error.URLError, ValueError, TimeoutError) as exc:
+                  failures.append(f"{name}: {type(exc).__name__} {exc}")
+                  print(f"{name} FAILED: {type(exc).__name__}: {exc}", flush=True)
+
+          # Browser CORS proof without a login or private credentials.
+          cors_url = api + "/api/v1/auth/login"
+          req = urllib.request.Request(cors_url, method="OPTIONS", headers={
+              "Origin": web,
+              "Access-Control-Request-Method": "POST",
+              "Access-Control-Request-Headers": "content-type",
+          })
+          try:
+              with urllib.request.urlopen(req, timeout=40) as resp:
+                  allowed = resp.headers.get("Access-Control-Allow-Origin")
+                  print(f"Browser CORS: HTTP {resp.status}, allow-origin={allowed}", flush=True)
+                  if allowed != web:
+                      failures.append("API does not allow exact dashboard Origin")
+          except urllib.error.URLError as exc:
+              print(f"Browser CORS FAILED: {exc}", flush=True)
+              failures.append(f"Browser CORS: {exc}")
+
+          if failures:
+              print("Deployment smoke failures:\n" + "\n".join(failures), flush=True)
+              raise SystemExit(1)
+          print("All public deployment smoke checks passed. Authenticated E2E NOT tested.", flush=True)
+          PY
