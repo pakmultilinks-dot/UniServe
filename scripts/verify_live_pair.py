@@ -81,6 +81,35 @@ def run() -> int:
     except (URLError, OSError, ValueError) as exc:
         issues.append(f"Web fetch: {type(exc).__name__}: {exc}")
 
+    # Diagnostic discovery only: never tell users a guessed alias works unless
+    # the remote server actually replies and its JS carries our new marker.
+    for candidate in [
+        "https://uniserve-web-dashboard-pakmultilinks-dot.vercel.app",
+        "https://uniserve-web-dashboard.vercel.app",
+        "https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app",
+    ]:
+        try:
+            c_status, c_html, _ = request(candidate + "/dashboard/orders")
+            print(f"Candidate production domain {candidate}: HTTP {c_status}", flush=True)
+            if c_status != 200:
+                continue
+            probe = JsScripts()
+            probe.feed(c_html.decode("utf-8", errors="replace"))
+            found = False
+            for path in probe.src[:35]:
+                address = urljoin(candidate + "/", path)
+                if urlparse(address).netloc != urlparse(candidate).netloc:
+                    continue
+                script_status, script_body, _ = request(address)
+                if script_status == 200 and (b"Order workflow:" in script_body or b"Web build:" in script_body):
+                    found = True
+                    break
+            print(f"Candidate carries current queue marker: {found}", flush=True)
+            if found:
+                print(f"CONFIRMED UP-TO-DATE CANDIDATE: {candidate}", flush=True)
+        except (URLError, OSError, ValueError) as exc:
+            print(f"Candidate not usable: {candidate}: {type(exc).__name__}", flush=True)
+
     for label, path in [
         ("API liveness", "/api/v1/health"),
         ("API readiness", "/api/v1/health/ready"),
