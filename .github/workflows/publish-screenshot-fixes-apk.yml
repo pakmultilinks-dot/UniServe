@@ -1,0 +1,59 @@
+name: Publish verified UniServe demo APK
+
+on:
+  push:
+    branches:
+      - release/publish-screenshot-repair-20261022
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-demo-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      APK_BUILD_BRANCH: release/android-screenshot-repair-20261022
+      RELEASE_TAG: uniserve-android-screenshot-fixes-20261022
+    steps:
+      - name: Select latest native APK build from release branch
+        run: |
+          APK_BUILD_RUN="$(gh run list --repo "$GH_REPO" --workflow "Build Android APK" --branch "$APK_BUILD_BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId')"
+          test -n "$APK_BUILD_RUN"
+          echo "APK_BUILD_RUN=$APK_BUILD_RUN" >> "$GITHUB_ENV"
+          echo "Using native build run $APK_BUILD_RUN"
+      - name: Wait for actual native APK build
+        run: gh run watch "$APK_BUILD_RUN" --repo "$GH_REPO" --exit-status --interval 15
+      - name: Download actual Android APK (not web bundle)
+        run: |
+          mkdir -p dist
+          gh run download "$APK_BUILD_RUN" --name uniserve-apk --dir dist
+          test -s dist/app-release.apk
+      - name: Verify APK is a valid Android application archive
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          p = Path("dist/app-release.apk")
+          assert p.stat().st_size > 1_000_000, "APK unexpectedly small"
+          with ZipFile(p) as z:
+              assert z.testzip() is None, "Corrupt APK ZIP entry"
+              files = set(z.namelist())
+              assert "AndroidManifest.xml" in files, "Missing Android manifest"
+              assert "classes.dex" in files, "Missing Android bytecode"
+          print(f"APK validated: {p.stat().st_size:,} bytes")
+          PY
+          mv dist/app-release.apk dist/UniServe-Android-Screenshot-Fixes.apk
+          sha256sum dist/UniServe-Android-Screenshot-Fixes.apk
+      - name: Publish permanent GitHub prerelease download link
+        run: |
+          gh release create "$RELEASE_TAG" dist/UniServe-Android-Screenshot-Fixes.apk \
+            --repo "$GH_REPO" \
+            --target fix/mobile-screen-screenshot-defects-20261022 \
+            --title "UniServe Android Screenshot Repairs — October 22, 2026" \
+            --notes "Android preview APK built from GitHub Actions run $APK_BUILD_RUN using the UniServe mobile Expo/Gradle release workflow. Android release backend origin defaults to https://uniserve-api.onrender.com/api/v1 unless overridden by repository variable UNISERVE_API_BASE_URL. This new pre-release includes Android registration bottom-inset, blank startup loading, FoodImage timeout/fallback, order-detail safe area, and checkout progress UX changes from PR #6. Automated source and archive checks were completed, but physical Android and deployed live E2E are NOT yet certified." \
+            --prerelease
+          gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json url,assets
