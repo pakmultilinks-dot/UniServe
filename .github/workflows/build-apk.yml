@@ -2,17 +2,21 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - release/android-apk-20261021
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 70
     defaults:
       run:
         working-directory: apps/mobile
     env:
       # Repository variable can override the fallback production API host.
       # This is a public URL, not an authentication secret.
-      EXPO_PUBLIC_API_BASE_URL: ${{ vars.UNISERVE_API_BASE_URL }}
+      EXPO_PUBLIC_API_BASE_URL: ${{ vars.UNISERVE_API_BASE_URL || 'https://uniserve-api.onrender.com/api/v1' }}
     steps:
       - name: Checkout selected workflow revision
         uses: actions/checkout@v4
@@ -59,6 +63,11 @@ jobs:
         run: |
           cd android
           ./gradlew assembleRelease --no-daemon
+
+      - name: Inspect APK output
+        run: |
+          test -s android/app/build/outputs/apk/release/app-release.apk
+          ls -lh android/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
