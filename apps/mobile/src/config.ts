@@ -37,7 +37,10 @@ const getEnvironment = (): Environment => {
 
 const environment = getEnvironment();
 
-export const API_BASE_URL = ENV[environment].API_BASE_URL;
+// Expo inlines this value at bundle time. Respect it for release APKs too.
+// Previously the override applied only to development builds.
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+export const API_BASE_URL = configuredApiUrl || ENV[environment].API_BASE_URL;
 export const APP_ENV = environment;
 
 /**
