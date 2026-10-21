@@ -40,7 +40,7 @@ async def test_readiness_ready_with_schema(client):
 
 @pytest.mark.asyncio
 async def test_readiness_degraded_when_schema_missing(client):
-    """SELECT 1 success + missing core tables must report degraded.
+    """SELECT 1 success + missing core tables must return 503 degraded.
 
     Regression guard for the Phase 28A disaster-recovery rehearsal: after a
     schema wipe the database server still answers SELECT 1, but the API is
@@ -62,7 +62,7 @@ async def test_readiness_degraded_when_schema_missing(client):
 
     app.dependency_overrides[get_db] = _fake_db
     response = await client.get("/api/v1/health/ready")
-    assert response.status_code == 200
+    assert response.status_code == 503
     data = response.json()
     assert data["status"] == "degraded"
     assert data["database"] == "connected"
@@ -71,7 +71,7 @@ async def test_readiness_degraded_when_schema_missing(client):
 
 @pytest.mark.asyncio
 async def test_readiness_degraded_when_db_disconnected(client):
-    """Database connectivity failure must report degraded (unchanged)."""
+    """Database connectivity failure must return 503 (not a false healthy 200)."""
     from app.core.database import get_db
     from app.main import app
 
@@ -84,7 +84,7 @@ async def test_readiness_degraded_when_db_disconnected(client):
 
     app.dependency_overrides[get_db] = _fake_db
     response = await client.get("/api/v1/health/ready")
-    assert response.status_code == 200
+    assert response.status_code == 503
     data = response.json()
     assert data["status"] == "degraded"
     assert data["database"] == "disconnected"
