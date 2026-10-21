@@ -49,7 +49,7 @@ jobs:
 
           Includes PR #6 screenshot repairs and the loaded-photo timeout regression fix. Full-stack CI passed on this source. Live demo API login, cart, checkout, staff queue, ready notification and collection passed without real payment.
 
-          Release remains a candidate: Render deployment and browser CORS are blocked by missing deployment connection; physical Android/emulator screen verification is outstanding. Not certified as a complete production deployment. SHA256 and source provenance are attached.
+          Render and Vercel deployed the exact merged source. API/database readiness and exact-origin browser CORS preflight pass; the live demo API flow passed again after deployment with CORS headers verified. Physical Android/emulator screen verification and interactive browser E2E remain outstanding, so this is a candidate APK. SHA256 and source provenance are attached.
           NOTES
           gh release create "$RELEASE_TAG" dist/UniServe-main-1cea399.apk dist/SHA256SUMS.txt dist/provenance.json --target "$SOURCE_SHA" --title "UniServe main Android candidate — October 22, 2026" --notes-file release-notes.md --prerelease
           gh release view "$RELEASE_TAG" --json url,assets
