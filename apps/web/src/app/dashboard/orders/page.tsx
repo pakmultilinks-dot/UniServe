@@ -136,7 +136,18 @@ export default function OrdersPage() {
       setSelectorError(null);
       if (!filtersRestored.current) {
         const stored = loadStoredFilters();
-        if (stored) {
+        // Home's recent order links include the order's cafeteria. A deep
+        // link must take priority over the queue filters kept in sessionStorage,
+        // otherwise a Student Cafeteria order looks missing under Faculty Cafe.
+        // Only accept cafeteria ids that the current user can actually access.
+        const requestedCafeteria = new URLSearchParams(window.location.search).get("cafeteria");
+        const linkedCafeteria = visible.find((c) => c.id === requestedCafeteria)?.id;
+        if (linkedCafeteria) {
+          setSelectedCafeteria(linkedCafeteria);
+          setActiveTab("all");
+          setOrderDate("");
+          setPage(1);
+        } else if (stored) {
           const allowedTabs: string[] = isStaff ? [...STAFF_TABS] : [...ORDER_TABS];
           if (typeof stored.tab === "string" && allowedTabs.includes(stored.tab)) {
             setActiveTab(stored.tab);
