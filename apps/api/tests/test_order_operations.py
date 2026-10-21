@@ -522,6 +522,59 @@ class TestPreparationLifecycle:
         assert data["status"] == "completed"
         assert data["collected_at"] is not None
 
+    async def test_ready_after_closing_never_gets_past_pickup_deadline(
+        self,
+        staff_client: AsyncClient,
+        student_client: AsyncClient,
+        student_user: User,
+        staff_user: User,
+        manager_user: User,
+        db: AsyncSession,
+    ):
+        """Completing a 10 PM order at an 8 PM cafeteria cannot expire it immediately."""
+        cafeteria, _, order_data = await _create_and_checkout_order(
+            student_client,
+            db,
+            student_user=student_user,
+            staff_user=staff_user,
+            manager_user=manager_user,
+        )
+        order_id = order_data["id"]
+        # Midnight belongs to the current cafeteria-local date and is already
+        # over at practically every time of day. The exceptional behavior must
+        # use the configured full pickup window, not yesterday's close.
+        cafeteria.closing_time = "00:00"
+        await db.flush()
+        assert (await staff_client.post(
+            f"/api/v1/orders/{order_id}/confirm", json={}
+        )).status_code == 200
+        assert (await staff_client.post(
+            f"/api/v1/orders/{order_id}/prepare", json={}
+        )).status_code == 200
+        response = await staff_client.put(
+            f"/api/v1/orders/{order_id}/ready", json={}
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        ready_at = datetime.fromisoformat(data["ready_at"].replace("Z", "+00:00"))
+        deadline = datetime.fromisoformat(data["pickup_deadline"].replace("Z", "+00:00"))
+        assert deadline > ready_at
+        from app.core.config import settings
+        assert (deadline - ready_at).total_seconds() <= settings.PICKUP_WINDOW_MINUTES * 60
+
+        # Both student/mobile endpoints must see the same server status and
+        # the in-app Ready notification after staff acts on the web queue.
+        student_view = await student_client.get(f"/api/v1/orders/{order_id}")
+        assert student_view.status_code == 200
+        assert student_view.json()["status"] == "ready"
+
+        notifications = await student_client.get("/api/v1/notifications")
+        assert notifications.status_code == 200
+        assert any(
+            n["notification_type"] == "order_ready" and n["order_id"] == order_id
+            for n in notifications.json()["items"]
+        )
+
     async def test_prepare_sets_eta(
         self,
         staff_client: AsyncClient,

@@ -44,7 +44,7 @@ services:
       - key: ORDER_AUTO_ACCEPT
         value: "true"
       - key: CORS_ORIGINS
-        value: '["https://uniserve-web-dashboard-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard.vercel.app", "http://localhost:8081", "http://localhost:8082"]'
+        value: '["https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app", "https://uniserve-web-dashboard.vercel.app", "http://localhost:8081", "http://localhost:8082"]'
 
 databases:
   - name: uniserve-db

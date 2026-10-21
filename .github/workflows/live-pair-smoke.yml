@@ -1,0 +1,27 @@
+name: Verify deployed UniServe web and API
+
+on:
+  push:
+    branches:
+      - fix/end-to-end-operations-reliability-20261021
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-pair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Verified main-branch Vercel alias with the latest order queue marker.
+      # Repository variable UNISERVE_WEB_URL may override this when a stable production domain is configured.
+      UNISERVE_WEB_URL: ${{ vars.UNISERVE_WEB_URL || 'https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app' }}
+      UNISERVE_API_URL: ${{ vars.UNISERVE_API_ORIGIN || 'https://uniserve-api.onrender.com' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Probe actual web revision, API readiness and browser cross-origin access
+        run: python scripts/verify_live_pair.py

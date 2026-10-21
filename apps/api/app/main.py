@@ -177,10 +177,16 @@ def create_application() -> FastAPI:
 
     application.add_middleware(SecurityHeadersMiddleware)
 
-    # CORS middleware
+    # CORS middleware. The Vercel main-branch deployment is an authenticated
+    # operations console origin, distinct from the immutable per-commit URL.
+    # Keep a narrow exact-origin allowlist, including the currently verified
+    # operations URL even if Render still has an older CORS_ORIGINS setting.
+    # Never use "*" with credentialed browser requests.
+    verified_main_dashboard = "https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app"
+    allowed_origins = list(dict.fromkeys([*settings.CORS_ORIGINS, verified_main_dashboard]))
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -198,7 +204,7 @@ def create_application() -> FastAPI:
             "status": "running",
             "docs": "/docs",
             "health": "/api/v1/health",
-            "dashboard": "https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app",
+            "dashboard": "https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app",
         }
 
     # Static files — food images served from app/static/food/
