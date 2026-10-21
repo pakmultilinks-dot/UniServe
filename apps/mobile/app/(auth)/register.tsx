@@ -205,7 +205,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
-    paddingBottom: 32,
+    // Extra scrollable space makes the sign-in link reachable on short Android phones.
+    paddingBottom: 76,
   },
   sealRow: {
     alignItems: "center",
@@ -251,6 +252,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
     alignItems: "center",
     justifyContent: "center",
+    flexWrap: "wrap",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
   loginLink: {
     fontSize: 14,
