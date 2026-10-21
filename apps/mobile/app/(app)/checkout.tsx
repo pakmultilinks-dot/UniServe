@@ -472,7 +472,10 @@ export default function CheckoutScreen() {
             disabled={isPlacing || isSuspended || !canPlaceOrder}
           >
             {isPlacing ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <View style={styles.placeOrderProgress} accessible accessibilityRole="text" accessibilityLabel="Placing your order">
+                <ActivityIndicator size="small" color="#ffffff" />
+                <Text style={styles.placeOrderProgressText}>Placing order…</Text>
+              </View>
             ) : (
               <Text style={styles.placeOrderBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                 {isSuspended
@@ -738,6 +741,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 1,
     maxWidth: "72%",
+  },
+  placeOrderProgress: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  placeOrderProgressText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
   },
   placeOrderBtnText: {
     color: "#ffffff",
