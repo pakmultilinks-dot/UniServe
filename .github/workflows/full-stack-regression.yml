@@ -46,6 +46,11 @@ jobs:
         run: npm test --workspace=apps/mobile -- --runInBand
       - name: Lint mobile
         run: npm run lint --workspace=apps/mobile
+      - name: Bundle Android release JavaScript with configured API origin
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_API_BASE_URL: https://example.invalid/api/v1
+        run: npx expo export --platform android --output-dir ../../artifacts/mobile-ci-export
 
   backend:
     name: API tests with disposable PostgreSQL
