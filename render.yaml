@@ -5,8 +5,9 @@ services:
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: ./apps/api
     plan: free
-    branch: review/landing-and-fixes
-    healthCheckPath: /api/v1/health
+    branch: main
+    # Only mark deployments healthy once PostgreSQL and core schema are ready.
+    healthCheckPath: /api/v1/health/ready
     envVars:
       - key: APP_ENV
         value: production

@@ -100,6 +100,12 @@ jobs:
         run: python -m ruff check --no-fix app migrations
       - name: Full API regression suite
         run: python -m pytest -q --no-header -p no:cacheprovider
+      - name: Test real PostgreSQL migrations and service integration
+        env:
+          UNISERVE_INTEGRATION_PG: '1'
+          POSTGRES_DB: uniserve_test_integration
+          POSTGRES_PASSWORD: uniserve_test_password
+        run: python -m pytest tests/integration -q --no-header -p no:cacheprovider
       - name: Record pre-existing mypy debt (not yet a passing gate)
         if: always()
         continue-on-error: true
