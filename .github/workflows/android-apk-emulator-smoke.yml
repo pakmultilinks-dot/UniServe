@@ -16,10 +16,16 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      APK_BUILD_RUN: '39624610785'
+      APK_BUILD_BRANCH: release/android-apk-20261021
     steps:
-      - name: Wait for actual APK build
-        run: gh run watch "$APK_BUILD_RUN" --exit-status --interval 15
+      - name: Select latest native APK build from release branch
+        run: |
+          APK_BUILD_RUN="$(gh run list --repo "$GH_REPO" --workflow "Build Android APK" --branch "$APK_BUILD_BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId')"
+          test -n "$APK_BUILD_RUN"
+          echo "APK_BUILD_RUN=$APK_BUILD_RUN" >> "$GITHUB_ENV"
+          echo "Using native build run $APK_BUILD_RUN"
+      - name: Wait for actual native APK build
+        run: gh run watch "$APK_BUILD_RUN" --repo "$GH_REPO" --exit-status --interval 15
       - name: Download release APK
         run: |
           mkdir -p dist
