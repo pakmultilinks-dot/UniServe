@@ -421,6 +421,28 @@ describe("ApiClient.request() — error semantics (Phase 60)", () => {
     }
   });
 
+  it("recognizes React Native cancellation text after an abort", async () => {
+    const provider = createMockTokenProvider({ accessToken: null, refreshToken: null });
+    const client = new ApiClient("http://api.test/v1", provider);
+
+    fetchSpy.mockImplementationOnce(
+      (_url: string, opts?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          opts?.signal?.addEventListener("abort", () =>
+            reject(new TypeError("Fetch request has been canceled")),
+          );
+        }),
+    );
+
+    await expect(client.request("POST", "/auth/login", {
+      body: { university_email: "student@demo.uniserve.pk", password: "example" },
+      timeout: 10,
+    })).rejects.toMatchObject({
+      status: 408,
+      message: "Request timed out",
+    });
+  });
+
   it("aborts requests that exceed the timeout and reports status 408", async () => {
     const provider = createMockTokenProvider({ accessToken: null, refreshToken: null });
     const client = new ApiClient("http://api.test/v1", provider);

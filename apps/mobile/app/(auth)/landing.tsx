@@ -11,7 +11,6 @@ import {
   StyleSheet,
   Text,
   View,
-  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -19,8 +18,6 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { textColor, colors } from "../../src/theme";
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // Appetizing campus food hero: biryani-style spread
 const HERO_IMAGE =
@@ -38,16 +35,15 @@ export default function OnboardingScreen() {
         style={styles.hero}
         resizeMode="cover"
       >
-        {/* Dark scrim from the top so white text stays readable over any
-            photo, then a soft fade into the page background at the bottom. */}
+        {/* Keep the hero readable while providing a light, high-contrast footer. */}
         <LinearGradient
           colors={[
-            "rgba(10,7,3,0.82)",
-            "rgba(10,7,3,0.55)",
-            "rgba(10,7,3,0.35)",
+            "rgba(10,7,3,0.48)",
+            "rgba(10,7,3,0.60)",
+            "rgba(10,7,3,0.74)",
             isDark ? "#14100a" : "#fffdf8",
           ]}
-          locations={[0, 0.35, 0.62, 0.92]}
+          locations={[0, 0.4, 0.68, 0.96]}
           style={styles.gradient}
         />
 
@@ -83,7 +79,7 @@ export default function OnboardingScreen() {
             onPress={() => router.push("/login")}
             style={styles.loginLink}
           >
-            <Text style={styles.loginLinkText}>
+            <Text style={[styles.loginLinkText, { color: isDark ? "#ffffff" : "#302719" }]}>
               Already have an account? <Text style={styles.loginLinkBold}>Log in</Text>
             </Text>
           </Pressable>
@@ -104,8 +100,6 @@ const styles = StyleSheet.create({
   },
   hero: {
     flex: 1,
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
   },
   gradient: {
     ...StyleSheet.absoluteFill,
@@ -114,7 +108,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
     paddingHorizontal: 28,
-    paddingBottom: 36,
+    paddingBottom: 20,
   },
   textBlock: {
     marginBottom: 28,
@@ -128,8 +122,8 @@ const styles = StyleSheet.create({
     color: "#e8c07a",
   },
   title: {
-    fontSize: 48,
-    lineHeight: 52,
+    fontSize: 43,
+    lineHeight: 47,
     fontWeight: "900",
     letterSpacing: -0.5,
     color: "#ffffff",
@@ -194,7 +188,6 @@ const styles = StyleSheet.create({
   loginLinkText: {
     fontSize: 14,
     fontWeight: "500",
-    color: "rgba(255,255,255,0.92)",
   },
   loginLinkBold: {
     fontWeight: "700",

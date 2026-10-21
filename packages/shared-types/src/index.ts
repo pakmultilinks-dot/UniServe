@@ -1305,7 +1305,7 @@ export class ApiClient {
       return await this.handleResponse<T>(response);
     } catch (err) {
       if (err instanceof ApiClientError) throw err;
-      if (err instanceof DOMException && err.name === "AbortError") {
+      if (controller.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
         throw new ApiClientError(408, "Request timed out");
       }
       throw new ApiClientError(0, `Network error: ${(err as Error).message ?? "unknown"}`);
@@ -1393,7 +1393,7 @@ export class ApiClient {
       return await this.handleResponse<T>(response);
     } catch (err) {
       if (err instanceof ApiClientError) throw err;
-      if (err instanceof DOMException && err.name === "AbortError") {
+      if (controller.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
         throw new ApiClientError(408, "Request timed out");
       }
       throw new ApiClientError(0, `Network error: ${(err as Error).message ?? "unknown"}`);
