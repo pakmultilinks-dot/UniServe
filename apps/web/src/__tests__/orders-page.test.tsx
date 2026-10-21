@@ -294,6 +294,8 @@ describe("OrdersPage — Prepare action gating (F-ACC-06)", () => {
 
     expect(await screen.findByText("Ready")).toBeInTheDocument();
     expect(screen.getByText("Collect")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent("Order workflow:");
+    expect(screen.getByRole("note")).toHaveTextContent("Web build:");
     expect(screen.queryByText("Prepare")).not.toBeInTheDocument();
     expect(screen.queryByText("Confirm")).not.toBeInTheDocument();
   });
