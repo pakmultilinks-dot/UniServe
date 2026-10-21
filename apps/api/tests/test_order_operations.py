@@ -562,6 +562,19 @@ class TestPreparationLifecycle:
         from app.core.config import settings
         assert (deadline - ready_at).total_seconds() <= settings.PICKUP_WINDOW_MINUTES * 60
 
+        # Both student/mobile endpoints must see the same server status and
+        # the in-app Ready notification after staff acts on the web queue.
+        student_view = await student_client.get(f"/api/v1/orders/{order_id}")
+        assert student_view.status_code == 200
+        assert student_view.json()["status"] == "ready"
+
+        notifications = await student_client.get("/api/v1/notifications")
+        assert notifications.status_code == 200
+        assert any(
+            n["notification_type"] == "order_ready" and n["order_id"] == order_id
+            for n in notifications.json()["items"]
+        )
+
     async def test_prepare_sets_eta(
         self,
         staff_client: AsyncClient,
