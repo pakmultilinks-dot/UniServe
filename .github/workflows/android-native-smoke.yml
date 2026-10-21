@@ -16,9 +16,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Wait for exact new main APK
         run: |
-          test "$(gh run view 39667961092 --json headSha --jq .headSha)" = "1cea39907145b7a0a11d530e21afc562ac5a9b3c"
-          gh run watch 39667961092 --exit-status --interval 20
-          gh run download 39667961092 --name uniserve-apk --dir native-apk
+          test "$(gh run view 39673558277 --json headSha --jq .headSha)" = "d85c36bd2c356d661edcd873c14c83c8f184d6f4"
+          gh run watch 39673558277 --exit-status --interval 20
+          gh run download 39673558277 --name uniserve-apk --dir native-apk
       - name: Enable KVM for the disposable emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
