@@ -186,7 +186,9 @@ describe("OrdersPage — quiet background polling", () => {
       apiMock.getCafeteriaOrders.mockImplementationOnce(
         () => new Promise(() => {}),
       );
-      const poll = intervalSpy.mock.calls.find(([, delay]) => delay === 5000)?.[0];
+      // Initial render registers a callback with an empty cafeteria before
+      // the selector resolves. Use the latest callback after the cafeteria loads.
+      const poll = intervalSpy.mock.calls.filter(([, delay]) => delay === 5000).at(-1)?.[0];
       expect(poll).toBeTypeOf("function");
 
       const requestsBeforePoll = apiMock.getCafeteriaOrders.mock.calls.length;
