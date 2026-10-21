@@ -1,0 +1,41 @@
+name: Verify fresh APK on Android emulator
+on:
+  push:
+    branches: [ops/android-native-smoke-20261022]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for exact new main APK
+        run: |
+          test "$(gh run view 39667961092 --json headSha --jq .headSha)" = "1cea39907145b7a0a11d530e21afc562ac5a9b3c"
+          gh run watch 39667961092 --exit-status --interval 20
+          gh run download 39667961092 --name uniserve-apk --dir native-apk
+      - name: Enable KVM for the disposable emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise fresh APK startup, registration scroll and authenticated screens
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: python3 scripts/android_native_smoke.py
+      - name: Preserve native screenshots and UI hierarchy
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-native-screen-evidence
+          path: native-evidence/
