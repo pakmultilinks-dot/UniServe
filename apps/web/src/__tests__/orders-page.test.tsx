@@ -171,6 +171,10 @@ describe("OrdersPage — quiet background polling", () => {
       orders: [makeOrder({ order_number: 905, status: "pending" })],
       total: 1,
     });
+    // JSDOM may start with document.hidden true in a headless CI runner.
+    // Make this an explicitly visible-tab test so the polling path runs.
+    const hiddenDescriptor = Object.getOwnPropertyDescriptor(document, "hidden");
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
     const intervalSpy = vi.spyOn(globalThis, "setInterval");
 
     try {
@@ -185,14 +189,22 @@ describe("OrdersPage — quiet background polling", () => {
       const poll = intervalSpy.mock.calls.find(([, delay]) => delay === 5000)?.[0];
       expect(poll).toBeTypeOf("function");
 
+      const requestsBeforePoll = apiMock.getCafeteriaOrders.mock.calls.length;
       await act(async () => {
         (poll as () => void)();
       });
 
+      expect(apiMock.getCafeteriaOrders).toHaveBeenCalledTimes(requestsBeforePoll + 1);
       expect(screen.getByText("Confirm")).toBeInTheDocument();
       expect(document.querySelector(".skeleton")).toBeNull();
     } finally {
       intervalSpy.mockRestore();
+      apiMock.getCafeteriaOrders.mockReset();
+      if (hiddenDescriptor) {
+        Object.defineProperty(document, "hidden", hiddenDescriptor);
+      } else {
+        Reflect.deleteProperty(document, "hidden");
+      }
     }
   });
 });
