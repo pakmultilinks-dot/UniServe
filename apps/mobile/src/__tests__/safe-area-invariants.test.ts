@@ -105,3 +105,30 @@ describe("notification bodies stay fully readable", () => {
     expect(src).not.toContain("numberOfLines={2}");
   });
 });
+
+describe("screens from the physical Android screenshots", () => {
+  it("keeps the registration Sign in link scrollable above system navigation", () => {
+    const src = read("app/(auth)/register.tsx");
+    expect(src).toContain('edges={["top", "bottom"]}');
+    expect(src).toContain("paddingBottom: 76");
+    expect(src).toContain("flexWrap: \"wrap\"");
+  });
+
+  it("keeps the order details scroller within the bottom safe area", () => {
+    const src = read("app/(app)/order/[id].tsx");
+    expect(src).toContain('edges={["bottom"]}');
+    expect(src).toContain("<ScrollView");
+  });
+
+  it("shows meaningful loading UI rather than returning a blank root navigator", () => {
+    const src = read("app/_layout.tsx");
+    expect(src).toContain("Loading UniServe");
+    expect(src).toContain("Checking your session");
+    expect(src).not.toMatch(/if \(isLoading\) return null/);
+  });
+
+  it("shows what checkout is doing rather than only a tiny spinner", () => {
+    const src = read("app/(app)/checkout.tsx");
+    expect(src).toContain("Placing order…");
+  });
+});
