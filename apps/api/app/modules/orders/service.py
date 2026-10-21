@@ -1030,10 +1030,14 @@ class OrderService:
                 # closing time is cafeteria-local, so combining it with the
                 # server-local date is wrong near midnight (e.g. UTC server,
                 # PKT cafeteria). checkout() already uses this convention.
-                local_today = datetime.now(tz).date()
+                local_today = now.astimezone(tz).date()
                 local_closing = datetime.combine(local_today, dt_time(hour, minute), tzinfo=tz)
                 utc_closing = local_closing.astimezone(UTC)
-                if utc_closing < deadline_30min:
+                # If staff completes an already-accepted order after the
+                # published closing time, the closing instant is in the past.
+                # Never mark a newly ready order immediately overdue; keep the
+                # configured pickup window in that exceptional case.
+                if now < utc_closing < deadline_30min:
                     pickup_deadline = utc_closing
             except (ValueError, IndexError):
                 pass  # Invalid closing_time format — fall back to 30-min window
