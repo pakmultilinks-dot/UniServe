@@ -297,10 +297,10 @@ export default function DashboardPage() {
             </h2>
             {orders.length > 0 && (
               <Link
-                href="/dashboard/orders"
+                href={`/dashboard/orders?cafeteria=${encodeURIComponent(orders[0].cafeteria_id)}`}
                 className="text-sm font-medium text-brand-700 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-colors"
               >
-                View all
+                Open order queue
               </Link>
             )}
           </div>
@@ -364,10 +364,10 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <Link
-                    href="/dashboard/orders"
+                    href={`/dashboard/orders?cafeteria=${encodeURIComponent(order.cafeteria_id)}`}
                     className="ml-4 flex-shrink-0 text-xs font-medium text-brand-700 dark:text-brand-400 hover:text-brand-600"
                   >
-                    Details
+                    View in queue
                   </Link>
                 </div>
               ))
