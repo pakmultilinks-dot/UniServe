@@ -5,7 +5,7 @@
  * with the category icon. When image URL exists, loads the image.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Image, StyleSheet, ViewStyle, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { MenuCategory } from "@uniserve/shared-types";
@@ -40,6 +40,12 @@ export default function FoodImage({
 }: FoodImageProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const imageTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finishLoading = () => {
+    if (imageTimeout.current) clearTimeout(imageTimeout.current);
+    imageTimeout.current = null;
+    setIsLoading(false);
+  };
   // Persisted image references are host-independent ("/api/v1/static/…") —
   // resolve against the configured API origin before rendering; fall back
   // to the category placeholder on null, resolution failure, or load error.
@@ -53,11 +59,11 @@ export default function FoodImage({
     setImageFailed(false);
     setIsLoading(Boolean(imageUri));
     if (!imageUri) return;
-    const timeout = setTimeout(() => {
+    imageTimeout.current = setTimeout(() => {
       setImageFailed(true);
       setIsLoading(false);
     }, 12000);
-    return () => clearTimeout(timeout);
+    return () => { if (imageTimeout.current) clearTimeout(imageTimeout.current); };
   }, [imageUri]);
 
   const containerStyle: ViewStyle[] = [
@@ -82,11 +88,12 @@ export default function FoodImage({
           {isLoading && <ActivityIndicator testID="food-image-loading" size="small" color="#9ca3af" />}
         </View>
         <Image
+          testID="food-image"
           source={{ uri: imageUri }}
           style={[styles.image, { borderRadius }]}
           resizeMode="cover"
-          onLoadEnd={() => setIsLoading(false)}
-          onError={() => { setImageFailed(true); setIsLoading(false); }}
+          onLoadEnd={finishLoading}
+          onError={() => { setImageFailed(true); finishLoading(); }}
         />
       </View>
     );
