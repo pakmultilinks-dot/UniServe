@@ -1,0 +1,49 @@
+name: UniServe APK Android emulator smoke
+
+on:
+  push:
+    branches:
+      - test/android-apk-emulator-20261021
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      APK_BUILD_RUN: '39621636454'
+    steps:
+      - name: Wait for actual APK build
+        run: gh run watch "$APK_BUILD_RUN" --exit-status --interval 15
+      - name: Download release APK
+        run: |
+          mkdir -p dist
+          gh run download "$APK_BUILD_RUN" --name uniserve-apk --dir dist
+          test -s dist/app-release.apk
+      - name: Boot Android emulator and launch UniServe
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r dist/app-release.apk
+            adb shell monkey -p com.uniserve.mobile 1
+            sleep 25
+            adb shell pidof com.uniserve.mobile
+            adb exec-out screencap -p > uniserve-emulator-launch.png
+            ls -lh uniserve-emulator-launch.png
+      - name: Upload launch screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uniserve-android-emulator-launch
+          path: uniserve-emulator-launch.png
+          if-no-files-found: warn
