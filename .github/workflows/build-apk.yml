@@ -2,17 +2,21 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - release/android-screenshot-repair-20261022
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 70
     defaults:
       run:
         working-directory: apps/mobile
     env:
       # Repository variable can override the fallback production API host.
       # This is a public URL, not an authentication secret.
-      EXPO_PUBLIC_API_BASE_URL: ${{ vars.UNISERVE_API_BASE_URL }}
+      EXPO_PUBLIC_API_BASE_URL: ${{ vars.UNISERVE_API_BASE_URL || 'https://uniserve-api.onrender.com/api/v1' }}
     steps:
       - name: Checkout selected workflow revision
         uses: actions/checkout@v4
@@ -55,10 +59,35 @@ jobs:
       - name: Prebuild Android
         run: npx expo prebuild --platform android --clean
 
+      - name: Configure Gradle for GitHub runner memory
+        run: |
+          # Expo prebuild creates the Android Gradle properties. Gradle/KSP
+          # exhausted the default JVM Metaspace on the first release build.
+          sed -i '/^org.gradle.jvmargs=/d' android/gradle.properties
+          # Expo emits gradle.properties without a trailing newline on this runner.
+          # Without a separator, the first appended JVM option is concatenated
+          # with the preceding expo.inlineModules property, corrupting both.
+          printf '\n' >> android/gradle.properties
+          cat >> android/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=1536m -Dfile.encoding=UTF-8
+          org.gradle.parallel=false
+          org.gradle.workers.max=2
+          kotlin.compiler.execution.strategy=in-process
+          EOF
+          tail -n 6 android/gradle.properties
+          grep -q '^org.gradle.jvmargs=-Xmx3072m' android/gradle.properties
+          ! grep -q 'watchedDirectories=\[\]org.gradle.jvmargs' android/gradle.properties
+
       - name: Build Release APK
         run: |
+          set -euo pipefail
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --no-parallel --max-workers=2
+
+      - name: Inspect APK output
+        run: |
+          test -s android/app/build/outputs/apk/release/app-release.apk
+          ls -lh android/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
