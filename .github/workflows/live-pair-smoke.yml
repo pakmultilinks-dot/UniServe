@@ -14,10 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      # The URL supplied in the user's screenshot is a deployment snapshot.
-      # Set repository variable UNISERVE_WEB_URL to the real production alias
-      # once identified in Vercel's Domains tab.
-      UNISERVE_WEB_URL: ${{ vars.UNISERVE_WEB_URL || 'https://uniserve-web-dashboard-mo5nzfure-pakmultilinks-dot.vercel.app' }}
+      # Verified main-branch Vercel alias with the latest order queue marker.
+      # Repository variable UNISERVE_WEB_URL may override this when a stable production domain is configured.
+      UNISERVE_WEB_URL: ${{ vars.UNISERVE_WEB_URL || 'https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app' }}
       UNISERVE_API_URL: ${{ vars.UNISERVE_API_ORIGIN || 'https://uniserve-api.onrender.com' }}
     steps:
       - uses: actions/checkout@v4
