@@ -15,6 +15,7 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -78,6 +79,7 @@ export default function RegisterScreen() {
   };
 
   return (
+    <SafeAreaView style={[styles.screen, { backgroundColor: bg }]} edges={["top", "bottom"]}>
     <KeyboardAvoidingView
       style={[styles.screen, { backgroundColor: bg }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -191,6 +193,7 @@ export default function RegisterScreen() {
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -201,7 +204,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 40,
+    paddingTop: 24,
     paddingBottom: 32,
   },
   sealRow: {
@@ -218,7 +221,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginTop: 4,
-    marginBottom: 24,
+    marginBottom: 18,
   },
   form: {
     marginBottom: 8,
