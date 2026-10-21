@@ -5,7 +5,7 @@
  * with the category icon. When image URL exists, loads the image.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Image, StyleSheet, ViewStyle, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { MenuCategory } from "@uniserve/shared-types";
@@ -46,6 +46,20 @@ export default function FoodImage({
   const imageUri = resolveApiImageUrl(uri) || CATEGORY_IMAGES[category ?? ""];
   const bgColorHex = "#f3ead8";
 
+  // Slow/unreachable image servers previously left a perpetual spinner.
+  // Reset the state for recycled menu cards and stop trying after 12 seconds.
+  // A failed photo must never block browsing or adding food to the cart.
+  useEffect(() => {
+    setImageFailed(false);
+    setIsLoading(Boolean(imageUri));
+    if (!imageUri) return;
+    const timeout = setTimeout(() => {
+      setImageFailed(true);
+      setIsLoading(false);
+    }, 12000);
+    return () => clearTimeout(timeout);
+  }, [imageUri]);
+
   const containerStyle: ViewStyle[] = [
     styles.container,
     { borderRadius },
@@ -72,7 +86,7 @@ export default function FoodImage({
           style={[styles.image, { borderRadius }]}
           resizeMode="cover"
           onLoadEnd={() => setIsLoading(false)}
-          onError={() => setImageFailed(true)}
+          onError={() => { setImageFailed(true); setIsLoading(false); }}
         />
       </View>
     );
