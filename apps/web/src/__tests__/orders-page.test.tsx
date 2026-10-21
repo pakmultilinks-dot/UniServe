@@ -6,7 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { ApiClientError } from "@uniserve/shared-types";
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -164,6 +164,38 @@ function makeOrder(
     ...overrides,
   };
 }
+
+describe("OrdersPage — quiet background polling", () => {
+  it("keeps the visible queue in place while a background refresh is pending", async () => {
+    apiMock.getCafeteriaOrders.mockResolvedValue({
+      orders: [makeOrder({ order_number: 905, status: "pending" })],
+      total: 1,
+    });
+    const intervalSpy = vi.spyOn(globalThis, "setInterval");
+
+    try {
+      renderPage();
+      expect(await screen.findByText("Confirm")).toBeInTheDocument();
+
+      // The next poll is deliberately slow. Existing queue items should stay
+      // visible; a background refresh must not replace them with skeletons.
+      apiMock.getCafeteriaOrders.mockImplementationOnce(
+        () => new Promise(() => {}),
+      );
+      const poll = intervalSpy.mock.calls.find(([, delay]) => delay === 5000)?.[0];
+      expect(poll).toBeTypeOf("function");
+
+      await act(async () => {
+        (poll as () => void)();
+      });
+
+      expect(screen.getByText("Confirm")).toBeInTheDocument();
+      expect(document.querySelector(".skeleton")).toBeNull();
+    } finally {
+      intervalSpy.mockRestore();
+    }
+  });
+});
 
 describe("OrdersPage — Prepare action gating (F-ACC-06)", () => {
   it("Case 1 — pending, unconfirmed: Confirm is offered and Prepare is not", async () => {
