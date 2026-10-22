@@ -7,6 +7,7 @@ import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from playwright.sync_api import sync_playwright
 
 OUT = Path('native-evidence')
 OUT.mkdir(exist_ok=True)
@@ -17,6 +18,7 @@ student = staff = None
 order_id = None
 owns_cart = False
 completed = False
+pw = browser = page = None
 cid = '83543334-2688-4c5d-9c83-ee201fac02bd'
 
 def api(method, path, token=None, body=None):
@@ -31,6 +33,13 @@ def api(method, path, token=None, body=None):
 
 def login_api(role):
     return api('POST', '/auth/login', body={'university_email': role + '@demo.uniserve.pk', 'password': 'UniServe2026!'})['tokens']['access_token']
+
+def wait_order_status(expected):
+    for _ in range(15):
+        order = api('GET', '/orders/' + order_id, student)
+        if order['status'] == expected: return order
+        time.sleep(2)
+    raise AssertionError('Order did not reach expected status: ' + expected)
 
 def adb(*args, binary=False):
     return subprocess.check_output(['adb', *args], text=not binary)
@@ -155,10 +164,31 @@ try:
     queue = api('GET', f'/orders/cafeteria/{cid}?limit=100', staff)['orders']
     assert any(o['id'] == order_id for o in queue), 'Native order missing from staff queue'
     print('PASS native checkout -> staff queue; QA order:', order_id, flush=True)
-    if order['status'] == 'pending': order = api('POST', f'/orders/{order_id}/confirm', staff, {})
-    if order['status'] == 'confirmed': order = api('POST', f'/orders/{order_id}/prepare', staff, {})
-    if order['status'] == 'preparing': order = api('PUT', f'/orders/{order_id}/ready', staff, {})
-    assert order['status'] == 'ready'
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(headless=True)
+    page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+    web = 'https://uniserve-web-dashboard-pakmultilinks-dot.vercel.app'
+    page.goto(web + '/login', wait_until='domcontentloaded', timeout=120000)
+    page.get_by_placeholder('your.name@lgu.edu.pk').fill('staff@demo.uniserve.pk')
+    page.get_by_placeholder('Enter your password').fill('UniServe2026!')
+    page.get_by_role('button', name='Sign In', exact=True).click()
+    page.wait_for_url('**/dashboard**', timeout=60000)
+    page.goto(web + '/dashboard/orders?cafeteria=' + cid, wait_until='domcontentloaded', timeout=60000)
+    card = page.get_by_text('#' + str(order['order_number']), exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
+    card.wait_for(state='visible', timeout=60000)
+    card.screenshot(path=str(OUT / 'web-01-new-native-order.png'))
+    if order['status'] == 'pending':
+        if not order.get('confirmed_at'):
+            card.get_by_role('button', name='Confirm', exact=True).click()
+            time.sleep(2)
+        card.get_by_role('button', name='Prepare', exact=True).click()
+        order = wait_order_status('preparing')
+    if order['status'] == 'preparing':
+        card.get_by_role('button', name='Ready', exact=True).click()
+    order = wait_order_status('ready')
+    card.get_by_role('button', name='Collect', exact=True).wait_for(state='visible', timeout=30000)
+    card.screenshot(path=str(OUT / 'web-02-ready.png'))
+    print('PASS real staff dashboard login, queue visibility and Ready action', flush=True)
     time.sleep(17)
     snap('09-order-ready')
     notifications = api('GET', '/notifications?limit=100', student)['items']
@@ -167,8 +197,11 @@ try:
     wait_text('ready', 30)
     snap('10-native-ready-notification')
     print('PASS ready notification correlated by exact new order ID', flush=True)
-    order = api('POST', '/orders/collect', staff, {'order_number': order['order_number']})
-    assert order['status'] == 'completed'
+    card.get_by_role('button', name='Collect', exact=True).click()
+    page.get_by_role('button', name='Confirm Collect', exact=True).click()
+    order = wait_order_status('completed')
+    card.screenshot(path=str(OUT / 'web-03-collected.png'))
+    print('PASS real staff dashboard collection action', flush=True)
     completed = True
     link('order/' + order_id)
     wait_text('Completed', 60)
@@ -178,6 +211,11 @@ try:
     snap('12-order-scrolled')
     print('PASS native flow through collection; no money transferred', flush=True)
 finally:
+    if page and not completed:
+        try: page.screenshot(path=str(OUT / 'web-failure.png'), full_page=True)
+        except Exception: pass
+    if browser: browser.close()
+    if pw: pw.stop()
     (OUT / 'crash-log.txt').write_text(adb('logcat', '-b', 'crash', '-d'))
     if order_id and not completed:
         try:

@@ -22,6 +22,10 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Prepare isolated staff-dashboard browser test
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
       - name: Exercise fresh APK startup, registration scroll and authenticated screens
         uses: reactivecircus/android-emulator-runner@v2
         with:
