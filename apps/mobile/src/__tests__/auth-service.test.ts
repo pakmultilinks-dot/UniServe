@@ -8,6 +8,7 @@
 
 jest.mock("../services/api", () => ({
   apiClient: {
+    request: jest.fn(),
     get: jest.fn(),
     post: jest.fn(),
     patch: jest.fn(),
@@ -27,6 +28,7 @@ import { apiClient, secureStoreTokenProvider } from "../services/api";
 import {
   login,
   pinLogin,
+  AUTH_LOGIN_TIMEOUT_MS,
   logout,
   refreshTokens,
   changePassword,
@@ -47,28 +49,33 @@ beforeEach(() => {
 describe("auth service — login endpoints", () => {
   it("posts credentials to /auth/login", async () => {
     const response = { tokens: {}, user: {} };
-    apiMock.post.mockResolvedValue(response);
+    apiMock.request.mockResolvedValue(response);
 
     const result = await login({
       university_email: "s@lgu.edu.pk",
       password: "Pass123!",
     });
 
-    expect(apiMock.post).toHaveBeenCalledWith("/auth/login", {
-      university_email: "s@lgu.edu.pk",
-      password: "Pass123!",
+    expect(apiMock.request).toHaveBeenCalledWith("POST", "/auth/login", {
+      body: {
+        university_email: "s@lgu.edu.pk",
+        password: "Pass123!",
+      },
+      timeout: AUTH_LOGIN_TIMEOUT_MS,
     });
+    expect(AUTH_LOGIN_TIMEOUT_MS).toBeGreaterThan(60_000);
+    expect(apiMock.post).not.toHaveBeenCalled();
     expect(result).toBe(response);
   });
 
   it("posts PIN credentials to /auth/pin/login", async () => {
-    apiMock.post.mockResolvedValue({});
+    apiMock.request.mockResolvedValue({});
 
     await pinLogin({ user_id: "u1", pin: "1234" });
 
-    expect(apiMock.post).toHaveBeenCalledWith("/auth/pin/login", {
-      user_id: "u1",
-      pin: "1234",
+    expect(apiMock.request).toHaveBeenCalledWith("POST", "/auth/pin/login", {
+      body: { user_id: "u1", pin: "1234" },
+      timeout: AUTH_LOGIN_TIMEOUT_MS,
     });
   });
 

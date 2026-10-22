@@ -7,7 +7,7 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react-native";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react-native";
 
 const mockLogin = jest.fn();
 const mockPinLogin = jest.fn();
@@ -89,6 +89,32 @@ describe("LoginScreen — sign-in flow", () => {
         "Pass123!",
       ),
     );
+  });
+
+  it("explains an idle-server delay while the sign-in request is in progress", async () => {
+    jest.useFakeTimers();
+    mockLogin.mockImplementation(() => new Promise(() => undefined));
+    try {
+      render(<LoginScreen />);
+      fillForm("you@lgu.edu.pk", "Pass123!");
+      fireEvent.press(screen.getByText("Log In"));
+
+      await act(async () => {
+        jest.advanceTimersByTime(12_100);
+      });
+      expect(screen.getByText(/The server may be waking up after being idle/)).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("shows a useful recovery message after a login request times out", async () => {
+    mockLogin.mockRejectedValue(new Error("Request timed out"));
+    render(<LoginScreen />);
+    fillForm("you@lgu.edu.pk", "Pass123!");
+    fireEvent.press(screen.getByText("Log In"));
+    expect(await screen.findByText(/UniServe took too long to respond/)).toBeTruthy();
+    expect(screen.getByText("Log In")).toBeTruthy();
   });
 
   it("surfaces server errors and stays on the login form", async () => {

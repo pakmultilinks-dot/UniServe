@@ -43,12 +43,23 @@ export async function resendOtp(data: OTPResendRequest): Promise<OTPResponse> {
 
 // ---- Login ----
 
+// A sleeping free Render instance can take roughly a minute to wake.
+// Auth must wait longer than the shared 60-second request timeout without
+// changing timeouts for non-idempotent checkout or payment endpoints.
+export const AUTH_LOGIN_TIMEOUT_MS = 125_000;
+
 export async function login(data: LoginRequest): Promise<LoginResponse> {
-  return apiClient.post<LoginResponse>("/auth/login", data);
+  return apiClient.request<LoginResponse>("POST", "/auth/login", {
+    body: data,
+    timeout: AUTH_LOGIN_TIMEOUT_MS,
+  });
 }
 
 export async function pinLogin(data: PINLoginRequest): Promise<LoginResponse> {
-  return apiClient.post<LoginResponse>("/auth/pin/login", data);
+  return apiClient.request<LoginResponse>("POST", "/auth/pin/login", {
+    body: data,
+    timeout: AUTH_LOGIN_TIMEOUT_MS,
+  });
 }
 
 // ---- Token Management ----
