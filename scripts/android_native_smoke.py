@@ -1,13 +1,36 @@
-"""Disposable CI emulator test; uses demo login, never submits checkout/payment."""
+"""Disposable emulator QA: only demo cash orders, never an online payment."""
+import json
 import re
 import subprocess
 import time
+import urllib.request
+import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 OUT = Path('native-evidence')
 OUT.mkdir(exist_ok=True)
 PACKAGE = 'com.uniserve.mobile'
+BASE = 'https://uniserve-api.onrender.com/api/v1'
+qa_note = 'deployment-qa-native-' + str(uuid.uuid4())
+student = staff = None
+order_id = None
+owns_cart = False
+completed = False
+cid = '83543334-2688-4c5d-9c83-ee201fac02bd'
+
+def api(method, path, token=None, body=None):
+    headers = {'Content-Type': 'application/json'}
+    if token: headers['Authorization'] = 'Bearer ' + token
+    req = urllib.request.Request(BASE + path, method=method, headers=headers,
+        data=json.dumps(body).encode() if body is not None else None)
+    with urllib.request.urlopen(req, timeout=60) as response:
+        raw = response.read()
+        print('API', method, path, response.status, flush=True)
+        return json.loads(raw) if raw else None
+
+def login_api(role):
+    return api('POST', '/auth/login', body={'university_email': role + '@demo.uniserve.pk', 'password': 'UniServe2026!'})['tokens']['access_token']
 
 def adb(*args, binary=False):
     return subprocess.check_output(['adb', *args], text=not binary)
@@ -46,6 +69,8 @@ try:
     adb('shell', 'input', 'keyevent', '224')
     adb('shell', 'wm', 'dismiss-keyguard')
     adb('install', '-r', 'native-apk/app-release.apk')
+    package_info = adb('shell', 'dumpsys', 'package', PACKAGE)
+    assert re.search(r'\bversionCode=7\b', package_info) and 'versionName=0.1.6' in package_info, 'Expected fresh 0.1.6 / code 7 binary'
     adb('shell', 'monkey', '-p', PACKAGE, '-c', 'android.intent.category.LAUNCHER', '1')
     root = wait_text('Get Started', 90)
     snap('00-startup-welcome')
@@ -83,17 +108,84 @@ try:
     _, root = dump()
     cafe = [n for n in root.iter('node') if n.attrib.get('text') == 'Student Cafeteria']
     if cafe: tap(cafe[0]); time.sleep(8)
+    root = wait_text('Current cafeteria: Student Cafeteria', 30)
+    labels = [n for n in root.iter('node') if n.attrib.get('content-desc', '').startswith('Current cafeteria: Student Cafeteria')]
+    assert labels, 'Selected cafeteria must expose its visible label'
+    bounds = list(map(int, re.findall(r'\d+', labels[0].attrib['bounds'])))
+    assert bounds[3] - bounds[1] >= 80, 'Cafeteria selector must not collapse to a dot'
     snap('04-authenticated-menu')
     adb('shell', 'input', 'swipe', '500', '1500', '500', '400', '450')
     time.sleep(3)
     snap('05-menu-scrolled')
     print('PASS native demo login and menu screen capture', flush=True)
-    link('order/553b9691-5e4a-4d60-910a-a3ed8194e747')
-    wait_text('completed', 60)
-    snap('06-completed-order')
+    student, staff = login_api('student'), login_api('staff')
+    cart = api('GET', f'/cafeterias/{cid}/cart/', student)
+    assert not cart['items'], 'Preserve pre-existing demo cart contents'
+    owns_cart = True
+    _, root = dump()
+    plus = [n for n in root.iter('node') if n.attrib.get('content-desc') == '\uf103' and n.attrib.get('clickable') == 'true' and n.attrib.get('enabled') == 'true']
+    assert plus, 'Available native add-to-cart action missing'
+    tap(plus[0]); time.sleep(5)
+    cart = api('GET', f'/cafeterias/{cid}/cart/', student)
+    assert len(cart['items']) == 1, 'Native add-to-cart did not persist exactly one item'
+    print('PASS native add-to-cart persists to API', flush=True)
+    link('checkout')
+    wait_text('Payment Method', 30)
+    snap('06-checkout-top')
+    fields = []
+    for _ in range(4):
+        _, root = dump()
+        fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
+        if fields: break
+        adb('shell', 'input', 'swipe', '500', '1500', '500', '500', '400')
+        time.sleep(1)
+    assert fields, 'Checkout order-note input missing'
+    tap(fields[0]); adb('shell', 'input', 'text', qa_note)
+    adb('shell', 'input', 'keyevent', '4')
+    root = snap('07-checkout-submit-visible')
+    place = [n for n in root.iter('node') if n.attrib.get('text', '').lower().startswith('place order')]
+    assert place, 'Cash checkout action must have a visible text label'
+    tap(place[0])
+    snap('08-checkout-after-submit')
+    wait_text('Order Details', 90)
+    orders = api('GET', '/orders/?limit=100', student)['orders']
+    order = next(o for o in orders if o.get('note') == qa_note)
+    order_id = order['id']
+    assert order['payment_method'] == 'cash', 'QA must never use an online payment'
+    queue = api('GET', f'/orders/cafeteria/{cid}?limit=100', staff)['orders']
+    assert any(o['id'] == order_id for o in queue), 'Native order missing from staff queue'
+    print('PASS native checkout -> staff queue; QA order:', order_id, flush=True)
+    if order['status'] == 'pending': order = api('POST', f'/orders/{order_id}/confirm', staff, {})
+    if order['status'] == 'confirmed': order = api('POST', f'/orders/{order_id}/prepare', staff, {})
+    if order['status'] == 'preparing': order = api('PUT', f'/orders/{order_id}/ready', staff, {})
+    assert order['status'] == 'ready'
+    time.sleep(17)
+    snap('09-order-ready')
+    notifications = api('GET', '/notifications?limit=100', student)['items']
+    assert any(n.get('order_id') == order_id and 'ready' in (n['title'] + n['body']).lower() for n in notifications)
+    link('notifications')
+    wait_text('ready', 30)
+    snap('10-native-ready-notification')
+    print('PASS ready notification correlated by exact new order ID', flush=True)
+    order = api('POST', '/orders/collect', staff, {'order_number': order['order_number']})
+    assert order['status'] == 'completed'
+    completed = True
+    link('order/' + order_id)
+    wait_text('Completed', 60)
+    snap('11-completed-order')
     adb('shell', 'input', 'swipe', '500', '1500', '500', '400', '450')
     time.sleep(2)
-    snap('07-order-scrolled')
-    print('PASS native order detail loads; scroll evidence captured', flush=True)
+    snap('12-order-scrolled')
+    print('PASS native flow through collection; no money transferred', flush=True)
 finally:
     (OUT / 'crash-log.txt').write_text(adb('logcat', '-b', 'crash', '-d'))
+    if order_id and not completed:
+        try:
+            manager = login_api('manager')
+            api('POST', f'/orders/{order_id}/manager-cancel', manager, {'reason': 'Deployment QA interrupted; no real food or payment'})
+        except Exception as exc: print('QA order cleanup requires review:', type(exc).__name__, flush=True)
+    if owns_cart and student:
+        try:
+            cart = api('GET', f'/cafeterias/{cid}/cart/', student)
+            for item in cart['items']: api('DELETE', f'/cafeterias/{cid}/cart/items/{item["id"]}', student)
+        except Exception as exc: print('QA cart cleanup requires review:', type(exc).__name__, flush=True)
