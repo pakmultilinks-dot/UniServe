@@ -42,9 +42,17 @@ def link(path):
     time.sleep(4)
 
 try:
+    adb('shell', 'svc', 'power', 'stayon', 'true')
+    adb('shell', 'input', 'keyevent', '224')
+    adb('shell', 'wm', 'dismiss-keyguard')
     adb('install', '-r', 'native-apk/app-release.apk')
     adb('shell', 'monkey', '-p', PACKAGE, '-c', 'android.intent.category.LAUNCHER', '1')
-    wait_text('Welcome Back', 90)
+    root = wait_text('Get Started', 90)
+    snap('00-startup-welcome')
+    entry = [n for n in root.iter('node') if n.attrib.get('content-desc', '').lower() == 'log in']
+    assert entry, 'Welcome login navigation missing'
+    tap(entry[0])
+    wait_text('Welcome Back', 30)
     snap('01-startup-login')
     print('PASS native APK installs and startup reaches visible login', flush=True)
     link('register')
