@@ -64,6 +64,15 @@ def wait_text(text, seconds=60):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         raw, root = dump()
+        if "Pixel Launcher isn't responding" in raw:
+            # Handle only the disposable system launcher's ANR, never an
+            # application ANR or crash. Keep those as genuine test failures.
+            wait_buttons = [n for n in root.iter('node') if n.attrib.get('text') == 'Wait']
+            if wait_buttons:
+                print('CI environment: waiting for Pixel Launcher recovery', flush=True)
+                tap(wait_buttons[0])
+                time.sleep(3)
+                continue
         if text.lower() in raw.lower(): return root
         time.sleep(3)
     snap('failure-' + text.replace(' ', '-'))
@@ -80,7 +89,9 @@ try:
     adb('install', '-r', 'native-apk/app-release.apk')
     package_info = adb('shell', 'dumpsys', 'package', PACKAGE)
     assert re.search(r'\bversionCode=7\b', package_info) and 'versionName=0.1.6' in package_info, 'Expected fresh 0.1.6 / code 7 binary'
-    adb('shell', 'monkey', '-p', PACKAGE, '-c', 'android.intent.category.LAUNCHER', '1')
+    component = adb('shell', 'cmd', 'package', 'resolve-activity', '--brief', PACKAGE).strip().splitlines()[-1]
+    assert component.startswith(PACKAGE + '/'), 'Unexpected resolved app component'
+    adb('shell', 'am', 'start', '-W', '-n', component)
     root = wait_text('Get Started', 90)
     snap('00-startup-welcome')
     entry = [n for n in root.iter('node') if n.attrib.get('content-desc', '').lower() == 'log in']
