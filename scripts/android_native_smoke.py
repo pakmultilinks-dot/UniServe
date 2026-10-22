@@ -204,7 +204,19 @@ try:
     print('PASS real staff dashboard collection action', flush=True)
     completed = True
     link('order/' + order_id)
-    wait_text('Completed', 60)
+    # "Completed" also exists as a future timeline label while READY.
+    # Wait beyond the documented 15s poll, then require READY-only QR UI
+    # to disappear; a text-only match would be a false positive.
+    time.sleep(17)
+    terminal_deadline = time.monotonic() + 45
+    while time.monotonic() < terminal_deadline:
+        raw, root = dump()
+        if 'completed' in raw.lower() and 'show pickup qr code' not in raw.lower():
+            break
+        time.sleep(3)
+    else:
+        snap('failure-completion-refresh')
+        raise AssertionError('Native order did not refresh from ready to completed')
     snap('11-completed-order')
     adb('shell', 'input', 'swipe', '500', '1500', '500', '400', '450')
     time.sleep(2)
