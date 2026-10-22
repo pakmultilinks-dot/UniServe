@@ -169,9 +169,19 @@ try:
     page = browser.new_page(viewport={'width': 1440, 'height': 1000})
     web = 'https://uniserve-web-dashboard-pakmultilinks-dot.vercel.app'
     page.goto(web + '/login', wait_until='domcontentloaded', timeout=120000)
-    page.get_by_placeholder('your.name@lgu.edu.pk').fill('staff@demo.uniserve.pk')
-    page.get_by_placeholder('Enter your password').fill('UniServe2026!')
-    page.get_by_role('button', name='Sign In', exact=True).click()
+    # Static HTML can be visible before Next hydrates controlled inputs.
+    # Wait for initial scripts, then prove an actual API login occurred.
+    page.wait_for_load_state('networkidle', timeout=60000)
+    email_field = page.get_by_placeholder('your.name@lgu.edu.pk')
+    password_field = page.get_by_placeholder('Enter your password')
+    email_field.fill('staff@demo.uniserve.pk')
+    password_field.fill('UniServe2026!')
+    assert email_field.input_value() == 'staff@demo.uniserve.pk', 'Staff email field lost its value'
+    assert password_field.input_value() == 'UniServe2026!', 'Staff password field lost its value'
+    with page.expect_response(lambda r: r.url.startswith(BASE + '/auth/login') and r.request.method == 'POST', timeout=30000) as login_response:
+        page.get_by_role('button', name='Sign In', exact=True).click()
+    assert login_response.value.status == 200, 'Staff browser login API did not succeed'
+    print('PASS staff browser login POST HTTP 200', flush=True)
     page.wait_for_url('**/dashboard**', timeout=60000)
     page.goto(web + '/dashboard/orders?cafeteria=' + cid, wait_until='domcontentloaded', timeout=60000)
     card = page.get_by_text('#' + str(order['order_number']), exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
