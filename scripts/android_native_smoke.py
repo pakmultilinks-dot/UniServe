@@ -34,6 +34,13 @@ def api(method, path, token=None, body=None):
 def login_api(role):
     return api('POST', '/auth/login', body={'university_email': role + '@demo.uniserve.pk', 'password': 'UniServe2026!'})['tokens']['access_token']
 
+def backend_ready():
+    started = time.monotonic()
+    with urllib.request.urlopen(BASE + '/health/ready', timeout=115) as response:
+        result = json.loads(response.read())
+        assert response.status == 200 and result['status'] == 'ready'
+    print('Backend readiness preflight seconds:', round(time.monotonic() - started, 2), flush=True)
+
 def wait_order_status(expected):
     for _ in range(15):
         order = api('GET', '/orders/' + order_id, student)
@@ -83,6 +90,7 @@ def link(path):
     time.sleep(4)
 
 try:
+    backend_ready()
     adb('shell', 'svc', 'power', 'stayon', 'true')
     adb('shell', 'input', 'keyevent', '224')
     adb('shell', 'wm', 'dismiss-keyguard')
@@ -123,7 +131,21 @@ try:
     buttons = [n for n in root.iter('node') if n.attrib.get('text', '').lower() == 'log in']
     assert buttons, 'Login action missing'
     tap(buttons[0])
-    root = wait_text('Cafeteria', 90)
+    try:
+        root = wait_text('Cafeteria', 90)
+    except AssertionError:
+        raw, root = dump()
+        if 'Request timed out' not in raw: raise
+        print('CI NETWORK RECOVERY: first native login timed out; retrying once after readiness check', flush=True)
+        backend_ready()
+        fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
+        assert len(fields) == 2
+        tap(fields[1]); adb('shell', 'input', 'text', 'UniServe2026!')
+        adb('shell', 'input', 'keyevent', '4')
+        _, root = dump()
+        buttons = [n for n in root.iter('node') if n.attrib.get('text', '').lower() == 'log in']
+        tap(buttons[0])
+        root = wait_text('Cafeteria', 90)
     time.sleep(8)
     _, root = dump()
     cafe = [n for n in root.iter('node') if n.attrib.get('text') == 'Student Cafeteria']
