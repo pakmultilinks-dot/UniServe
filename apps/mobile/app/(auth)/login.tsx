@@ -41,6 +41,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isConnectingSlowly, setIsConnectingSlowly] = useState(false);
   const [error, setError] = useState("");
 
   // Phase 58 — Workstream G: quick PIN sign-in. If a user is stored on this
@@ -100,22 +101,35 @@ export default function LoginScreen() {
   const bc = borderColor(resolvedTheme, "default");
   const brand = colors.brand[700];
 
+  // Unlike the warmed-backend emulator run, a real phone may be the first
+  // client to wake an idle Render instance. Give useful progress feedback
+  // instead of leaving the user staring at a tiny spinner for a minute.
+  useEffect(() => {
+    if (!isLoading) return;
+    const noticeTimer = setTimeout(() => setIsConnectingSlowly(true), 12_000);
+    return () => clearTimeout(noticeTimer);
+  }, [isLoading]);
+
   const handleLogin = async () => {
     if (!email.trim() || !password) {
       setError("Please enter both email and password");
       return;
     }
     setError("");
+    setIsConnectingSlowly(false);
     setIsLoading(true);
     try {
       await login(email.trim(), password);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Login failed";
-      setError(message);
+      setError(message === "Request timed out"
+        ? "UniServe took too long to respond. Check your connection and try again."
+        : message);
       // Clear password on failure for security (audit recommendation)
       setPassword("");
     } finally {
       setIsLoading(false);
+      setIsConnectingSlowly(false);
     }
   };
 
@@ -242,6 +256,13 @@ export default function LoginScreen() {
                 fullWidth
               />
 
+              {isLoading && isConnectingSlowly ? (
+                <Text accessibilityRole="text" style={[styles.connectionNotice, { color: tcSec }]}>
+                  Connecting to UniServe… The server may be waking up after being idle.
+                  Your sign-in is still in progress.
+                </Text>
+              ) : null}
+
               {storedUser ? (
                 <TouchableOpacity
                   onPress={() => { setAuthMode("pin"); setPinError(""); }}
@@ -321,6 +342,13 @@ const styles = StyleSheet.create({
   forgotRow: {
     alignItems: "flex-end",
     marginTop: 4,
+  },
+  connectionNotice: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    paddingHorizontal: 12,
   },
   pinWelcome: {
     fontSize: 14,
