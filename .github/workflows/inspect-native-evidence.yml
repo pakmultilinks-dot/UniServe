@@ -24,3 +24,20 @@ jobs:
                   print('\nEVIDENCE FILE:', p.name)
                   print(p.read_text()[-18000:])
           PY
+
+      - name: Recheck current production readiness and browser CORS
+        run: |
+          python3 - <<'PY'
+          import urllib.request,json
+          api='https://uniserve-api.onrender.com'
+          web='https://uniserve-web-dashboard-pakmultilinks-dot.vercel.app'
+          for url in [api+'/api/v1/health/ready',web+'/dashboard/orders']:
+              with urllib.request.urlopen(url,timeout=115) as r:
+                  body=r.read()
+                  print('CURRENT LIVE',url,r.status,body.decode() if '/health/' in url else len(body))
+          req=urllib.request.Request(api+'/api/v1/auth/login',method='OPTIONS',headers={'Origin':web,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'})
+          with urllib.request.urlopen(req,timeout=115) as r:
+              allowed=r.headers.get('Access-Control-Allow-Origin')
+              print('CURRENT CORS',r.status,allowed)
+              assert r.status==200 and allowed==web
+          PY
