@@ -698,7 +698,9 @@ const styles = StyleSheet.create({
   cafeteriaInline: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
+    alignSelf: "stretch",
+    minHeight: 44,
+    paddingVertical: 4,
     paddingRight: 8,
   },
   cafeteriaTextCol: {
