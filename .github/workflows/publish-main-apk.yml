@@ -12,9 +12,9 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      BUILD_RUN: '39673558277'
-      SOURCE_SHA: d85c36bd2c356d661edcd873c14c83c8f184d6f4
-      RELEASE_TAG: uniserve-main-20261022-d85c36b
+      BUILD_RUN: '39726216958'
+      SOURCE_SHA: 76dedbe3f71ada9ea626a925d3180720482e5ec7
+      RELEASE_TAG: uniserve-main-20261022-76dedbe
     steps:
       - name: Verify exact source and wait for new native build
         run: |
@@ -35,8 +35,8 @@ jobs:
               assert {'AndroidManifest.xml', 'classes.dex', 'assets/index.android.bundle'} <= set(z.namelist())
               assert b'example.invalid' not in z.read('assets/index.android.bundle')
               assert b'https://uniserve-api.onrender.com/api/v1' in z.read('assets/index.android.bundle')
-          p.rename('dist/UniServe-main-d85c36b.apk')
-          p = Path('dist/UniServe-main-d85c36b.apk')
+          p.rename('dist/UniServe-main-76dedbe.apk')
+          p = Path('dist/UniServe-main-76dedbe.apk')
           digest = hashlib.sha256(p.read_bytes()).hexdigest()
           Path('dist/SHA256SUMS.txt').write_text(digest + '  ' + p.name + '\n')
           Path('dist/provenance.json').write_text(json.dumps({'source_commit': os.environ['SOURCE_SHA'], 'native_build_run': os.environ['BUILD_RUN'], 'sha256': digest, 'bytes': p.stat().st_size}, indent=2))
@@ -45,11 +45,11 @@ jobs:
       - name: Publish new candidate with explicit verification limits
         run: |
           cat > release-notes.md <<'NOTES'
-          Fresh native Android APK built from merged main commit d85c36bd2c356d661edcd873c14c83c8f184d6f4, build run https://github.com/pakmultilinks-dot/UniServe/actions/runs/39673558277. This is a new build; no earlier release APK was reused.
+          Fresh native Android APK built from merged main commit 76dedbe3f71ada9ea626a925d3180720482e5ec7, build run https://github.com/pakmultilinks-dot/UniServe/actions/runs/39726216958. This is a new build; no earlier release APK was reused.
 
-          Version 0.1.5 / Android code 6. Includes PR #7 Gradle memory repair, PR #6 screenshot repairs and the loaded-photo timeout regression fix. Full-stack CI passed on this source. Live demo API login, cart, checkout, staff queue, ready notification and collection passed without real payment.
+          Version 0.1.6 / Android code 7. Includes the native cafeteria selector height repair from PR #8. Includes PR #7 Gradle memory repair, PR #6 screenshot repairs and the loaded-photo timeout regression fix. Full-stack CI passed on this source. Live demo API login, cart, checkout, staff queue, ready notification and collection passed without real payment.
 
           Render and Vercel deployed the exact merged source. API/database readiness and exact-origin browser CORS preflight pass; the live demo API flow passed again after deployment with CORS headers verified. Physical Android/emulator screen verification and interactive browser E2E remain outstanding, so this is a candidate APK. SHA256 and source provenance are attached.
           NOTES
-          gh release create "$RELEASE_TAG" dist/UniServe-main-d85c36b.apk dist/SHA256SUMS.txt dist/provenance.json --target "$SOURCE_SHA" --title "UniServe main Android candidate — October 22, 2026" --notes-file release-notes.md --prerelease
+          gh release create "$RELEASE_TAG" dist/UniServe-main-76dedbe.apk dist/SHA256SUMS.txt dist/provenance.json --target "$SOURCE_SHA" --title "UniServe main Android candidate — October 22, 2026" --notes-file release-notes.md --prerelease
           gh release view "$RELEASE_TAG" --json url,assets
