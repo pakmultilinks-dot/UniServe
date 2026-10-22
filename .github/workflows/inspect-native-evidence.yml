@@ -1,0 +1,26 @@
+name: Inspect native failure evidence
+on:
+  push:
+    branches: [ops/inspect-native-evidence-20261022]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Read native failure evidence
+        run: |
+          gh api repos/$GH_REPO/actions/artifacts/12382774099/zip > evidence.zip
+          unzip -q evidence.zip -d evidence
+          python3 - <<'PY'
+          from pathlib import Path
+          for p in Path('evidence').rglob('*'):
+              if p.suffix in ('.xml', '.txt'):
+                  print('\nEVIDENCE FILE:', p.name)
+                  print(p.read_text()[-18000:])
+          PY
