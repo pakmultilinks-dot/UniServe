@@ -74,8 +74,61 @@ jobs:
           cd android
           ./gradlew assembleRelease --no-daemon --no-parallel --max-workers=2
 
+      - name: Sign and validate final release package
+        working-directory: .
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+        run: python3 scripts/sign_verify_android.py
+
+      - name: Preserve public signing, package and source evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-package-verification
+          path: artifacts/android-verification/
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: uniserve-apk
           path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+
+  install-and-live-flow:
+    needs: build-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      QA_DEMO_PASSWORD: ${{ secrets.QA_DEMO_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: uniserve-apk
+          path: native-apk
+      - name: Enable KVM for disposable Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Prepare isolated staff browser
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Install, launch and test actual signed APK with live staff dashboard
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-metrics -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: python3 scripts/android_native_smoke.py
+      - name: Preserve real Android and dashboard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-native-screen-evidence
+          path: native-evidence/
