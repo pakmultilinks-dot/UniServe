@@ -19,6 +19,7 @@ student = staff = None
 order_id = None
 owns_cart = False
 completed = False
+extra_orders = []
 pw = browser = page = None
 cid = '83543334-2688-4c5d-9c83-ee201fac02bd'
 
@@ -157,6 +158,26 @@ try:
     bounds = list(map(int, re.findall(r'\d+', labels[0].attrib['bounds'])))
     assert bounds[3] - bounds[1] >= 80, 'Cafeteria selector must not collapse to a dot'
     snap('04-authenticated-menu')
+    # Exercise category and search in the actual native UI, including empty results.
+    categories = [n for n in root.iter('node') if n.attrib.get('text') == 'Breakfast']
+    assert categories, 'Breakfast category not visible'
+    tap(categories[0]); time.sleep(3)
+    snap('04a-category-breakfast')
+    _, root = dump()
+    tap(next(n for n in root.iter('node') if n.attrib.get('text') == 'All'))
+    time.sleep(3)
+    _, root = dump()
+    search = next(n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText')
+    tap(search); adb('shell', 'input', 'text', 'zzqa-nomatch')
+    adb('shell', 'input', 'keyevent', '4')
+    wait_text('No items found', 30)
+    snap('04b-search-empty-results')
+    _, root = dump()
+    clear = next(n for n in root.iter('node') if n.attrib.get('content-desc') == chr(62027))
+    tap(clear); time.sleep(3)
+    _, root = dump()
+    assert 'No items found' not in ET.tostring(root, encoding='unicode')
+    print('PASS native category selection, search empty state and clearing search', flush=True)
     adb('shell', 'input', 'swipe', '500', '1500', '500', '400', '450')
     time.sleep(3)
     snap('05-menu-scrolled')
@@ -172,6 +193,19 @@ try:
     cart = api('GET', f'/cafeterias/{cid}/cart/', student)
     assert len(cart['items']) == 1, 'Native add-to-cart did not persist exactly one item'
     print('PASS native add-to-cart persists to API', flush=True)
+    link('cart')
+    root = wait_text('Checkout', 30)
+    tap(next(n for n in root.iter('node') if n.attrib.get('content-desc') == chr(61700)))
+    time.sleep(4)
+    changed = api('GET', f'/cafeterias/{cid}/cart/', student)
+    assert changed['items'][0]['quantity'] == 2, 'Native cart increment did not persist'
+    _, root = dump()
+    tap(next(n for n in root.iter('node') if n.attrib.get('content-desc') == chr(62753)))
+    time.sleep(4)
+    changed = api('GET', f'/cafeterias/{cid}/cart/', student)
+    assert changed['items'][0]['quantity'] == 1, 'Native cart decrement did not persist'
+    snap('05a-cart-quantity-controls')
+    print('PASS native quantity increment/decrement persisted to backend', flush=True)
     link('checkout')
     wait_text('Payment Method', 30)
     snap('06-checkout-top')
@@ -266,6 +300,69 @@ try:
     time.sleep(2)
     snap('12-order-scrolled')
     print('PASS native flow through collection; no money transferred', flush=True)
+    link('orders')
+    wait_text('Orders', 30)
+    # History must include the exact completed order, not an arbitrary old label.
+    raw, _ = dump()
+    assert '#' + str(order['order_number']) in raw, 'New completed order absent from native history'
+    snap('13-order-history')
+    print('PASS native history contains exact completed QA order', flush=True)
+
+    def seed_test_order(label):
+        api('POST', f'/cafeterias/{cid}/cart/items', student,
+            {'menu_item_id': cart['items'][0]['menu_item_id'], 'quantity': 1})
+        result = api('POST', f'/cafeterias/{cid}/cart/checkout', student,
+            {'payment_method':'cash','order_type':'immediate','note':qa_note+'-'+label,
+             'idempotency_key':str(uuid.uuid4())})
+        extra_orders.append(result['id'])
+        return result
+
+    cancelled = seed_test_order('student-cancel')
+    link('order/' + cancelled['id'])
+    wait_text('Order Details', 45)
+    for _ in range(5):
+        raw, root = dump()
+        buttons = [n for n in root.iter('node') if n.attrib.get('text') == 'Cancel Order']
+        if buttons: break
+        adb('shell','input','swipe','500','1500','500','500','400'); time.sleep(1)
+    assert buttons, 'Pending student cancellation missing'
+    tap(buttons[0]); root = wait_text('Yes, cancel',30)
+    tap(next(n for n in root.iter('node') if n.attrib.get('text') == 'Yes, cancel'))
+    wait_text('This order was cancelled',45)
+    assert api('GET','/orders/'+cancelled['id'],student)['status'] == 'cancelled'
+    snap('14-student-cancelled-order')
+    print('PASS actual native student cancellation saved; QA order:',cancelled['id'],flush=True)
+
+    rejected = seed_test_order('staff-reject')
+    page.goto(web+'/dashboard/orders?cafeteria='+cid,wait_until='networkidle',timeout=60000)
+    rejected_card = page.get_by_text('#'+str(rejected['order_number']),exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
+    rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
+    modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
+    modal.locator('select').select_option('other')
+    modal.locator('textarea').fill('Automated QA rejection; no food or payment')
+    modal.get_by_role('button',name='Confirm Reject',exact=True).click()
+    for _ in range(15):
+        rejected_state = api('GET','/orders/'+rejected['id'],student)
+        if rejected_state['status']=='cancelled': break
+        time.sleep(2)
+    assert rejected_state['status']=='cancelled' and rejected_state['rejection_reason']=='other'
+    rejected_card.screenshot(path=str(OUT/'web-04-staff-rejected.png'))
+    link('order/'+rejected['id']); wait_text('This order was cancelled',45)
+    snap('15-staff-rejection-on-student')
+    print('PASS actual dashboard rejection synchronizes to native student',flush=True)
+
+    # Read actual staff statistics and menu, without changing live catalog data.
+    responses=[]
+    page.on('response',lambda response: responses.append((response.url,response.status)))
+    page.goto(web+'/dashboard',wait_until='networkidle',timeout=60000)
+    page.get_by_text('Active Orders',exact=True).first.wait_for(timeout=30000)
+    page.screenshot(path=str(OUT/'web-05-staff-statistics.png'),full_page=True)
+    assert any('/orders/cafeteria/' in url and status==200 for url,status in responses)
+    page.goto(web+'/dashboard/menu',wait_until='networkidle',timeout=60000)
+    page.get_by_role('heading',name='Menu Management',exact=True).wait_for(timeout=30000)
+    assert any('/menu-items' in url and status==200 for url,status in responses)
+    page.screenshot(path=str(OUT/'web-06-real-menu.png'),full_page=True)
+    print('PASS dashboard statistics and menu loaded from actual API responses',flush=True)
 finally:
     if page and not completed:
         try: page.screenshot(path=str(OUT / 'web-failure.png'), full_page=True)
@@ -278,6 +375,14 @@ finally:
             manager = login_api('manager')
             api('POST', f'/orders/{order_id}/manager-cancel', manager, {'reason': 'Deployment QA interrupted; no real food or payment'})
         except Exception as exc: print('QA order cleanup requires review:', type(exc).__name__, flush=True)
+    for extra_id in extra_orders:
+        try:
+            state = api('GET','/orders/'+extra_id,student)
+            if state['status'] not in ('completed','cancelled'):
+                manager = login_api('manager')
+                api('POST',f'/orders/{extra_id}/manager-cancel',manager,
+                    {'reason':'Interrupted automated QA; no food or payment'})
+        except Exception as exc: print('Extra QA order cleanup requires review:',type(exc).__name__,flush=True)
     if owns_cart and student:
         try:
             cart = api('GET', f'/cafeterias/{cid}/cart/', student)

@@ -1,7 +1,5 @@
 name: Diagnose Android installation
 on:
-  push:
-    branches: [fix/android-install-repair-20261023]
   workflow_dispatch:
 permissions:
   contents: read
