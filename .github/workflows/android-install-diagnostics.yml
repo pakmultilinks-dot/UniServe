@@ -43,8 +43,10 @@ jobs:
           emulator-options: -no-metrics -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
             adb install install-evidence/old.apk 2>&1 | tee install-evidence/old-install.txt
+            grep -Fx Success install-evidence/old-install.txt
             adb shell dumpsys package com.uniserve.mobile > install-evidence/old-package.txt
             adb install -r install-evidence/current.apk 2>&1 | tee install-evidence/upgrade-install.txt
+            grep -Fx Success install-evidence/upgrade-install.txt
             adb shell pm list users > install-evidence/users.txt
             adb logcat -b crash -d > install-evidence/crash-log.txt
       - uses: actions/upload-artifact@v4
