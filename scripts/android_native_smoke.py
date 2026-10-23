@@ -1,6 +1,8 @@
 """Disposable emulator QA: only demo cash orders, never an online payment."""
 import json
 import os
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import re
 import subprocess
 import time
@@ -331,9 +333,15 @@ try:
     def seed_test_order(label):
         api('POST', f'/cafeterias/{cid}/cart/items', student,
             {'menu_item_id': cart['items'][0]['menu_item_id'], 'quantity': 1})
+        now = datetime.now(ZoneInfo('Asia/Karachi'))
+        collection = now + timedelta(minutes=90)
+        assert collection.date() == now.date(), 'Pending scheduled QA needs a future same-day slot >30 minutes away'
         result = api('POST', f'/cafeterias/{cid}/cart/checkout', student,
-            {'payment_method':'cash','order_type':'immediate','note':qa_note+'-'+label,
-             'idempotency_key':str(uuid.uuid4())})
+            {'payment_method':'cash','order_type':'scheduled',
+             'scheduled_collection_time':collection.strftime('%H:%M'),
+             'note':qa_note+'-'+label,'idempotency_key':str(uuid.uuid4())})
+        assert result['status'] == 'pending', 'Scheduled QA order must remain pending'
+        print('Created pending scheduled QA order:',result['id'],flush=True)
         extra_orders.append(result['id'])
         return result
 
@@ -354,9 +362,27 @@ try:
     snap('14-student-cancelled-order')
     print('PASS actual native student cancellation saved; QA order:',cancelled['id'],flush=True)
 
-    rejected = seed_test_order('staff-reject')
+    rejected = seed_test_order('manager-reject')
+    # Rejection is intentionally a manager-only dashboard action. Do not
+    # change RBAC or disable production auto-acceptance to satisfy QA.
+    page.context.close()
+    page = browser.new_page(viewport={'width':1440,'height':1000})
+    page.goto(web+'/login',wait_until='networkidle',timeout=120000)
+    page.get_by_placeholder('your.name@lgu.edu.pk').fill('manager@demo.uniserve.pk')
+    page.get_by_placeholder('Enter your password').fill(os.environ['QA_DEMO_PASSWORD'])
+    with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as manager_response:
+        page.get_by_role('button',name='Sign In',exact=True).click()
+    assert manager_response.value.status==200
+    page.wait_for_url('**/dashboard**',timeout=60000)
     page.goto(web+'/dashboard/orders?cafeteria='+cid,wait_until='networkidle',timeout=60000)
     rejected_card = page.get_by_text('#'+str(rejected['order_number']),exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
+    rejected_card.get_by_role('button',name='Confirm',exact=True).click(timeout=60000)
+    for _ in range(15):
+        confirmed = api('GET','/orders/'+rejected['id'],student)
+        if confirmed.get('confirmed_at'): break
+        time.sleep(2)
+    assert confirmed.get('confirmed_at') and confirmed['status']=='pending'
+    print('PASS real manager dashboard manually confirms a pending scheduled order',flush=True)
     rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
     modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
     modal.locator('select').select_option('other')
@@ -370,7 +396,7 @@ try:
     rejected_card.screenshot(path=str(OUT/'web-04-staff-rejected.png'))
     link('order/'+rejected['id']); wait_text('This order was cancelled',45)
     snap('15-staff-rejection-on-student')
-    print('PASS actual dashboard rejection synchronizes to native student',flush=True)
+    print('PASS actual manager dashboard rejection synchronizes to native student',flush=True)
 
     # Read actual staff statistics and menu, without changing live catalog data.
     responses=[]
