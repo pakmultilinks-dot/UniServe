@@ -1,0 +1,27 @@
+name: Verify live dashboard operations
+on:
+  push:
+    branches: [fix/android-install-repair-20261023]
+    paths: [scripts/live_dashboard_qa.py, .github/workflows/live-dashboard-qa.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      QA_DEMO_PASSWORD: ${{ secrets.QA_DEMO_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated browser
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Test exact live dashboard and real backend
+        run: python3 scripts/live_dashboard_qa.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-dashboard-evidence
+          path: dashboard-evidence/
