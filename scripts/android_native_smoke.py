@@ -69,6 +69,17 @@ def tap(node):
     x1, y1, x2, y2 = bounds
     adb('shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2))
 
+def labelled_nodes(root, label):
+    label = label.casefold()
+    nodes = [n for n in root.iter('node')
+        if n.attrib.get('text', '').casefold() == label
+        or n.attrib.get('content-desc', '').casefold().endswith(label)]
+    # Native Pressables with an icon group their text into content-desc.
+    # Prefer the actual clickable container; require a visible nonzero box.
+    nodes = [n for n in nodes if len(set(re.findall(r'\d+', n.attrib.get('bounds','')))) > 1]
+    return sorted(nodes, key=lambda n: n.attrib.get('clickable') != 'true')
+
+
 def wait_text(text, seconds=60):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
@@ -165,6 +176,15 @@ try:
     snap('04a-category-breakfast')
     _, root = dump()
     tap(next(n for n in root.iter('node') if n.attrib.get('text') == 'All'))
+    time.sleep(3)
+    _, root = dump()
+    search = next(n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText')
+    tap(search); adb('shell', 'input', 'text', 'chicken')
+    adb('shell', 'input', 'keyevent', '4')
+    wait_text('Chicken Biryani', 30)
+    snap('04b-search-matching-products')
+    _, root = dump()
+    tap(next(n for n in root.iter('node') if n.attrib.get('content-desc') == chr(62027)))
     time.sleep(3)
     _, root = dump()
     search = next(n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText')
@@ -319,15 +339,16 @@ try:
 
     cancelled = seed_test_order('student-cancel')
     link('order/' + cancelled['id'])
-    wait_text('Order Details', 45)
+    wait_text('Order #' + str(cancelled['order_number']), 45)
+    snap('14-cancel-before-scroll')
     for _ in range(5):
         raw, root = dump()
-        buttons = [n for n in root.iter('node') if n.attrib.get('text') == 'Cancel Order']
+        buttons = labelled_nodes(root, 'Cancel Order')
         if buttons: break
         adb('shell','input','swipe','500','1500','500','500','400'); time.sleep(1)
     assert buttons, 'Pending student cancellation missing'
     tap(buttons[0]); root = wait_text('Yes, cancel',30)
-    tap(next(n for n in root.iter('node') if n.attrib.get('text') == 'Yes, cancel'))
+    tap(labelled_nodes(root, 'Yes, cancel')[0])
     wait_text('This order was cancelled',45)
     assert api('GET','/orders/'+cancelled['id'],student)['status'] == 'cancelled'
     snap('14-student-cancelled-order')
@@ -363,6 +384,13 @@ try:
     assert any('/menu-items' in url and status==200 for url,status in responses)
     page.screenshot(path=str(OUT/'web-06-real-menu.png'),full_page=True)
     print('PASS dashboard statistics and menu loaded from actual API responses',flush=True)
+except BaseException:
+    try: snap('failure-last-screen')
+    except Exception: pass
+    if page:
+        try: page.screenshot(path=str(OUT/'web-failure.png'),full_page=True)
+        except Exception: pass
+    raise
 finally:
     if page and not completed:
         try: page.screenshot(path=str(OUT / 'web-failure.png'), full_page=True)
