@@ -1,4 +1,4 @@
-# Android installation repair — October 23, 2026
+# Android installation repair — started October 23, updated October 24, 2026
 
 ## Source and scope
 
@@ -18,13 +18,17 @@ Its subject is `CN=Android Debug`. This shared debug identity is a **confirmed r
 
 ## Repair
 
-The fresh candidate is 0.1.8 / code 9 and retains UniServe's package and UI. The final APK is explicitly re-signed using a private persistent PKCS12 release identity, with v1/v2/v3 enabled. Private key material and passwords are only in protected local backup and encrypted GitHub Actions secrets, never source/artifacts/logs. The public certificate fingerprint is pinned in `docs/android-release-certificate.sha256`:
+The fresh corrected candidate is 0.1.9 / code 10 and retains UniServe's package and UI. The final APK is explicitly re-signed using a private persistent PKCS12 release identity, with v1/v2/v3 enabled. Private key material and passwords are only in protected local backup and encrypted GitHub Actions secrets, never source/artifacts/logs. The public certificate fingerprint is pinned in `docs/android-release-certificate.sha256`:
 
 `f6991eea10fb24d0a5676207a150432f6e6d2bc5f5c653b9410dffe7ce7dbadf`
 
 `sign_verify_android.py` fails on wrong certificate, package/version, missing ABI, testOnly/debuggable flags, invalid signature/alignment/archive, or missing production API URL. Public evidence includes certificate, metadata, manifest, alignment, checksum and exact build source/run provenance. The candidate APK is an Actions artifact; **a completed compile alone does not certify installation or ordering**. The dependent Android job must pass actual installation, startup, native student ordering and live staff-browser actions.
 
 Signing changes mean a one-time migration from the old debug-signed APK requires uninstalling that old app first. Future private-signed builds must retain the same private identity; never regenerate the signing key per build. Uninstalling clears local app data, while account/order data remains on the backend.
+
+## Verified mobile status defect
+
+The 0.1.8 candidate passed actual installation and full ordering/cancellation/manager checks, but visual review caught a remaining defect: a **confirmed, rejected-before-preparation** scheduled order showed Preparing. Confirmation preserves Pending on the server; it does not prove preparation started. The screen now uses `preparation_started_at` and `ready_at` to retain only stages actually reached on cancellation. Four rendered regressions cover confirmed-only rejection, real preparation, reached readiness and ordinary completion. No styles, branding, navigation or business rules changed. A fresh 0.1.9/code 10 binary is required; the earlier 0.1.8 candidate is superseded for final handover.
 
 ## Samsung installation and diagnostic instructions
 
