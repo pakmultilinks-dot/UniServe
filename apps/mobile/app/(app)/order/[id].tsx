@@ -99,9 +99,9 @@ const TERMINAL_ORDER_STATUSES: readonly OrderStatus[] = ["completed", "cancelled
 interface TimelineProps {
   currentStatus: OrderStatus;
   theme: "light" | "dark";
-  /** Staff confirmation timestamp — a cancelled order that was never
-   *  confirmed only ever sat in "Pending", so later stages must not render. */
-  confirmedAt?: string | null;
+  /** Confirmation alone never proves preparation started. */
+  preparationStartedAt?: string | null;
+  readyAt?: string | null;
   /** Staff rejection reason/note, surfaced so a cancelled order never shows a
    *  vague "cancelled" with no explanation (fixes contradictory notifications). */
   rejectionReason?: string | null;
@@ -111,7 +111,8 @@ interface TimelineProps {
 function OrderStatusTimeline({
   currentStatus,
   theme,
-  confirmedAt,
+  preparationStartedAt,
+  readyAt,
   rejectionReason,
   rejectionNote,
 }: TimelineProps) {
@@ -124,11 +125,12 @@ function OrderStatusTimeline({
   const currentIdx = STATUS_ORDER.indexOf(currentStatus as any);
   const isCancelled = currentStatus === "cancelled";
 
-  /* A cancelled order never traversed the remaining stages — showing greyed
-     "Preparing/Ready/Completed" steps implies progress that did not happen.
-     confirmed_at is the only client-visible marker of forward progress: no
-     confirmation → the order was killed while still Pending. */
-  const reachedIdx = isCancelled ? (confirmedAt ? 1 : 0) : currentIdx;
+  // Render only stages evidenced by actual lifecycle timestamps. Staff
+  // confirmation keeps an order pending; treating it as preparation gave
+  // rejected scheduled orders a misleading Preparing stage.
+  const reachedIdx = isCancelled
+    ? (readyAt ? 2 : preparationStartedAt ? 1 : 0)
+    : currentIdx;
   const visibleSteps = STATUS_ORDER.filter(
     (_, idx) => !isCancelled || idx <= reachedIdx,
   );
@@ -545,7 +547,8 @@ export default function OrderDetailScreen() {
         <OrderStatusTimeline
           currentStatus={order.status}
           theme={resolvedTheme as "light" | "dark"}
-          confirmedAt={order.confirmed_at}
+          preparationStartedAt={order.preparation_started_at}
+          readyAt={order.ready_at}
           rejectionReason={order.rejection_reason}
           rejectionNote={order.rejection_note}
         />

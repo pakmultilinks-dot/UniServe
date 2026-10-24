@@ -111,7 +111,7 @@ try:
     adb('shell', 'wm', 'dismiss-keyguard')
     adb('install', '-r', 'native-apk/app-release.apk')
     package_info = adb('shell', 'dumpsys', 'package', PACKAGE)
-    assert re.search(r'\bversionCode=9\b', package_info) and 'versionName=0.1.8' in package_info, 'Expected fresh 0.1.8 / code 9 binary'
+    assert re.search(r'\bversionCode=10\b', package_info) and 'versionName=0.1.9' in package_info, 'Expected fresh 0.1.9 / code 10 binary'
     component = adb('shell', 'cmd', 'package', 'resolve-activity', '--brief', PACKAGE).strip().splitlines()[-1]
     assert component.startswith(PACKAGE + '/'), 'Unexpected resolved app component'
     adb('shell', 'am', 'start', '-W', '-n', component)
@@ -381,7 +381,7 @@ try:
         confirmed = api('GET','/orders/'+rejected['id'],student)
         if confirmed.get('confirmed_at'): break
         time.sleep(2)
-    assert confirmed.get('confirmed_at') and confirmed['status']=='pending'
+    assert confirmed.get('confirmed_at') and confirmed['status']=='pending' and not confirmed.get('preparation_started_at')
     print('PASS real manager dashboard manually confirms a pending scheduled order',flush=True)
     rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
     modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
@@ -395,7 +395,8 @@ try:
     assert rejected_state['status']=='cancelled' and rejected_state['rejection_reason']=='other'
     rejected_card.screenshot(path=str(OUT/'web-04-staff-rejected.png'))
     link('order/'+rejected['id']); wait_text('This order was cancelled',45)
-    snap('15-staff-rejection-on-student')
+    root = snap('15-staff-rejection-on-student')
+    assert not any(n.attrib.get('text') == 'Preparing' for n in root.iter('node')), 'Rejected-before-preparation order must not claim Preparing'
     print('PASS actual manager dashboard rejection synchronizes to native student',flush=True)
 
     # Read actual staff statistics and menu, without changing live catalog data.

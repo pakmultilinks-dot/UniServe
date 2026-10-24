@@ -1,8 +1,5 @@
 name: Verify signed Android candidate
 on:
-  push:
-    branches: [fix/android-install-repair-20261023]
-    paths: [scripts/android_native_smoke.py, .github/workflows/verify-android-candidate.yml]
   workflow_dispatch:
 permissions:
   contents: read
