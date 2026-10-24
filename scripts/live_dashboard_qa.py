@@ -86,6 +86,9 @@ try:
         assert response.value.status in (200,201)
         image=card.get_by_role('img',name=name,exact=True)
         image.wait_for(timeout=30000)
+        # Visibility is not evidence that the image bytes have decoded.
+        page.wait_for_function('(img)=>img.complete && img.naturalWidth>0',
+            arg=image.element_handle(), timeout=30000)
         assert image.evaluate('(img)=>img.complete && img.naturalWidth>0')
         card.screenshot(path=str(OUT/'02-manager-uploaded-image.png'))
         # Staff view must expose real catalog but no manager editing controls.
