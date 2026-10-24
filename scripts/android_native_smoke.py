@@ -61,6 +61,14 @@ def wait_order_status(expected):
 def adb(*args, binary=False):
     return subprocess.check_output(['adb', *args], text=not binary)
 
+def type_text(value):
+    # Controlled native inputs must settle between key events; bulk adb text
+    # injection transposed the first two letters of the generated QA email.
+    for char in value:
+        adb('shell','input','text',char)
+        time.sleep(0.12)
+
+
 def dump():
     adb('shell', 'uiautomator', 'dump', '/sdcard/qa-window.xml')
     raw = adb('exec-out', 'cat', '/sdcard/qa-window.xml')
@@ -119,7 +127,8 @@ try:
     qa_student_id = created_user['user']['id']
     qa_student_password = created_user['temporary_password']
     print('::add-mask::'+qa_student_password, flush=True)
-    print('Isolated native QA student created; existing demo carts remain untouched', flush=True)
+    student = login_api('student')
+    print('Isolated native QA credentials verified through API; existing demo carts remain untouched', flush=True)
     adb('shell', 'svc', 'power', 'stayon', 'true')
     adb('shell', 'input', 'keyevent', '224')
     adb('shell', 'wm', 'dismiss-keyguard')
@@ -152,10 +161,13 @@ try:
     root = wait_text('Welcome Back', 30)
     fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
     assert len(fields) == 2, 'Expected email/password inputs'
-    tap(fields[0]); adb('shell', 'input', 'text', qa_student_email)
+    tap(fields[0]); type_text(qa_student_email)
+    _, entered = dump()
+    email_input = next(n for n in entered.iter('node') if n.attrib.get('class') == 'android.widget.EditText')
+    assert email_input.attrib.get('text') == qa_student_email, 'Native email entry must exactly match generated QA account'
     _, root = dump()
     fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
-    tap(fields[1]); adb('shell', 'input', 'text', qa_student_password)
+    tap(fields[1]); type_text(qa_student_password)
     adb('shell', 'input', 'keyevent', '4')
     _, root = dump()
     buttons = [n for n in root.iter('node') if n.attrib.get('text', '').lower() == 'log in']
@@ -170,7 +182,7 @@ try:
         backend_ready()
         fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
         assert len(fields) == 2
-        tap(fields[1]); adb('shell', 'input', 'text', qa_student_password)
+        tap(fields[1]); type_text(qa_student_password)
         adb('shell', 'input', 'keyevent', '4')
         _, root = dump()
         buttons = [n for n in root.iter('node') if n.attrib.get('text', '').lower() == 'log in']
@@ -388,7 +400,7 @@ try:
         api('POST', f'/cafeterias/{cid}/cart/items', student,
             {'menu_item_id': cart['items'][0]['menu_item_id'], 'quantity': 1})
         now = datetime.now(ZoneInfo('Asia/Karachi'))
-        collection = now + timedelta(minutes=90)
+        collection = now + timedelta(minutes=35)
         assert collection.date() == now.date(), 'Pending scheduled QA needs a future same-day slot >30 minutes away'
         result = api('POST', f'/cafeterias/{cid}/cart/checkout', student,
             {'payment_method':'cash','order_type':'scheduled',
