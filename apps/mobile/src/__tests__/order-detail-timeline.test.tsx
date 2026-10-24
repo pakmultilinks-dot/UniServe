@@ -32,10 +32,11 @@ beforeEach(() => {
   };
 });
 
-it("keeps a confirmed-but-never-prepared rejection at Pending", async () => {
+it("shows Cancelled as terminal status with Pending only as history", async () => {
   mockOrder.confirmed_at = "2026-10-23T07:42:01Z";
   render(<OrderDetailScreen />);
   await screen.findByText("This order was cancelled");
+  expect(screen.getByText("Cancelled")).toBeTruthy();
   expect(screen.getByText("Pending")).toBeTruthy();
   expect(screen.queryByText("Preparing")).toBeNull();
   expect(screen.queryByText("Ready for Pickup")).toBeNull();
@@ -48,6 +49,7 @@ it("preserves actual preparation history on cancellation", async () => {
   mockOrder.preparation_started_at = "2026-10-23T07:43:00Z";
   render(<OrderDetailScreen />);
   await screen.findByText("This order was cancelled");
+  expect(screen.getByText("Cancelled")).toBeTruthy();
   expect(screen.getByText("Preparing")).toBeTruthy();
   expect(screen.queryByText("Ready for Pickup")).toBeNull();
   expect(screen.queryByText("Completed")).toBeNull();
@@ -57,6 +59,7 @@ it("preserves a reached Ready stage without inventing completion", async () => {
   mockOrder.ready_at = "2026-10-23T07:44:00Z";
   render(<OrderDetailScreen />);
   await screen.findByText("This order was cancelled");
+  expect(screen.getByText("Cancelled")).toBeTruthy();
   expect(screen.getByText("Ready for Pickup")).toBeTruthy();
   expect(screen.queryByText("Completed")).toBeNull();
 });

@@ -139,8 +139,8 @@ function OrderStatusTimeline({
     <View style={[styles.timelineCard, { backgroundColor: bg, borderColor: bc }]}>
       {visibleSteps.map((status, idx) => {
         const config = STATUS_CONFIG[status];
-        const isActive = idx === reachedIdx;
-        const isPast = !isCancelled ? idx < currentIdx : idx < reachedIdx;
+        const isActive = !isCancelled && idx === reachedIdx;
+        const isPast = isCancelled ? idx <= reachedIdx : idx < currentIdx;
 
         return (
           <View key={status} style={styles.timelineStep}>
@@ -189,6 +189,20 @@ function OrderStatusTimeline({
         );
       })}
 
+      {/* A terminal cancellation must be the primary status, not an active
+          Pending/Preparing heading. Earlier stages remain historical. */}
+      {isCancelled && (
+        <View style={styles.timelineStep}>
+          <View style={styles.timelineIconCol}>
+            <View style={[styles.timelineIcon, { backgroundColor: functionalColor(theme, "error"), borderColor: functionalColor(theme, "error") }]}>
+              <Ionicons name="close-circle-outline" size={14} color="#ffffff" />
+            </View>
+          </View>
+          <View style={styles.timelineLabelCol}>
+            <Text style={[styles.timelineLabel, { color: functionalColor(theme, "error"), fontWeight: "700" }]}>Cancelled</Text>
+          </View>
+        </View>
+      )}
       {/* Cancelled override */}
       {isCancelled && (
         <View style={[styles.cancelledBanner, { borderColor: functionalColor(theme, "error") + "30" }]}>

@@ -62,3 +62,14 @@ Do not merge automatically. Once reviewed and merged, run **Build Android APK on
 ## Optional future UX work — not implemented
 
 Foodpanda's public [ordering explanation](https://www.foodpanda.pk/contents/how-it-works) was consulted only for general browse → cart → checkout → confirmation ideas. Future changes could improve semantic labels on native quantity controls and make loading/retry wording more consistent, subject to approval. No branding, layouts, delivery/rider/maps/payment features were copied. The nine reference images were not attached to this request's available files; no visual redesign was inferred from them.
+
+
+## Samsung screenshot follow-up: 0.1.10 / code 11
+
+The supplied physical-phone screenshots demonstrate the app installs/launches, but reveal inconsistent cafeteria error/selection states, a canceled order retaining an active Pending heading, and a hardcoded v0.1.4 profile label.
+
+Home and cart now share one cafeteria request/state. Manual retry and foreground refresh clear the same error and select an available cafeteria after recovery. Catalog GETs retry transient network/timeout/502/503/504 failures once; mutations are never automatically replayed. Search/category filtering uses the loaded menu, so each keystroke no longer starts another network request. Old menu/cart/session responses are ignored after selection/session changes.
+
+Cancelled is now the terminal heading; actual earlier stages remain checked history. Profile version comes from Expo build configuration. Menu decrement errors surface a retryable toast instead of an unhandled rejection. No layout/branding redesign.
+
+Fresh native QA creates a separate verified QA student using existing authorized admin access, masks its generated password, preserves existing demo carts, and suspends only that QA account after cleanup. It must test actual offline cafeteria refresh and restored-network retry, the real profile version, and the complete cash order/notification/collection/cancellation flow. This is fault recovery testing, not proof of a physical Render idle cycle. A new source-built APK is required; 0.1.9 is historical.

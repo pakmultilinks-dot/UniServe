@@ -23,6 +23,10 @@ owns_cart = False
 completed = False
 extra_orders = []
 pw = browser = page = None
+qa_student_id = None
+qa_student_email = None
+qa_student_password = None
+admin = None
 cid = '83543334-2688-4c5d-9c83-ee201fac02bd'
 
 def api(method, path, token=None, body=None):
@@ -36,7 +40,9 @@ def api(method, path, token=None, body=None):
         return json.loads(raw) if raw else None
 
 def login_api(role):
-    return api('POST', '/auth/login', body={'university_email': role + '@demo.uniserve.pk', 'password': os.environ['QA_DEMO_PASSWORD']})['tokens']['access_token']
+    email = qa_student_email if role == 'student' and qa_student_email else role + '@demo.uniserve.pk'
+    password = qa_student_password if role == 'student' and qa_student_password else os.environ['QA_DEMO_PASSWORD']
+    return api('POST', '/auth/login', body={'university_email': email, 'password': password})['tokens']['access_token']
 
 def backend_ready():
     started = time.monotonic()
@@ -106,12 +112,20 @@ def link(path):
 
 try:
     backend_ready()
+    admin = login_api('admin')
+    qa_student_email = 'qa-native-' + uuid.uuid4().hex[:12] + '@demo.uniserve.pk'
+    created_user = api('POST', '/users/', admin, {'first_name':'QA', 'last_name':'Native',
+        'university_id':'QA-'+uuid.uuid4().hex[:16], 'university_email':qa_student_email, 'role':'student'})
+    qa_student_id = created_user['user']['id']
+    qa_student_password = created_user['temporary_password']
+    print('::add-mask::'+qa_student_password, flush=True)
+    print('Isolated native QA student created; existing demo carts remain untouched', flush=True)
     adb('shell', 'svc', 'power', 'stayon', 'true')
     adb('shell', 'input', 'keyevent', '224')
     adb('shell', 'wm', 'dismiss-keyguard')
     adb('install', '-r', 'native-apk/app-release.apk')
     package_info = adb('shell', 'dumpsys', 'package', PACKAGE)
-    assert re.search(r'\bversionCode=10\b', package_info) and 'versionName=0.1.9' in package_info, 'Expected fresh 0.1.9 / code 10 binary'
+    assert re.search(r'\bversionCode=11\b', package_info) and 'versionName=0.1.10' in package_info, 'Expected fresh 0.1.10 / code 11 binary'
     component = adb('shell', 'cmd', 'package', 'resolve-activity', '--brief', PACKAGE).strip().splitlines()[-1]
     assert component.startswith(PACKAGE + '/'), 'Unexpected resolved app component'
     adb('shell', 'am', 'start', '-W', '-n', component)
@@ -137,17 +151,17 @@ try:
     root = wait_text('Welcome Back', 30)
     fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
     assert len(fields) == 2, 'Expected email/password inputs'
-    tap(fields[0]); adb('shell', 'input', 'text', 'student@demo.uniserve.pk')
+    tap(fields[0]); adb('shell', 'input', 'text', qa_student_email)
     _, root = dump()
     fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
-    tap(fields[1]); adb('shell', 'input', 'text', os.environ['QA_DEMO_PASSWORD'])
+    tap(fields[1]); adb('shell', 'input', 'text', qa_student_password)
     adb('shell', 'input', 'keyevent', '4')
     _, root = dump()
     buttons = [n for n in root.iter('node') if n.attrib.get('text', '').lower() == 'log in']
     assert buttons, 'Login action missing'
     tap(buttons[0])
     try:
-        root = wait_text('Cafeteria', 90)
+        root = wait_text('Cafeteria', 160)
     except AssertionError:
         raw, root = dump()
         if 'Request timed out' not in raw: raise
@@ -155,12 +169,12 @@ try:
         backend_ready()
         fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
         assert len(fields) == 2
-        tap(fields[1]); adb('shell', 'input', 'text', os.environ['QA_DEMO_PASSWORD'])
+        tap(fields[1]); adb('shell', 'input', 'text', qa_student_password)
         adb('shell', 'input', 'keyevent', '4')
         _, root = dump()
         buttons = [n for n in root.iter('node') if n.attrib.get('text', '').lower() == 'log in']
         tap(buttons[0])
-        root = wait_text('Cafeteria', 90)
+        root = wait_text('Cafeteria', 160)
     time.sleep(8)
     _, root = dump()
     cafe = [n for n in root.iter('node') if n.attrib.get('text') == 'Student Cafeteria']
@@ -171,6 +185,30 @@ try:
     bounds = list(map(int, re.findall(r'\d+', labels[0].attrib['bounds'])))
     assert bounds[3] - bounds[1] >= 80, 'Cafeteria selector must not collapse to a dot'
     snap('04-authenticated-menu')
+    # Reproduce the screenshot's failed refresh, then recover on the exact APK.
+    # Network controls affect only this disposable emulator.
+    adb('shell','svc','wifi','disable'); adb('shell','svc','data','disable')
+    adb('shell','input','keyevent','3'); time.sleep(2)
+    adb('shell','am','start','-W','-n',component); time.sleep(3)
+    _, root = dump()
+    selector = next(n for n in root.iter('node') if n.attrib.get('content-desc','').startswith('Current cafeteria:'))
+    tap(selector)
+    wait_text('Unable to refresh',160)
+    snap('04c-offline-cafeteria-refresh')
+    adb('shell','svc','wifi','enable'); adb('shell','svc','data','enable'); time.sleep(8)
+    _, root = dump()
+    tap(labelled_nodes(root,'Try Again')[0])
+    for _ in range(45):
+        raw, root = dump()
+        if 'Unable to refresh' not in raw and 'Loading cafeterias' not in raw: break
+        time.sleep(3)
+    assert 'Unable to refresh' not in raw and 'Loading cafeterias' not in raw, 'Catalog retry must clear stale failure/loading'
+    tap(labelled_nodes(root,'Student Cafeteria')[0])
+    root = wait_text('Chicken Biryani',60)
+    assert 'Unable to connect' not in ET.tostring(root,encoding='unicode')
+    snap('04d-restored-menu-no-stale-error')
+    print('PASS actual native offline catalog refresh and restored-network retry; cached selection preserved and error cleared',flush=True)
+
     # Exercise category and search in the actual native UI, including empty results.
     categories = [n for n in root.iter('node') if n.attrib.get('text') == 'Breakfast']
     assert categories, 'Breakfast category not visible'
@@ -397,6 +435,7 @@ try:
     link('order/'+rejected['id']); wait_text('This order was cancelled',45)
     root = snap('15-staff-rejection-on-student')
     assert not any(n.attrib.get('text') == 'Preparing' for n in root.iter('node')), 'Rejected-before-preparation order must not claim Preparing'
+    assert any(n.attrib.get('text') == 'Cancelled' for n in root.iter('node')), 'Cancelled must be the primary terminal status'
     print('PASS actual manager dashboard rejection synchronizes to native student',flush=True)
 
     # Read actual staff statistics and menu, without changing live catalog data.
@@ -411,6 +450,14 @@ try:
     assert any('/menu-items' in url and status==200 for url,status in responses)
     page.screenshot(path=str(OUT/'web-06-real-menu.png'),full_page=True)
     print('PASS dashboard statistics and menu loaded from actual API responses',flush=True)
+    link('profile')
+    for _ in range(4):
+        raw, root = dump()
+        if 'v0.1.10' in raw: break
+        adb('shell','input','swipe','500','1500','500','400','450'); time.sleep(1)
+    wait_text('v0.1.10',30); snap('16-profile-actual-build-version')
+    print('PASS native profile displays actual build version v0.1.10',flush=True)
+
 except BaseException:
     try: snap('failure-last-screen')
     except Exception: pass
@@ -419,6 +466,9 @@ except BaseException:
         except Exception: pass
     raise
 finally:
+    try:
+        adb('shell','svc','wifi','enable'); adb('shell','svc','data','enable')
+    except Exception: pass
     if page and not completed:
         try: page.screenshot(path=str(OUT / 'web-failure.png'), full_page=True)
         except Exception: pass
@@ -443,3 +493,9 @@ finally:
             cart = api('GET', f'/cafeterias/{cid}/cart/', student)
             for item in cart['items']: api('DELETE', f'/cafeterias/{cid}/cart/items/{item["id"]}', student)
         except Exception as exc: print('QA cart cleanup requires review:', type(exc).__name__, flush=True)
+
+    if qa_student_id and admin:
+        try:
+            api('POST',f'/users/{qa_student_id}/suspend',admin,{'reason':'Isolated automated QA completed; no real food or payment'})
+            print('Isolated QA student suspended after cleanup',flush=True)
+        except Exception as exc: print('QA account cleanup requires review:',type(exc).__name__,flush=True)
