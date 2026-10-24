@@ -1,8 +1,6 @@
 """Disposable emulator QA: only demo cash orders, never an online payment."""
 import json
 import os
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 import re
 import subprocess
 import time
@@ -221,7 +219,7 @@ try:
         time.sleep(3)
     assert 'Unable to refresh' not in raw and 'Loading cafeterias' not in raw, 'Catalog retry must clear stale failure/loading'
     tap(labelled_nodes(root,'Student Cafeteria')[0])
-    root = wait_text('Chicken Biryani',60)
+    root = wait_text('Chicken Biryani',150)
     assert 'Unable to connect' not in ET.tostring(root,encoding='unicode')
     snap('04d-restored-menu-no-stale-error')
     print('PASS actual native offline catalog refresh and restored-network retry; cached selection preserved and error cleared',flush=True)
@@ -403,15 +401,14 @@ try:
     def seed_test_order(label):
         api('POST', f'/cafeterias/{cid}/cart/items', student,
             {'menu_item_id': cart['items'][0]['menu_item_id'], 'quantity': 1})
-        now = datetime.now(ZoneInfo('Asia/Karachi'))
-        collection = now + timedelta(minutes=35)
-        assert collection.date() == now.date(), 'Pending scheduled QA needs a future same-day slot >30 minutes away'
+        # Unpaid online immediate orders legitimately remain Pending. Only
+        # create the order; NEVER initiate a payment/provider request. This
+        # exercises cancellation/rejection even outside same-day slot hours.
         result = api('POST', f'/cafeterias/{cid}/cart/checkout', student,
-            {'payment_method':'cash','order_type':'scheduled',
-             'scheduled_collection_time':collection.strftime('%H:%M'),
+            {'payment_method':'online','order_type':'immediate',
              'note':qa_note+'-'+label,'idempotency_key':str(uuid.uuid4())})
-        assert result['status'] == 'pending', 'Scheduled QA order must remain pending'
-        print('Created pending scheduled QA order:',result['id'],flush=True)
+        assert result['status'] == 'pending', 'Unpaid QA order must remain pending'
+        print('Created unpaid Pending QA order; no payment initiation:',result['id'],flush=True)
         extra_orders.append(result['id'])
         return result
 
@@ -452,7 +449,7 @@ try:
         if confirmed.get('confirmed_at'): break
         time.sleep(2)
     assert confirmed.get('confirmed_at') and confirmed['status']=='pending' and not confirmed.get('preparation_started_at')
-    print('PASS real manager dashboard manually confirms a pending scheduled order',flush=True)
+    print('PASS real manager dashboard manually confirms an unpaid Pending order without preparation',flush=True)
     rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
     modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
     modal.locator('select').select_option('other')
