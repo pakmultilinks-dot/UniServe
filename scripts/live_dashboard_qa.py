@@ -10,7 +10,11 @@ import uuid
 from playwright.sync_api import sync_playwright
 
 BASE='https://uniserve-api.onrender.com/api/v1'
-WEB='https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app'
+WEB=os.environ.get('QA_WEB_URL','https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app')
+assert WEB in {
+    'https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app',
+    'https://uniserve-web-dashboard-git-fix-android-a47c77-pakmultilinks-dot.vercel.app',
+}, 'Only authorized UniServe dashboard deployments may receive QA credentials'
 OUT=Path('dashboard-evidence'); OUT.mkdir(exist_ok=True)
 CID='83543334-2688-4c5d-9c83-ee201fac02bd'
 name='QA-unpublished-'+str(uuid.uuid4())[:8]

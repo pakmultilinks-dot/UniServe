@@ -79,3 +79,6 @@ A fresh production probe at20:29PKT measured health/readiness and exact-Origin C
 
 
 Visual inspection of the supplied login screenshot revealed that `lgu-logo.jpg`, the launcher icon and splash were generated from an unrelated coffee-ordering reference image. These are now rasterized from the existing UniServe web SVG mark, preserving the established shield/colors rather than inventing a new logo. The web landing asset is corrected too; its production publication remains subject to review/merge. `make_icon.cjs` regenerates the assets using sharp0.35.5 (`UNISERVE_SHARP_MODULE` can point to an isolated installation). This correction requires a new fresh source build; the earlier build11 compile was canceled before handover. Native QA also exercises two distinct products and their actual total, with named quantity controls.
+
+
+The web client also used the default60-second login/session-restoration deadline. These authentication calls now allow125 seconds, scoped to auth rather than checkout/payment writes. Regressions cover83-second login/current-user responses and bounded stalled-login timeout. This web-runtime correction is verified through CI/preview and awaits review/merge for the main production dashboard. Its source changes do not alter the mobile APK.
