@@ -1,5 +1,5 @@
 import React from "react";
-import { Text, AppState } from "react-native";
+import { Text, AppState, type AppStateStatus } from "react-native";
 import { render, screen, act, waitFor } from "@testing-library/react-native";
 import { CartProvider, useCart } from "../contexts/CartContext";
 import { getCafeterias } from "../services/data";
@@ -9,8 +9,9 @@ jest.mock("../services/secure-storage", () => ({ SecureStorage: { getItemAsync: 
 jest.mock("../services/data", () => ({ getCafeterias: jest.fn(), getCart: jest.fn(async () => ({ items: [] })) }));
 let state: ReturnType<typeof useCart>;
 function Reader() {
-  state = useCart();
-  return <Text testID="state">{JSON.stringify({ error: state.cafeteriasError, loading: state.isCafeteriaLoading, selected: state.selectedCafeteria?.id, cafeterias: state.cafeterias.length })}</Text>;
+  const value = useCart();
+  React.useEffect(() => { state = value; }, [value]);
+  return <Text testID="state">{JSON.stringify({ error: value.cafeteriasError, loading: value.isCafeteriaLoading, selected: value.selectedCafeteria?.id, cafeterias: value.cafeterias.length })}</Text>;
 }
 const read = () => JSON.parse(screen.getByTestId("state").props.children);
 const request = getCafeterias as jest.Mock;
@@ -43,4 +44,19 @@ it("does not restore an old session's selection after logout", async () => {
   view.rerender(<CartProvider><Reader /></CartProvider>);
   await act(async () => { resolve([{ id: "old-session-caf" }]); });
   expect(read().selected).toBeUndefined(); expect(read().cafeterias).toBe(0);
+});
+
+it("refreshes a failed cafeteria load when the app returns to the foreground", async () => {
+  let foreground: ((state: AppStateStatus) => void) | undefined;
+  jest.spyOn(AppState, "addEventListener").mockImplementation((_event, listener) => {
+    foreground = listener;
+    return { remove: jest.fn() };
+  });
+  request.mockRejectedValueOnce(new Error("offline"));
+  render(<CartProvider><Reader /></CartProvider>);
+  await waitFor(() => expect(read().error).toContain("Unable to connect"));
+  request.mockResolvedValueOnce([{ id: "restored" }]);
+  await act(async () => { foreground?.("active"); });
+  await waitFor(() => expect(read().selected).toBe("restored"));
+  expect(read().error).toBe("");
 });

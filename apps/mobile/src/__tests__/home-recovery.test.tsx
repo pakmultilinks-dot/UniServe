@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react-native";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react-native";
 import HomeScreen from "../../app/(app)/(tabs)";
 import { getTodaysMenu } from "../services/data";
 const mockCafe = { id: "c1", name: "Student Cafeteria", operational_status: "open" };
@@ -47,4 +47,17 @@ it("filters search/categories locally without extra network requests", async () 
   fireEvent.press(screen.getByTestId("breakfast"));
   await waitFor(() => expect(screen.queryByText("Chicken Biryani")).toBeNull());
   expect(menu).toHaveBeenCalledTimes(1);
+});
+
+it("ignores a delayed menu response from the previous cafeteria", async () => {
+  let resolveOld!: (value: unknown) => void;
+  menu.mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve; }))
+    .mockResolvedValueOnce({ items: [{ menu_item: { id: "new-food", name: "New Cafe Meal", category: "main_course", is_available: true }, is_available_today: true }] });
+  const view = render(<HomeScreen />);
+  mockCart = { ...mockCart, selectedCafeteria: { ...mockCafe, id: "c2" } };
+  view.rerender(<HomeScreen />);
+  await screen.findByText("New Cafe Meal");
+  await act(async () => { resolveOld({ items: [{ menu_item: { id: "old-food", name: "Stale Meal" } }] }); });
+  expect(screen.queryByText("Stale Meal")).toBeNull();
+  expect(screen.getByText("New Cafe Meal")).toBeTruthy();
 });
