@@ -1,8 +1,9 @@
 import React from "react";
 import { render, screen } from "@testing-library/react-native";
+import type { Order } from "@uniserve/shared-types";
 import OrderDetailScreen from "../../app/(app)/order/[id]";
 
-let mockOrder: Record<string, unknown>;
+let mockOrder: Order;
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: "qa-order" }),
   useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
@@ -20,8 +21,12 @@ jest.mock("../services/data", () => ({
 
 beforeEach(() => {
   mockOrder = {
-    id: "qa-order", order_number: 27, status: "cancelled", payment_method: "cash",
-    order_type: "scheduled", total_amount: 35000, items: [],
+    id: "qa-order", order_number: 27, collection_token: "qa-token",
+    user_id: "qa-student", cafeteria_id: "qa-cafe",
+    status: "cancelled", payment_method: "cash",
+    order_type: "scheduled", total_amount: 35000, currency: "PKR",
+    order_date: "2026-10-23", inventory_reserved: false, items: [],
+    updated_at: "2026-10-23T07:42:00Z",
     created_at: "2026-10-23T07:42:00Z", rejection_reason: "other",
     rejection_note: "QA rejection before preparation",
   };
