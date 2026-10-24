@@ -111,7 +111,7 @@ def wait_text(text, seconds=60):
                 continue
         if text.lower() in raw.lower(): return root
         time.sleep(3)
-    snap('failure-' + text.replace(' ', '-'))
+    snap('failure-' + re.sub(r'[^A-Za-z0-9_-]+','-',text))
     raise AssertionError('Screen text not reached: ' + text)
 
 def link(path):
@@ -188,11 +188,15 @@ try:
         buttons = [n for n in root.iter('node') if n.attrib.get('text', '').lower() == 'log in']
         tap(buttons[0])
         root = wait_text('Cafeteria', 160)
-    time.sleep(8)
-    _, root = dump()
-    cafe = [n for n in root.iter('node') if n.attrib.get('text') == 'Student Cafeteria']
-    if cafe: tap(cafe[0]); time.sleep(8)
-    root = wait_text('Current cafeteria: Student Cafeteria', 30)
+    # Shared cafeteria state auto-selects the remembered/first valid location.
+    # Only choose a row if a real selector sheet is already open; tapping the
+    # current header would open it and hide the header from accessibility.
+    time.sleep(3)
+    raw, root = dump()
+    snap('03a-authenticated-cafeteria-state')
+    if any(n.attrib.get('text') == 'Select Cafeteria' for n in root.iter('node')):
+        tap(labelled_nodes(root,'Student Cafeteria')[0])
+    root = wait_text('Current cafeteria: Student Cafeteria',120)
     labels = [n for n in root.iter('node') if n.attrib.get('content-desc', '').startswith('Current cafeteria: Student Cafeteria')]
     assert labels, 'Selected cafeteria must expose its visible label'
     bounds = list(map(int, re.findall(r'\d+', labels[0].attrib['bounds'])))
@@ -232,7 +236,7 @@ try:
     time.sleep(3)
     _, root = dump()
     search = next(n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText')
-    tap(search); adb('shell', 'input', 'text', 'chicken')
+    tap(search); type_text('chicken')
     adb('shell', 'input', 'keyevent', '4')
     wait_text('Chicken Biryani', 30)
     snap('04b-search-matching-products')
@@ -241,7 +245,7 @@ try:
     time.sleep(3)
     _, root = dump()
     search = next(n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText')
-    tap(search); adb('shell', 'input', 'text', 'zzqa-nomatch')
+    tap(search); type_text('zzqa-nomatch')
     adb('shell', 'input', 'keyevent', '4')
     wait_text('No items found', 30)
     snap('04b-search-empty-results')
@@ -304,7 +308,7 @@ try:
         adb('shell', 'input', 'swipe', '500', '1500', '500', '500', '400')
         time.sleep(1)
     assert fields, 'Checkout order-note input missing'
-    tap(fields[0]); adb('shell', 'input', 'text', qa_note)
+    tap(fields[0]); type_text(qa_note)
     adb('shell', 'input', 'keyevent', '4')
     root = snap('07-checkout-submit-visible')
     place = [n for n in root.iter('node') if n.attrib.get('text', '').lower().startswith('place order')]
