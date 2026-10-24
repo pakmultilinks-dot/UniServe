@@ -85,3 +85,8 @@ The web client also used the default60-second login/session-restoration deadline
 
 
 Direct PR-preview browser login is blocked by the production API's narrow CORS allowlist (OPTIONS400/no Allow-Origin); the main dashboard origin continues to pass. Candidate browser QA can serve only the preview's static documents/assets under the approved origin inside an isolated Playwright context, while every API request remains real and unintercepted. This verifies candidate web code before review/merge; it is explicitly not a claim that the main production dashboard has been redeployed or that direct preview CORS is enabled.
+
+
+## Re-selecting the current cafeteria — confirmed infinite-loader fix
+
+Actual offline/recovery QA exposed a separate real defect: choosing the currently selected cafeteria cleared menu items and set loading=true, but the unchanged context selection triggered no fetching effect. The spinner could therefore remain indefinitely. Selection now only updates context/closes the sheet; the menu effect exclusively owns loading and data clearing. A rendered regression reselects the same cafeteria and requires its loaded meal to remain visible with no loader and no extra fetch. A fresh0.1.11/code12 APK is required. The0.1.10 draft is diagnostic and must not be published. Secondary Pending cancellation/rejection QA uses unpaid online orders without initiating payment or making provider calls, avoiding unsupported same-day scheduled slots late at night; the primary complete flow remains cash.

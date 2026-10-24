@@ -132,7 +132,7 @@ try:
     adb('shell', 'wm', 'dismiss-keyguard')
     adb('install', '-r', 'native-apk/app-release.apk')
     package_info = adb('shell', 'dumpsys', 'package', PACKAGE)
-    assert re.search(r'\bversionCode=11\b', package_info) and 'versionName=0.1.10' in package_info, 'Expected fresh 0.1.10 / code 11 binary'
+    assert re.search(r'\bversionCode=12\b', package_info) and 'versionName=0.1.11' in package_info, 'Expected fresh 0.1.11 / code 12 binary'
     component = adb('shell', 'cmd', 'package', 'resolve-activity', '--brief', PACKAGE).strip().splitlines()[-1]
     assert component.startswith(PACKAGE + '/'), 'Unexpected resolved app component'
     adb('shell', 'am', 'start', '-W', '-n', component)
@@ -482,10 +482,10 @@ try:
     link('profile')
     for _ in range(4):
         raw, root = dump()
-        if 'v0.1.10' in raw: break
+        if 'v0.1.11' in raw: break
         adb('shell','input','swipe','500','1500','500','400','450'); time.sleep(1)
-    wait_text('v0.1.10',30); snap('16-profile-actual-build-version')
-    print('PASS native profile displays actual build version v0.1.10',flush=True)
+    wait_text('v0.1.11',30); snap('16-profile-actual-build-version')
+    print('PASS native profile displays actual build version v0.1.11',flush=True)
 
 except BaseException:
     try: snap('failure-last-screen')

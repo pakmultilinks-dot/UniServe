@@ -12,7 +12,13 @@ jest.mock("../contexts/CartContext", () => ({ useCart: () => mockCart }));
 jest.mock("../contexts/FavoritesContext", () => ({ useFavorites: () => ({ isFavorite: () => false }) }));
 jest.mock("../contexts/NotificationsContext", () => ({ useNotifications: () => ({ unreadCount: 0, refreshUnreadCount: jest.fn() }) }));
 jest.mock("../services/data", () => ({ getTodaysMenu: jest.fn() }));
-jest.mock("../components/ui/BottomSheet", () => ({ BottomSheet: () => null, BottomSheetRow: () => null }));
+jest.mock("../components/ui/BottomSheet", () => {
+  const React = require("react"); const { View, Text, Pressable } = require("react-native");
+  return {
+    BottomSheet: ({ visible, children }: { visible: boolean; children: React.ReactNode }) => visible ? <View>{children}</View> : null,
+    BottomSheetRow: ({ label, onPress }: { label: string; onPress: () => void }) => <Pressable testID="choose-cafeteria" onPress={onPress}><Text>{label}</Text></Pressable>,
+  };
+});
 jest.mock("../components/ui", () => {
   const React = require("react"); const { Text, TextInput, Pressable } = require("react-native");
   return {
@@ -26,7 +32,7 @@ jest.mock("../components/ui", () => {
 const menu = getTodaysMenu as jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks();
-  mockCart = { selectedCafeteria: mockCafe, cafeterias: [mockCafe], cafeteriasError: "", isCafeteriaLoading: false, refreshCafeterias: jest.fn(), cartItemCount: 0 };
+  mockCart = { selectedCafeteria: mockCafe, cafeterias: [mockCafe], cafeteriasError: "", isCafeteriaLoading: false, refreshCafeterias: jest.fn(), selectCafeteria: jest.fn(), cartItemCount: 0 };
   menu.mockResolvedValue({ items: [{ menu_item: { id: "food", name: "Chicken Biryani", category: "main_course", is_available: true }, is_available_today: true }] });
 });
 it("shows cafeteria failure and removes it once the shared retry recovers", async () => {
@@ -60,4 +66,13 @@ it("ignores a delayed menu response from the previous cafeteria", async () => {
   await act(async () => { resolveOld({ items: [{ menu_item: { id: "old-food", name: "Stale Meal" } }] }); });
   expect(screen.queryByText("Stale Meal")).toBeNull();
   expect(screen.getByText("New Cafe Meal")).toBeTruthy();
+});
+
+it("keeps the loaded menu when the already-selected cafeteria is chosen again", async () => {
+  render(<HomeScreen />); await screen.findByText("Chicken Biryani");
+  fireEvent.press(screen.getByLabelText("Current cafeteria: Student Cafeteria"));
+  fireEvent.press(screen.getByTestId("choose-cafeteria"));
+  expect(screen.getByText("Chicken Biryani")).toBeTruthy();
+  expect(screen.queryByText("Loading menu")).toBeNull();
+  expect(menu).toHaveBeenCalledTimes(1);
 });

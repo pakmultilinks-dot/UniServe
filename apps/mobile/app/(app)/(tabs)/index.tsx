@@ -253,8 +253,8 @@ export default function HomeScreen() {
     (cafeteria: Cafeteria) => {
       selectCafeteria(cafeteria);
       setCafeteriaSheetVisible(false);
-      setMenuItems([]);
-      setIsLoading(true);
+      // The selection effect owns menu loading. Re-selecting the same
+      // object triggers no effect, so never clear/start a loader here.
     },
     [selectCafeteria],
   );
