@@ -82,3 +82,6 @@ Visual inspection of the supplied login screenshot revealed that `lgu-logo.jpg`,
 
 
 The web client also used the default60-second login/session-restoration deadline. These authentication calls now allow125 seconds, scoped to auth rather than checkout/payment writes. Regressions cover83-second login/current-user responses and bounded stalled-login timeout. This web-runtime correction is verified through CI/preview and awaits review/merge for the main production dashboard. Its source changes do not alter the mobile APK.
+
+
+Direct PR-preview browser login is blocked by the production API's narrow CORS allowlist (OPTIONS400/no Allow-Origin); the main dashboard origin continues to pass. Candidate browser QA can serve only the preview's static documents/assets under the approved origin inside an isolated Playwright context, while every API request remains real and unintercepted. This verifies candidate web code before review/merge; it is explicitly not a claim that the main production dashboard has been redeployed or that direct preview CORS is enabled.

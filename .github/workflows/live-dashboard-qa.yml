@@ -8,7 +8,7 @@ on:
       target:
         description: Dashboard deployment to verify
         type: choice
-        options: [production, preview]
+        options: [production, preview, candidate]
         default: production
 permissions:
   contents: read
@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 20
     env:
       QA_DEMO_PASSWORD: ${{ secrets.QA_DEMO_PASSWORD }}
+      QA_CANDIDATE_BUNDLE_PROXY: ${{ inputs.target == 'candidate' && '1' || '0' }}
       QA_WEB_URL: ${{ inputs.target == 'preview' && 'https://uniserve-web-dashboard-git-fix-android-a47c77-pakmultilinks-dot.vercel.app' || 'https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app' }}
     steps:
       - uses: actions/checkout@v4

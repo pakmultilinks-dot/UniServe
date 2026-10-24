@@ -16,6 +16,9 @@ assert WEB in {
     'https://uniserve-web-dashboard-git-fix-android-a47c77-pakmultilinks-dot.vercel.app',
 }, 'Only authorized UniServe dashboard deployments may receive QA credentials'
 OUT=Path('dashboard-evidence'); OUT.mkdir(exist_ok=True)
+PREVIEW='https://uniserve-web-dashboard-git-fix-android-a47c77-pakmultilinks-dot.vercel.app'
+CANDIDATE_PROXY=os.environ.get('QA_CANDIDATE_BUNDLE_PROXY')=='1'
+assert not CANDIDATE_PROXY or WEB=='https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app'
 CID='83543334-2688-4c5d-9c83-ee201fac02bd'
 name='QA-unpublished-'+str(uuid.uuid4())[:8]
 item=None
@@ -36,6 +39,19 @@ def login(role):
     return api('POST','/auth/login',body={'university_email':role+'@demo.uniserve.pk',
         'password':os.environ['QA_DEMO_PASSWORD']})['tokens']['access_token']
 
+def browser_context(browser, **kwargs):
+    context = browser.new_context(**kwargs)
+    if CANDIDATE_PROXY:
+        # Serve only candidate static documents/assets in this disposable
+        # browser under the already-approved origin. API requests are NEVER
+        # intercepted. This verifies candidate code, not a production deploy.
+        def candidate_asset(route):
+            response = route.fetch(url=PREVIEW + route.request.url[len(WEB):])
+            route.fulfill(response=response)
+        context.route(WEB+'/**',candidate_asset)
+    return context
+
+
 def browser_login(page,role):
     page.goto(WEB+'/login',wait_until='networkidle',timeout=120000)
     page.get_by_placeholder('your.name@lgu.edu.pk').fill(role+'@demo.uniserve.pk')
@@ -46,6 +62,8 @@ def browser_login(page,role):
     page.wait_for_url('**/dashboard**',timeout=60000)
 
 try:
+    (OUT/'test-origin.json').write_text(json.dumps({'browser_origin':WEB,'candidate_static_proxy':PREVIEW if CANDIDATE_PROXY else None,'api_requests_intercepted':False},indent=2))
+    print('Browser QA mode:', 'candidate static assets at approved origin; real API' if CANDIDATE_PROXY else 'direct deployed dashboard',flush=True)
     api('GET','/health/ready')
     student,staff,manager,admin=(login(role) for role in ('student','staff','manager','admin'))
     for token in (student,staff,manager): api('GET','/administration/overview',token,expected=403)
@@ -61,7 +79,7 @@ try:
     api('PUT',f'/cafeterias/{CID}/menu-items/'+item['id'],staff,{'price':12400},expected=403)
     with sync_playwright() as pw:
         browser=pw.chromium.launch(headless=True)
-        context=browser.new_context(viewport={'width':1440,'height':1000})
+        context=browser_context(browser,viewport={'width':1440,'height':1000})
         page=context.new_page()
         browser_login(page,'manager')
         page.goto(WEB+'/dashboard/menu',wait_until='networkidle',timeout=60000)
@@ -96,7 +114,7 @@ try:
         assert image.evaluate('(img)=>img.complete && img.naturalWidth>0')
         card.screenshot(path=str(OUT/'02-manager-uploaded-image.png'))
         # Staff view must expose real catalog but no manager editing controls.
-        context.close(); context=browser.new_context(viewport={'width':390,'height':844}); page=context.new_page()
+        context.close(); context=browser_context(browser,viewport={'width':390,'height':844}); page=context.new_page()
         browser_login(page,'staff')
         responses=[]
         page.on('response',lambda r:responses.append((r.url,r.status)))
@@ -106,7 +124,7 @@ try:
         assert any('/menu-items' in url and status==200 for url,status in responses)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Dashboard overflows narrow viewport'
         page.screenshot(path=str(OUT/'03-staff-mobile-menu.png'),full_page=True)
-        context.close(); context=browser.new_context();page=context.new_page()
+        context.close(); context=browser_context(browser);page=context.new_page()
         browser_login(page,'admin')
         page.goto(WEB+'/dashboard/admin/overview',wait_until='networkidle',timeout=60000)
         page.screenshot(path=str(OUT/'04-admin-overview.png'),full_page=True)
