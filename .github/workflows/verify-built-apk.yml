@@ -1,5 +1,8 @@
 name: Verify exact previously built APK
 on:
+  push:
+    branches: [fix/android-install-repair-20261023]
+    paths: [.github/workflows/verify-built-apk.yml]
   workflow_dispatch:
     inputs:
       build_run:
@@ -13,6 +16,7 @@ permissions:
   actions: read
 jobs:
   emulator:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
