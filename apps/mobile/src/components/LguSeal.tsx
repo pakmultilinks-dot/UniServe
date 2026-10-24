@@ -1,7 +1,7 @@
 /**
  * UniServe — LguSeal Component (React Native)
  *
- * Renders the real LGU logo (same asset as the web landing page) for
+ * Renders the existing UniServe institutional mark (shared with the web app) for
  * consistent branding across web and mobile. Falls back to the drawn
  * shield if the image asset is unavailable.
  */
@@ -20,7 +20,7 @@ const SIZES = {
   lg: { container: 80, text: 24, barWidth: 34, barHeight: 7, bookWidth: 18, bookHeight: 10 },
 } as const;
 
-// Bundled real LGU logo — the same image the web app serves.
+// Rasterized from the existing web SVG mark; never a UI reference screenshot.
 const LGU_LOGO = require("../../assets/lgu-logo.jpg");
 
 export function LguSeal({ size = "md" }: LguSealProps) {
@@ -37,7 +37,7 @@ export function LguSeal({ size = "md" }: LguSealProps) {
           borderRadius: s.container * 0.15,
         }}
         resizeMode="cover"
-        accessibilityLabel="Lahore Garrison University logo"
+        accessibilityLabel="UniServe — Lahore Garrison University"
         onError={() => setImageFailed(true)}
       />
     );

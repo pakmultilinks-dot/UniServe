@@ -135,7 +135,8 @@ try:
     assert entry, 'Welcome login navigation missing'
     tap(entry[0])
     wait_text('Welcome Back', 30)
-    snap('01-startup-login')
+    root = snap('01-startup-login')
+    assert any(n.attrib.get('content-desc') == 'UniServe — Lahore Garrison University' for n in root.iter('node')), 'Actual UniServe identity must be accessible on login'
     print('PASS native APK installs and startup reaches visible login', flush=True)
     link('register')
     wait_text('Create', 30)
@@ -247,7 +248,7 @@ try:
     assert not cart['items'], 'Preserve pre-existing demo cart contents'
     owns_cart = True
     _, root = dump()
-    plus = [n for n in root.iter('node') if n.attrib.get('content-desc') == '\uf103' and n.attrib.get('clickable') == 'true' and n.attrib.get('enabled') == 'true']
+    plus = [n for n in root.iter('node') if n.attrib.get('content-desc','').startswith('Add ') and n.attrib.get('content-desc','').endswith(' to cart') and n.attrib.get('clickable') == 'true' and n.attrib.get('enabled') == 'true']
     assert plus, 'Available native add-to-cart action missing'
     tap(plus[0]); time.sleep(5)
     cart = api('GET', f'/cafeterias/{cid}/cart/', student)
@@ -255,17 +256,31 @@ try:
     print('PASS native add-to-cart persists to API', flush=True)
     link('cart')
     root = wait_text('Checkout', 30)
-    tap(next(n for n in root.iter('node') if n.attrib.get('content-desc') == chr(61700)))
+    tap(labelled_nodes(root,'Increase '+cart['items'][0]['item_name']+' quantity')[0])
     time.sleep(4)
     changed = api('GET', f'/cafeterias/{cid}/cart/', student)
     assert changed['items'][0]['quantity'] == 2, 'Native cart increment did not persist'
     _, root = dump()
-    tap(next(n for n in root.iter('node') if n.attrib.get('content-desc') == chr(62753)))
+    tap(labelled_nodes(root,'Decrease '+cart['items'][0]['item_name']+' quantity')[0])
     time.sleep(4)
     changed = api('GET', f'/cafeterias/{cid}/cart/', student)
     assert changed['items'][0]['quantity'] == 1, 'Native cart decrement did not persist'
     snap('05a-cart-quantity-controls')
     print('PASS native quantity increment/decrement persisted to backend', flush=True)
+    # Reproduce the two-item cart shown in the user's phone screenshots.
+    link('')
+    root = wait_text('Current cafeteria: Student Cafeteria',45)
+    time.sleep(3); _, root = dump()
+    second_add = [n for n in root.iter('node') if n.attrib.get('content-desc','').startswith('Add ')
+        and n.attrib.get('content-desc','').endswith(' to cart') and n.attrib.get('enabled') == 'true']
+    assert second_add, 'Second distinct product must have a native Add action'
+    tap(second_add[0]); time.sleep(5)
+    cart = api('GET',f'/cafeterias/{cid}/cart/',student)
+    assert len(cart['items']) == 2 and all(item['quantity']==1 for item in cart['items'])
+    assert cart['total_amount'] == sum(item['subtotal'] for item in cart['items'])
+    link('cart'); wait_text('Checkout',30); snap('05b-two-item-cart-total')
+    print('PASS actual native second product and two-item cart total',flush=True)
+
     link('checkout')
     wait_text('Payment Method', 30)
     snap('06-checkout-top')
@@ -288,6 +303,7 @@ try:
     orders = api('GET', '/orders/?limit=100', student)['orders']
     order = next(o for o in orders if o.get('note') == qa_note)
     order_id = order['id']
+    assert len(order['items']) == 2, 'Two-item native checkout must persist both products'
     assert order['payment_method'] == 'cash', 'QA must never use an online payment'
     queue = api('GET', f'/orders/cafeteria/{cid}?limit=100', staff)['orders']
     assert any(o['id'] == order_id for o in queue), 'Native order missing from staff queue'
