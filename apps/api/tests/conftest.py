@@ -61,8 +61,13 @@ def future_collection_time(minutes_ahead: int = 30) -> str:
     """Return a future same-day collection time for scheduled-order tests."""
     now = datetime.now(ZoneInfo("Asia/Karachi"))
     candidate = now + timedelta(minutes=minutes_ahead)
-    if candidate.date() != now.date() or candidate.hour == 23:
-        return "23:58"
+    # Orders can only be scheduled for a *future time today*. The old
+    # fallback of "23:58" was already in the past when CI ran at 23:58 PKT,
+    # creating four false-negative checkout failures. Never invent a past
+    # collection slot: report that the same-day scenario is untestable
+    # during the last minutes of the cafeteria-local day.
+    if candidate.date() != now.date() or candidate.strftime("%H:%M") >= "23:59":
+        pytest.skip("No future same-day collection slot remains in Asia/Karachi")
     return candidate.strftime("%H:%M")
 
 

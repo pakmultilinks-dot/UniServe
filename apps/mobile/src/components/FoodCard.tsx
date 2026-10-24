@@ -157,6 +157,8 @@ export default function FoodCard({
             /* Compact stepper */
             <View style={[styles.stepper, { backgroundColor: bgColor(resolvedTheme, "secondary") }]}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Decrease ${name} quantity`}
                 onPress={onDecrement}
                 style={styles.stepBtn}
                 hitSlop={8}
@@ -165,6 +167,8 @@ export default function FoodCard({
               </Pressable>
               <Text style={[styles.stepQty, { color: tc("primary") }]}>{quantity}</Text>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Increase ${name} quantity`}
                 onPress={onIncrement}
                 style={styles.stepBtn}
                 hitSlop={8}
@@ -175,6 +179,8 @@ export default function FoodCard({
           ) : (
             /* Add button */
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${name} to cart`}
               onPress={onAdd}
               disabled={!isAvailable || isBusy}
               style={[styles.addBtn, { backgroundColor: isAvailable ? brand : bgColor(resolvedTheme, "tertiary") }]}

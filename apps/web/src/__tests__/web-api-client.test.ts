@@ -152,3 +152,44 @@ describe("web api — query shaping", () => {
     expect(String(fetchSpy.mock.calls[0][0])).toContain("/orders?status=ready");
   });
 });
+
+describe("web login delayed-backend recovery", () => {
+  it("waits through the observed83-second production response", async () => {
+    vi.useFakeTimers();
+    fetchSpy.mockImplementationOnce((_url, init: RequestInit) => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(mockResponse({ user: USER, tokens: TOKENS })),83000);
+      init.signal?.addEventListener("abort", () => { clearTimeout(timer); const error = new Error("aborted"); error.name = "AbortError"; reject(error); });
+    }));
+    try {
+      const pending = webApi.login({ university_email: USER.university_email, password: "TestOnlyPass1!" });
+      await vi.advanceTimersByTimeAsync(83000);
+      expect((await pending).tokens.access_token).toBe(TOKENS.access_token);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+  it("still times out a stalled login and never replays it automatically", async () => {
+    vi.useFakeTimers();
+    fetchSpy.mockImplementationOnce((_url, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => { const error = new Error("aborted"); error.name = "AbortError"; reject(error); });
+    }));
+    try {
+      const pending = expect(webApi.login({ university_email: USER.university_email, password: "TestOnlyPass1!" })).rejects.toThrow("Request timed out");
+      await vi.advanceTimersByTimeAsync(125001); await pending;
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+it("restores the current user through an83-second delayed backend response", async () => {
+  vi.useFakeTimers();
+  fetchSpy.mockImplementationOnce((_url, init: RequestInit) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(mockResponse(USER)),83000);
+    init.signal?.addEventListener("abort", () => { clearTimeout(timer); const error = new Error("aborted"); error.name = "AbortError"; reject(error); });
+  }));
+  try {
+    const pending = webApi.getCurrentUser();
+    await vi.advanceTimersByTimeAsync(83000);
+    expect((await pending).id).toBe(USER.id);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
+});

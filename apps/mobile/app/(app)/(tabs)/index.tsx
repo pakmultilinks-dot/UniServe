@@ -11,7 +11,7 @@
  *   Zone 6: Floating cart bar (absolute, bottom: 70)
  *   — Bottom Tab Bar (below cart bar)
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -39,7 +39,7 @@ import { EmptyState } from "../../../src/components/ui";
 import { BottomSheet, BottomSheetRow } from "../../../src/components/ui/BottomSheet";
 import { SkeletonCard } from "../../../src/components/ui";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor, colors } from "../../../src/theme";
-import { getTodaysMenu, getCafeterias } from "../../../src/services/data";
+import { getTodaysMenu } from "../../../src/services/data";
 import type { MenuItem, Cafeteria } from "@uniserve/shared-types";
 
 // ── Helpers ──
@@ -69,9 +69,13 @@ interface ToastState {
 export default function HomeScreen() {
   const { resolvedTheme } = useTheme();
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const {
     selectedCafeteria,
+    cafeterias,
+    cafeteriasError,
+    isCafeteriaLoading: cafeteriasLoading,
+    refreshCafeterias,
     selectCafeteria,
     cart,
     cartItemCount,
@@ -110,7 +114,7 @@ export default function HomeScreen() {
   const bc = borderColor(resolvedTheme, "default");
 
   // State
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [allMenuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -119,9 +123,7 @@ export default function HomeScreen() {
   const [hasPublishedMenu, setHasPublishedMenu] = useState<boolean | null>(null);
   const [toast, setToast] = useState<ToastState>({ visible: false, message: "", type: "success" });
   const [cafeteriaSheetVisible, setCafeteriaSheetVisible] = useState(false);
-  const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
-  const [cafeteriasLoading, setCafeteriasLoading] = useState(true);
-  const [cafeteriasError, setCafeteriasError] = useState("");
+  const menuRequest = useRef(0);
 
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
   const cartItemMap = (cart?.items ?? []).reduce<Record<string, { cartItemId: string; quantity: number }>>(
@@ -134,38 +136,14 @@ export default function HomeScreen() {
 
   const isCafeteriaOpen = selectedCafeteria?.operational_status === "open";
 
-  // Load cafeterias for bottom sheet. Gated on isAuthenticated: on cold start
-  // the persisted token may not be in memory yet, and fetching anyway sent an
-  // unauthenticated request that 401'd and flashed the cafeteria picker with
-  // a "Failed to load cafeterias" error before auth settled.
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    setCafeteriasLoading(true);
-    setCafeteriasError("");
-    getCafeterias()
-      .then((data) => {
-        setCafeterias(data);
-        // First launch (or a previous auto-select that found nothing): surface
-        // the picker straight away so choosing a cafeteria is the first action,
-        // rather than leaving the user on an empty menu with no explanation.
-        if (data.length > 0 && !selectedCafeteria) {
-          setCafeteriaSheetVisible(true);
-        }
-      })
-      .catch(() => {
-        setCafeteriasError("Failed to load cafeterias. Please try again.");
-        setError("Failed to load cafeterias. Pull to retry.");
-      })
-      .finally(() => setCafeteriasLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
-
   // Load menu items
   const loadMenu = useCallback(async () => {
-    if (!selectedCafeteria) return;
+    const request = ++menuRequest.current;
+    if (!selectedCafeteria) { setError(""); setMenuItems([]); return; }
     try {
       setError("");
       const dailyMenu = await getTodaysMenu(selectedCafeteria.id);
+      if (request !== menuRequest.current) return;
       setHasPublishedMenu(dailyMenu !== null);
 
       if (!dailyMenu) {
@@ -180,50 +158,45 @@ export default function HomeScreen() {
           price: dailyItem.special_price ?? dailyItem.menu_item!.price,
           is_available: dailyItem.menu_item!.is_available && dailyItem.is_available_today,
         }));
-      const normalizedSearch = searchQuery.trim().toLowerCase();
-      setMenuItems(
-        dailyItems.filter((item) => {
-          const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
-          const matchesSearch = !normalizedSearch || item.name.toLowerCase().includes(normalizedSearch);
-          return matchesCategory && matchesSearch;
-        }),
-      );
+      setMenuItems(dailyItems);
     } catch {
-      setError("Failed to load menu");
+      if (request === menuRequest.current) setError("Unable to load the menu. Check your connection and try again.");
     }
-  }, [selectedCafeteria, selectedCategory, searchQuery]);
+  }, [selectedCafeteria]);
+
+  const menuItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return allMenuItems.filter((item) =>
+      (selectedCategory === "all" || item.category === selectedCategory) &&
+      (!query || item.name.toLowerCase().includes(query)));
+  }, [allMenuItems, selectedCategory, searchQuery]);
 
   useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setMenuItems([]);
+    setHasPublishedMenu(null);
     loadMenu().finally(() => {
+      if (!active) return;
       setIsLoading(false);
       setIsRefreshing(false);
     });
+    return () => { active = false; menuRequest.current += 1; };
   }, [loadMenu]);
 
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    // Pull-to-retry must also recover a failed cafeteria load — the empty
-    // banner promises "Pull to retry", and loadMenu is a no-op without a
-    // selected cafeteria.
-    if (cafeterias.length === 0) {
-      try {
-        setCafeterias(await getCafeterias());
-      } catch {
-        setError("Failed to load cafeterias. Pull to retry.");
-      }
-    }
-    // P3-15: reset isRefreshing here, in a finally on the fetch itself.
-    // Previously the reset lived only in the mount useEffect's finally,
-    // which runs when `loadMenu` identity changes — a pull-to-refresh with
-    // unchanged deps called loadMenu directly and left isRefreshing stuck
-    // true, so the RefreshControl spinner (rendered as a persistent
-    // "Refreshing..." banner on Expo web) never dismissed.
     try {
-      await loadMenu();
+      await refreshCafeterias();
+    } catch {
+      // Shared cafeteria state supplies the error; retry clears it everywhere.
     } finally {
       setIsRefreshing(false);
     }
-  }, [loadMenu, cafeterias.length]);
+  }, [refreshCafeterias]);
+
+  const showLoading = isLoading || (cafeteriasLoading && !selectedCafeteria);
+  const displayError = error || (!selectedCafeteria ? cafeteriasError : "");
 
   // Search: switch to "all" when searching
   useEffect(() => {
@@ -280,8 +253,8 @@ export default function HomeScreen() {
     (cafeteria: Cafeteria) => {
       selectCafeteria(cafeteria);
       setCafeteriaSheetVisible(false);
-      setMenuItems([]);
-      setIsLoading(true);
+      // The selection effect owns menu loading. Re-selecting the same
+      // object triggers no effect, so never clear/start a loader here.
     },
     [selectCafeteria],
   );
@@ -424,7 +397,7 @@ export default function HomeScreen() {
       )}
 
       {/* ── Loading State ── */}
-      {isLoading && (
+      {showLoading && (
         <View style={styles.loadingGrid}>
           {[1, 2, 3, 4].map((i) => (
             <View key={i} style={styles.gridItem}>
@@ -435,23 +408,23 @@ export default function HomeScreen() {
       )}
 
       {/* ── Error Banner ── */}
-      {error ? (
+      {displayError ? (
         <View style={[styles.errorBanner, { backgroundColor: bg, borderColor: bc }]}>
           <View style={[styles.errorIcon, { backgroundColor: colors.gold[100] }]}>
             <Ionicons name="cafe-outline" size={21} color={colors.brand[800]} />
           </View>
           <View style={styles.errorCopy}>
-            <Text style={[styles.errorTitle, { color: tc }]}>The menu is taking a break</Text>
-            <Text style={[styles.errorText, { color: tcMuted }]}>{error}. Try again in a moment.</Text>
+            <Text style={[styles.errorTitle, { color: tc }]}>Unable to connect</Text>
+            <Text style={[styles.errorText, { color: tcMuted }]}>{displayError}</Text>
           </View>
-          <Pressable onPress={onRefresh} style={styles.retryButton}>
+          <Pressable onPress={onRefresh} accessibilityRole="button" accessibilityLabel="Retry loading menu" style={styles.retryButton}>
             <Ionicons name="refresh" size={17} color={brand} />
           </Pressable>
         </View>
       ) : null}
 
       {/* ── Closed Cafeteria Warning ── */}
-      {!isCafeteriaOpen && selectedCafeteria && !isLoading ? (
+      {!isCafeteriaOpen && selectedCafeteria && !showLoading ? (
         <View style={[styles.warningBanner, { backgroundColor: functionalColor(resolvedTheme, "warning") + "10", borderColor: functionalColor(resolvedTheme, "warning") + "30" }]}>
           <Ionicons name="lock-closed" size={16} color={functionalColor(resolvedTheme, "warning")} />
           <Text style={[styles.warningText, { color: functionalColor(resolvedTheme, "warning"), flex: 1, marginLeft: 8 }]}>
@@ -465,7 +438,7 @@ export default function HomeScreen() {
       ) : null}
 
       {/* ── Empty States ── */}
-      {!isLoading && hasPublishedMenu === false && (
+      {!showLoading && hasPublishedMenu === false && (
         <EmptyState
           icon="document-text-outline"
           title="Menu not published yet"
@@ -473,7 +446,7 @@ export default function HomeScreen() {
         />
       )}
 
-      {!isLoading && menuItems.length === 0 && hasPublishedMenu !== false && !error && (
+      {!showLoading && menuItems.length === 0 && hasPublishedMenu !== false && !displayError && (
         <EmptyState
           icon={searchQuery ? "search-outline" : "restaurant-outline"}
           title={
@@ -494,7 +467,7 @@ export default function HomeScreen() {
       )}
 
       {/* ── First-launch / no-cafeteria call to action ── */}
-      {!isLoading && !selectedCafeteria && !error && (
+      {!showLoading && !selectedCafeteria && !displayError && (
         <View style={styles.chooseCafeteriaCta}>
           <Pressable
             onPress={() => setCafeteriaSheetVisible(true)}
@@ -513,7 +486,7 @@ export default function HomeScreen() {
       )}
 
       {/* ── Zone 5: Food Grid ── */}
-      {!isLoading && menuItems.length > 0 && (
+      {!showLoading && menuItems.length > 0 && (
         <ScrollView
           style={styles.scrollContent}
           contentContainerStyle={[
@@ -556,7 +529,9 @@ export default function HomeScreen() {
                   onDecrement={() => {
                     const cartItem = cartItemMap[item.id];
                     if (cartItem) {
-                      cartUpdateQuantity(cartItem.cartItemId, cartItem.quantity - 1);
+                      void cartUpdateQuantity(cartItem.cartItemId, cartItem.quantity - 1).catch((err: unknown) => {
+                        setToast({ visible: true, message: err instanceof Error ? err.message : "Unable to update cart. Please try again.", type: "error" });
+                      });
                     }
                   }}
                 />
@@ -620,22 +595,10 @@ export default function HomeScreen() {
         ) : cafeteriasError ? (
           <View style={styles.emptySheet}>
             <Text style={{ color: tcMuted, textAlign: "center", paddingVertical: 12 }}>
-              {cafeteriasError}
+              {cafeterias.length ? "Unable to refresh. Showing previously loaded cafeterias." : cafeteriasError}
             </Text>
             <Pressable
-              onPress={() => {
-                setCafeteriasLoading(true);
-                setCafeteriasError("");
-                getCafeterias()
-                  .then((data) => {
-                    setCafeterias(data);
-                    if (data.length > 0 && !selectedCafeteria) {
-                      setCafeteriaSheetVisible(true);
-                    }
-                  })
-                  .catch(() => setCafeteriasError("Failed to load cafeterias. Please try again."))
-                  .finally(() => setCafeteriasLoading(false));
-              }}
+              onPress={() => { void onRefresh(); }}
               style={{ paddingVertical: 8 }}
             >
               <Text style={{ color: brand, textAlign: "center", fontWeight: "600" }}>

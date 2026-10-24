@@ -1190,6 +1190,30 @@ class TestPhase6Authorization:
 
 
 # ---------------------------------------------------------------------------
+# Scheduled-time helper regression (CI around 23:58 Asia/Karachi)
+# ---------------------------------------------------------------------------
+
+
+def test_scheduled_time_helper_never_returns_an_expired_last_minute_slot(monkeypatch):
+    """A late-night run skips impossible same-day scenarios, not a fake 23:58."""
+    import tests.conftest as helpers
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    original_datetime = datetime
+
+    class FrozenEndOfDay(original_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            local = original_datetime(2026, 10, 22, 23, 58, tzinfo=ZoneInfo("Asia/Karachi"))
+            return local.astimezone(tz) if tz is not None else local.replace(tzinfo=None)
+
+    monkeypatch.setattr(helpers, "datetime", FrozenEndOfDay)
+    with pytest.raises(pytest.skip.Exception, match="No future same-day"):
+        helpers.future_collection_time(30)
+
+
+# ---------------------------------------------------------------------------
 # Scheduled Order + Inventory Tests
 # ---------------------------------------------------------------------------
 

@@ -5,6 +5,7 @@
  * Uses Ionicons for all icons, no emojis.
  */
 import React, { useState, useEffect } from "react";
+import Constants from "expo-constants";
 import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -353,7 +354,7 @@ export default function ProfileScreen() {
       {/* ── About ── */}
       <View style={[styles.section, { backgroundColor: bg, borderColor: bc }]}>
         <Text style={[styles.sectionTitle, { color: tcMuted }]}>ABOUT</Text>
-          <SectionRow icon="information-circle-outline" label="App version" value="v0.1.4" isLast theme={theme} />
+          <SectionRow icon="information-circle-outline" label="App version" value={`v${Constants.expoConfig?.version ?? "unknown"}`} isLast theme={theme} />
       </View>
 
       {/* ── Footer ── */}

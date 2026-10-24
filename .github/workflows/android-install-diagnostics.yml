@@ -1,0 +1,57 @@
+name: Diagnose Android installation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Download exact published binaries
+        run: |
+          mkdir -p install-evidence
+          curl -fL --retry 3 https://github.com/pakmultilinks-dot/UniServe/releases/download/uniserve-main-20261022-76dedbe/UniServe-main-76dedbe.apk -o install-evidence/old.apk
+          curl -fL --retry 3 https://github.com/pakmultilinks-dot/UniServe/releases/download/uniserve-android-login-0.1.7-build8-20261023/UniServe-Android-0.1.7-Build8.apk -o install-evidence/current.apk
+          sha256sum install-evidence/*.apk | tee install-evidence/checksums.txt
+          for label in old current; do
+            apk=install-evidence/$label.apk
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk" | tee install-evidence/$label-signatures.txt
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | tee install-evidence/$label-metadata.txt
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$apk" AndroidManifest.xml > install-evidence/$label-manifest.txt
+            "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk" > install-evidence/$label-alignment.txt
+            unzip -t "$apk" > install-evidence/$label-integrity.txt
+          done
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install old APK and test current APK upgrade
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-metrics -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            adb install install-evidence/old.apk 2>&1 | tee install-evidence/old-install.txt
+            grep -Fx Success install-evidence/old-install.txt
+            adb shell dumpsys package com.uniserve.mobile > install-evidence/old-package.txt
+            adb install -r install-evidence/current.apk 2>&1 | tee install-evidence/upgrade-install.txt
+            grep -Fx Success install-evidence/upgrade-install.txt
+            adb shell pm list users > install-evidence/users.txt
+            adb logcat -b crash -d > install-evidence/crash-log.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-install-diagnostics
+          path: |
+            install-evidence/*.txt

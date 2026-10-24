@@ -131,7 +131,11 @@ export const apiClient = new ApiClient(
 // ---- Auth API Functions (use shared client) ----
 
 export async function login(data: LoginRequest): Promise<LoginResponse> {
-  const response = await apiClient.post<LoginResponse>("/auth/login", data);
+  // Production can take longer than60 seconds to wake; keep this scoped
+  // to authentication, without replaying checkout/payment mutations.
+  const response = await apiClient.request<LoginResponse>("POST", "/auth/login", {
+    body: data, timeout: 125000,
+  });
   // Store tokens immediately after successful login
   webTokenProvider.setTokens(
     response.tokens.access_token,
@@ -147,7 +151,7 @@ export async function register(
 }
 
 export async function getCurrentUser(): Promise<User> {
-  return apiClient.get<User>("/auth/me");
+  return apiClient.request<User>("GET", "/auth/me", { timeout: 125000 });
 }
 
 /** P3-3 — return the cafeteria IDs the current staff/manager user is
