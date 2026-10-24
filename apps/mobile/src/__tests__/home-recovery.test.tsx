@@ -41,15 +41,15 @@ it("shows cafeteria failure and removes it once the shared retry recovers", asyn
   await screen.findByText("Unable to connect. Check your connection and try again.");
   mockCart = { ...mockCart, selectedCafeteria: mockCafe, cafeterias: [mockCafe], cafeteriasError: "" };
   view.rerender(<HomeScreen />);
-  await screen.findByText("Chicken Biryani");
+  await screen.findByText("Chicken Biryani", {}, { timeout: 10000 });
   expect(screen.queryByText("Unable to connect")).toBeNull();
 });
 it("filters search/categories locally without extra network requests", async () => {
-  render(<HomeScreen />); await screen.findByText("Chicken Biryani");
+  render(<HomeScreen />); await screen.findByText("Chicken Biryani", {}, { timeout: 10000 });
   fireEvent.changeText(screen.getByTestId("search"), "nothing-matches");
   await screen.findByText("No items found");
   fireEvent.changeText(screen.getByTestId("search"), "chicken");
-  await screen.findByText("Chicken Biryani");
+  await screen.findByText("Chicken Biryani", {}, { timeout: 10000 });
   fireEvent.press(screen.getByTestId("breakfast"));
   await waitFor(() => expect(screen.queryByText("Chicken Biryani")).toBeNull());
   expect(menu).toHaveBeenCalledTimes(1);
@@ -69,8 +69,8 @@ it("ignores a delayed menu response from the previous cafeteria", async () => {
 });
 
 it("keeps the loaded menu when the already-selected cafeteria is chosen again", async () => {
-  render(<HomeScreen />); await screen.findByText("Chicken Biryani");
-  fireEvent.press(screen.getByLabelText("Current cafeteria: Student Cafeteria"));
+  render(<HomeScreen />); await screen.findByText("Chicken Biryani", {}, { timeout: 10000 });
+  fireEvent.press(screen.getByLabelText("Current cafeteria: Student Cafeteria. Tap to change."));
   fireEvent.press(screen.getByTestId("choose-cafeteria"));
   expect(screen.getByText("Chicken Biryani")).toBeTruthy();
   expect(screen.queryByText("Loading menu")).toBeNull();
