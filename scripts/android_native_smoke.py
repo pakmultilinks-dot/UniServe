@@ -407,7 +407,9 @@ try:
     details.get_by_role('button', name='Collect', exact=True).click()
     page.get_by_role('button', name='Confirm Collect', exact=True).click()
     order = wait_order_status('completed')
-    details.get_by_text('Completed', exact=True).wait_for(timeout=30000)
+    completed = True
+    # StatusBadge uses CSS capitalize; its DOM text remains the enum value.
+    details.get_by_text('completed', exact=True).wait_for(timeout=30000)
     assert details.get_by_role('button', name='Collect', exact=True).count() == 0
     assert details.get_by_role('button', name='Delay', exact=True).count() == 0
     assert details.get_by_text('Computed ETA:', exact=False).count() == 0
@@ -558,7 +560,12 @@ try:
     tap(labelled_nodes(root, 'Sign Out')[0])
     root = wait_text('Are you sure you want to sign out?', 30)
     tap(labelled_nodes(root, 'Sign Out')[0])
-    link('login')
+    # Sign-out intentionally returns to the welcome entry. Use its real
+    # login action; an immediate deep link races the unauthenticated guard.
+    root = wait_text('Get Started', 45)
+    entry = [n for n in root.iter('node') if n.attrib.get('content-desc', '').lower() == 'log in']
+    assert entry, 'Welcome login action missing after sign-out'
+    tap(entry[0])
     root = wait_text('Welcome Back', 45)
     fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
     assert len(fields) == 2
