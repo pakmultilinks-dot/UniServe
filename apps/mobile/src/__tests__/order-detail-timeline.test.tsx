@@ -72,3 +72,17 @@ it("keeps all ordinary completion stages and removes pickup action", async () =>
   expect(screen.getByText("Ready for Pickup")).toBeTruthy();
   expect(screen.queryByText("Show Pickup QR Code")).toBeNull();
 });
+
+
+it("does not expose a pickup code before the order is ready", async () => {
+  mockOrder.status = "pending";
+  render(<OrderDetailScreen />);
+  await screen.findByText("Order #27");
+  expect(screen.queryByText("Show Pickup QR Code")).toBeNull();
+});
+
+it("exposes the pickup code for a ready order", async () => {
+  mockOrder.status = "ready";
+  render(<OrderDetailScreen />);
+  await screen.findByText("Show Pickup QR Code");
+});

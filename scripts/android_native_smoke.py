@@ -295,8 +295,10 @@ try:
     home_tab = labelled_nodes(root,'Home')[0]
     nav_top = int(re.findall(r'\d+',home_tab.attrib['bounds'])[1])
     floating = [list(map(int,re.findall(r'\d+',n.attrib['bounds']))) for n in root.iter('node')
-        if n.attrib.get('clickable') == 'true' and re.search(r'^.*, \d+, PKR \d+,',n.attrib.get('content-desc',''))]
-    assert floating, 'Floating cart bar bounds must be known before choosing a product'
+        if n.attrib.get('clickable') == 'true' and n.attrib.get('content-desc','').startswith('View cart, ')]
+    assert floating, 'Cart dock bounds must be known before choosing a product'
+    assert all(0 <= nav_top - bar[3] <= 40 for bar in floating), 'Cart dock must sit directly above navigation'
+    snap('05c-cart-dock-above-navigation')
     def unobscured(node):
         bounds = list(map(int,re.findall(r'\d+',node.attrib['bounds'])))
         return bounds[1] > 200 and bounds[3] < nav_top and all(bounds[3] < bar[1] or bounds[1] > bar[3] for bar in floating)
