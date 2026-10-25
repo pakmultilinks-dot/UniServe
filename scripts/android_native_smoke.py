@@ -130,7 +130,8 @@ try:
     adb('shell', 'wm', 'dismiss-keyguard')
     adb('install', '-r', 'native-apk/app-release.apk')
     package_info = adb('shell', 'dumpsys', 'package', PACKAGE)
-    assert re.search(r'\bversionCode=13\b', package_info) and 'versionName=0.1.12' in package_info, 'Expected fresh 0.1.12 / code 13 binary'
+    config = json.loads(Path('apps/mobile/app.json').read_text())['expo']
+    assert re.search(r'\bversionCode=' + str(config['android']['versionCode']) + r'\b', package_info) and ('versionName=' + config['version']) in package_info, 'Expected fresh 0.1.12 / code 13 binary'
     component = adb('shell', 'cmd', 'package', 'resolve-activity', '--brief', PACKAGE).strip().splitlines()[-1]
     assert component.startswith(PACKAGE + '/'), 'Unexpected resolved app component'
     adb('shell', 'am', 'start', '-W', '-n', component)
