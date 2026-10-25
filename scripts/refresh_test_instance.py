@@ -178,6 +178,19 @@ def main():
     )
     backup_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
+    # Check every legacy identity before recovery can change its password/status.
+    # The administrator queue is unpaginated when no limit/offset is supplied.
+    if args.retire_legacy_accounts:
+        legacy_ids = {user["id"] for user in legacy}
+        for cafe in cafeterias:
+            queue = api("GET", f"/orders/cafeteria/{cafe['id']}", admin)
+            assert len(queue["orders"]) == queue["total"], "Incomplete order preflight"
+            assert not any(
+                order["user_id"] in legacy_ids
+                and order["status"] not in ("completed", "cancelled")
+                for order in queue["orders"]
+            ), "Resolve legacy accounts' active orders before any maintenance writes"
+
     # Validate all existing drafts before changing either cafeteria.
     for plan in plans:
         cafe = next(cafe for cafe in cafeterias if cafe["id"] == plan["id"])

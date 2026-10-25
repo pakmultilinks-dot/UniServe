@@ -24,7 +24,6 @@ owns_cart = False
 completed = False
 extra_orders = []
 pw = browser = page = None
-qa_student_id = None
 qa_student_email = None
 qa_student_password = None
 admin = None
@@ -161,7 +160,7 @@ try:
     tap(fields[0]); type_text(qa_student_email)
     _, entered = dump()
     email_input = next(n for n in entered.iter('node') if n.attrib.get('class') == 'android.widget.EditText')
-    assert email_input.attrib.get('text') == qa_student_email, 'Native email entry must exactly match generated QA account'
+    assert email_input.attrib.get('text') == qa_student_email, 'Native email entry must exactly match configured test account'
     _, root = dump()
     fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
     tap(fields[1]); type_text(qa_student_password)
@@ -179,7 +178,10 @@ try:
         backend_ready()
         fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
         assert len(fields) == 2
-        tap(fields[1]); type_text(qa_student_password)
+        tap(fields[1])
+        adb('shell', 'input', 'keyevent', '123')
+        for _ in range(128): adb('shell', 'input', 'keyevent', '67')
+        type_text(qa_student_password)
         adb('shell', 'input', 'keyevent', '4')
         _, root = dump()
         buttons = [n for n in root.iter('node') if n.attrib.get('text', '').lower() == 'log in']
@@ -375,18 +377,42 @@ try:
     order = wait_order_status('ready')
     card.get_by_role('button', name='Collect', exact=True).wait_for(state='visible', timeout=30000)
     card.screenshot(path=str(OUT / 'web-02-ready.png'))
+    card.get_by_role('button', name='Details', exact=True).click()
+    details = page.get_by_role('dialog', name='Order #' + str(order['order_number']), exact=True)
+    details.wait_for(state='visible', timeout=30000)
+    assert order.get('customer_name'), 'Authorized order response must resolve customer name'
+    details.get_by_text(order['customer_name'], exact=True).wait_for(timeout=30000)
     print('PASS real staff dashboard login, queue visibility and Ready action', flush=True)
     time.sleep(17)
     snap('09-order-ready')
+    link('order/' + order_id)
+    root = wait_text('Show Pickup QR Code', 45)
+    for _ in range(3):
+        nodes = labelled_nodes(root, 'Show Pickup QR Code')
+        if nodes: break
+        adb('shell', 'input', 'swipe', '500', '1500', '500', '500', '450')
+        _, root = dump()
+    assert nodes, 'Ready-order QR action must be reachable'
+    tap(nodes[0])
+    wait_text('Show this screen to the cafeteria staff', 45)
+    qr_root = snap('09a-ready-pickup-qr')
+    assert any(n.attrib.get('text') == '#' + str(order['order_number']) for n in qr_root.iter('node'))
+    print('PASS native Ready pickup QR opens for exact order', flush=True)
     notifications = api('GET', '/notifications?limit=100', student)['items']
     assert any(n.get('order_id') == order_id and 'ready' in (n['title'] + n['body']).lower() for n in notifications)
     link('notifications')
     wait_text('ready', 30)
     snap('10-native-ready-notification')
     print('PASS ready notification correlated by exact new order ID', flush=True)
-    card.get_by_role('button', name='Collect', exact=True).click()
+    details.get_by_role('button', name='Collect', exact=True).click()
     page.get_by_role('button', name='Confirm Collect', exact=True).click()
     order = wait_order_status('completed')
+    details.get_by_text('Completed', exact=True).wait_for(timeout=30000)
+    assert details.get_by_role('button', name='Collect', exact=True).count() == 0
+    assert details.get_by_role('button', name='Delay', exact=True).count() == 0
+    assert details.get_by_text('Computed ETA:', exact=False).count() == 0
+    details.screenshot(path=str(OUT / 'web-03a-dialog-completed.png'))
+    details.get_by_role('button', name='Close', exact=True).click()
     card.screenshot(path=str(OUT / 'web-03-collected.png'))
     print('PASS real staff dashboard collection action', flush=True)
     completed = True
@@ -515,6 +541,41 @@ try:
     wait_text('v0.1.12',30); snap('16-profile-actual-build-version')
     print('PASS native profile displays actual build version v0.1.12',flush=True)
 
+    # Exercise the fourth configured identity in the same installed APK.
+    # Faculty browsing uses its own cafeteria and never creates another user.
+    faculty = login_api('faculty')
+    faculty_cid = 'df58ba17-3308-46ef-8a66-1c09e4c2fc94'
+    faculty_menu = api('GET', f'/cafeterias/{faculty_cid}/daily-menus/today', faculty)
+    assert faculty_menu['status'] == 'published' and faculty_menu['items']
+    from urllib.error import HTTPError
+    try:
+        api('GET', f'/orders/cafeteria/{faculty_cid}', staff)
+    except HTTPError as denied:
+        assert denied.code == 403, 'Staff must remain scoped to Student Cafeteria'
+    else:
+        raise AssertionError('Student cafeteria staff accessed faculty order queue')
+    _, root = dump()
+    tap(labelled_nodes(root, 'Sign Out')[0])
+    root = wait_text('Are you sure you want to sign out?', 30)
+    tap(labelled_nodes(root, 'Sign Out')[0])
+    link('login')
+    root = wait_text('Welcome Back', 45)
+    fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
+    assert len(fields) == 2
+    tap(fields[0]); type_text(ACCOUNTS['faculty']['email'])
+    _, root = dump()
+    fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
+    tap(fields[1]); type_text(ACCOUNTS['faculty']['password'])
+    adb('shell', 'input', 'keyevent', '4')
+    _, root = dump()
+    tap(labelled_nodes(root, 'Log In')[0])
+    root = wait_text('Current cafeteria: Faculty Cafe', 160)
+    snap('17-faculty-native-menu')
+    link('profile')
+    wait_text(ACCOUNTS['faculty']['email'], 45)
+    snap('18-faculty-native-profile')
+    print('PASS native faculty login/menu/profile and staff cafeteria authorization', flush=True)
+
 except BaseException:
     try: snap('failure-last-screen')
     except Exception: pass
@@ -551,8 +612,3 @@ finally:
             for item in cart['items']: api('DELETE', f'/cafeterias/{cid}/cart/items/{item["id"]}', student)
         except Exception as exc: print('QA cart cleanup requires review:', type(exc).__name__, flush=True)
 
-    if qa_student_id and admin:
-        try:
-            api('POST',f'/users/{qa_student_id}/suspend',admin,{'reason':'Isolated automated QA completed; no real food or payment'})
-            print('Isolated QA student suspended after cleanup',flush=True)
-        except Exception as exc: print('QA account cleanup requires review:',type(exc).__name__,flush=True)
