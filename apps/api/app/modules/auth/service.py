@@ -26,6 +26,7 @@ from app.core.exceptions import (
     PINError,
     PINLockedError,
     RateLimitError,
+    ServiceUnavailableError,
     TokenRevokedError,
     ValidationError,
 )
@@ -247,11 +248,15 @@ class AuthService:
             "email verification" if purpose == OTPPurpose.EMAIL_VERIFICATION else "password reset"
         )
         if user_email:
-            await self.email_provider.send_otp(
+            delivered = await self.email_provider.send_otp(
                 to_email=user_email,
                 otp=otp,
                 purpose=purpose_label,
             )
+            if not delivered:
+                raise ServiceUnavailableError(
+                    "We could not send your verification code. Please try again later."
+                )
         else:
             logger.warning("Could not resolve email for OTP sending", user_id=user_id)
 

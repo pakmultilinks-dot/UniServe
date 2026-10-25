@@ -80,10 +80,12 @@ export default function OrderQRScreen() {
           <Text style={styles.orderNumberLarge}>#{order.order_number}</Text>
         </View>
 
-        {order.status === "completed" || order.status === "cancelled" ? (
+        {order.status !== "ready" ? (
           <View style={styles.invalidQr}>
             <Ionicons name="close-circle-outline" size={48} color="#95816b" />
-            <Text style={styles.invalidQrText}>This collection code is no longer valid.</Text>
+            <Text style={styles.invalidQrText}>{order.status === "completed" || order.status === "cancelled"
+              ? "This collection code is no longer valid."
+              : "Your collection code will appear when your order is ready."}</Text>
           </View>
         ) : (
           <View style={styles.qrPlaceholder}>

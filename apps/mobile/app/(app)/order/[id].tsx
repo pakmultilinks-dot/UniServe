@@ -568,7 +568,7 @@ export default function OrderDetailScreen() {
         />
 
         {/* ── Pickup QR (only when ready) ── */}
-        {order.status !== "completed" && order.status !== "cancelled" && (
+        {order.status === "ready" && (
           <Pressable
             style={[styles.qrBanner, { backgroundColor: brand + "10", borderColor: brand + "30" }]}
             onPress={() => router.push(`/order/${order.id}/qr`)}
@@ -1044,6 +1044,8 @@ export default function OrderDetailScreen() {
                   </Pressable>
                 </View>
               </View>
+            ) : refundInfo && refundInfo.refundable.refundable_amount === 0 ? (
+              <Text style={{ color: tcMuted }}>No refundable payment was collected for this order.</Text>
             ) : (
               <Pressable
                 style={[styles.refundButton, { borderColor: brand }]}

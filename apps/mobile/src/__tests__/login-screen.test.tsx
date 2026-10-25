@@ -140,3 +140,14 @@ describe("LoginScreen — session expiry notice (P3-6)", () => {
     ).toBeTruthy();
   });
 });
+
+
+it("keeps entered credentials and explains an interrupted connection without Java details", async () => {
+  mockLogin.mockRejectedValue(new Error("Network error: fetch failed: java.net.SocketException: Software caused connection abort"));
+  render(<LoginScreen />);
+  fillForm("student@lgu.edu.pk", "ExamplePass1!");
+  fireEvent.press(screen.getByText("Log In"));
+  await screen.findByText(/Connection interrupted/);
+  expect(screen.queryByText(/java.net/)).toBeNull();
+  expect(screen.getByDisplayValue("ExamplePass1!")).toBeTruthy();
+});

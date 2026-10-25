@@ -448,13 +448,12 @@ try:
     def seed_test_order(label):
         api('POST', f'/cafeterias/{cid}/cart/items', student,
             {'menu_item_id': cart['items'][0]['menu_item_id'], 'quantity': 1})
-        # Unpaid online immediate orders legitimately remain Pending. Only
-        # create the order; NEVER initiate a payment/provider request. This
-        # exercises cancellation/rejection even outside same-day slot hours.
+        # Cash-only lifecycle tests must also work when online checkout is unavailable.
+        # No payment provider is contacted.
         result = api('POST', f'/cafeterias/{cid}/cart/checkout', student,
-            {'payment_method':'online','order_type':'immediate',
+            {'payment_method':'cash','order_type':'immediate',
              'note':qa_note+'-'+label,'idempotency_key':str(uuid.uuid4())})
-        assert result['status'] == 'pending', 'Unpaid QA order must remain pending'
+        assert result['status'] in ('pending', 'confirmed'), 'QA order must remain cancellable'
         print('Created unpaid Pending QA order; no payment initiation:',result['id'],flush=True)
         extra_orders.append(result['id'])
         return result
@@ -490,7 +489,8 @@ try:
     page.wait_for_url('**/dashboard**',timeout=60000)
     page.goto(web+'/dashboard/orders?cafeteria='+cid,wait_until='networkidle',timeout=60000)
     rejected_card = page.get_by_text('#'+str(rejected['order_number']),exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
-    rejected_card.get_by_role('button',name='Confirm',exact=True).click(timeout=60000)
+    if not api('GET','/orders/'+rejected['id'],student).get('confirmed_at'):
+        rejected_card.get_by_role('button',name='Confirm',exact=True).click(timeout=60000)
     for _ in range(15):
         confirmed = api('GET','/orders/'+rejected['id'],student)
         if confirmed.get('confirmed_at'): break
