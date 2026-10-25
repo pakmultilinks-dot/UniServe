@@ -284,13 +284,28 @@ try:
     # Reproduce the two-item cart shown in the user's phone screenshots.
     link('')
     root = wait_text('Current cafeteria: Student Cafeteria',45)
-    time.sleep(3); _, root = dump()
+    # Returning to Home preserves scroll position. An accessibility node may
+    # lie under the floating cart bar; tapping it would open Cart instead.
+    for _ in range(2):
+        adb('shell','input','swipe','500','500','500','1500','450'); time.sleep(1)
+    root = snap('05b-home-before-second-product')
+    home_tab = labelled_nodes(root,'Home')[0]
+    nav_top = int(re.findall(r'\d+',home_tab.attrib['bounds'])[1])
+    def unobscured(node):
+        bounds = list(map(int,re.findall(r'\d+',node.attrib['bounds'])))
+        return bounds[1] > 200 and bounds[3] < nav_top - 180
     second_add = [n for n in root.iter('node') if n.attrib.get('content-desc','').startswith('Add ')
-        and n.attrib.get('content-desc','').endswith(' to cart') and n.attrib.get('enabled') == 'true']
-    assert second_add, 'Second distinct product must have a native Add action'
-    tap(second_add[0]); time.sleep(5)
-    cart = api('GET',f'/cafeterias/{cid}/cart/',student)
-    assert len(cart['items']) == 2 and all(item['quantity']==1 for item in cart['items'])
+        and n.attrib.get('content-desc','').endswith(' to cart') and n.attrib.get('enabled') == 'true'
+        and n.attrib.get('clickable') == 'true' and unobscured(n)
+        and n.attrib['content-desc'] != 'Add '+cart['items'][0]['item_name']+' to cart']
+    assert second_add, 'Second distinct product must have an unobscured native Add action'
+    print('Native second-product action:',second_add[0].attrib['content-desc'],second_add[0].attrib['bounds'],flush=True)
+    tap(second_add[0])
+    for _ in range(15):
+        cart = api('GET',f'/cafeterias/{cid}/cart/',student)
+        if len(cart['items']) == 2: break
+        time.sleep(2)
+    assert len(cart['items']) == 2 and all(item['quantity']==1 for item in cart['items']), 'Two native products must persist: '+str([(i['item_name'],i['quantity']) for i in cart['items']])
     assert cart['total_amount'] == sum(item['subtotal'] for item in cart['items'])
     link('cart'); wait_text('Checkout',30); snap('05b-two-item-cart-total')
     print('PASS actual native second product and two-item cart total',flush=True)
