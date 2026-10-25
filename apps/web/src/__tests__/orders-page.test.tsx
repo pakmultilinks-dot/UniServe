@@ -27,11 +27,13 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard/orders",
 }));
 
+const authState = vi.hoisted(() => ({ role: "cafeteria_manager" }));
+
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
     user: {
       id: "m1",
-      role: "cafeteria_manager",
+      role: authState.role,
       first_name: "Manager",
       last_name: "One",
       university_email: "manager.one@lgu.edu.pk",
@@ -70,6 +72,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authState.role = "cafeteria_manager";
   window.sessionStorage.clear();
   window.history.replaceState({}, "", "/dashboard/orders");
   apiMock.getCafeterias.mockResolvedValue(CAFETERIAS);
@@ -324,5 +327,31 @@ describe("OrdersPage — open details after collection", () => {
     expect(within(dialog).queryByRole("button", { name: "Delay" })).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/Computed ETA/)).not.toBeInTheDocument();
     expect(apiMock.collectOrder).toHaveBeenCalledWith({ order_number: 991 });
+  });
+});
+
+
+describe("OrdersPage — administrator operational controls", () => {
+  it.each(["university_admin", "cafeteria_staff"])("offers only backend-authorized controls to %s", async (role) => {
+    authState.role = role;
+    const order = makeOrder({ order_number: 992, confirmed_at: "2026-10-08T12:05:00Z" });
+    apiMock.getCafeteriaOrders.mockResolvedValue({ orders: [order], total: 1 });
+    apiMock.getOrderDetail.mockResolvedValue(order);
+    renderPage();
+    expect(await screen.findByRole("button", { name: "Prepare" })).toBeInTheDocument();
+    if (role === "university_admin") {
+      expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Close Day" })).toBeInTheDocument();
+    } else {
+      expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Close Day" })).not.toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    const dialog = await screen.findByRole("dialog", { name: "Order #992" });
+    await within(dialog).findByRole("button", { name: "Prepare" });
+    expect(within(dialog).queryByRole("button", { name: "Reject" }) !== null).toBe(role === "university_admin");
+    expect(within(dialog).queryByRole("button", { name: "Cancel" }) !== null).toBe(role === "university_admin");
   });
 });

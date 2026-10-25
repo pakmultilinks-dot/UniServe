@@ -47,6 +47,7 @@ export default function OrdersPage() {
   const isStaff = user?.role === "cafeteria_staff";
   const isManager = user?.role === "cafeteria_manager";
   const isAdmin = user?.role === "university_admin";
+  const canManageOperations = isManager || isAdmin;
   const hasAccess = isStaff || isManager || isAdmin;
 
   useEffect(() => {
@@ -455,10 +456,10 @@ export default function OrdersPage() {
               aria-label="Filter by order date"
               className="px-2 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
             />
-            {/* Phase 58 (Workstream E1) — Close Day: manager-only sudden close
-                of the currently selected cafeteria (backend RBAC: manager,
+            {/* Phase 58 (Workstream E1) — Close Day: manager/admin sudden close
+                of the currently selected cafeteria (backend RBAC: manager/admin,
                 assigned cafeteria — enforced server-side). */}
-            {isManager && selectedCafeteria && (
+            {canManageOperations && selectedCafeteria && (
               <Button
                 size="sm"
                 variant="danger"
@@ -649,7 +650,7 @@ export default function OrdersPage() {
                               Confirm
                             </Button>
                           )}
-                          {isManager && (
+                          {canManageOperations && (
                             <Button
                               size="sm"
                               variant="danger"
@@ -710,10 +711,9 @@ export default function OrdersPage() {
                     </>
                   )}
                   {/* Phase 54 — Manager Cancel Order: shown only where the
-                      backend rules permit (manager + pending/preparing). Never
-                      shown to staff, students, or admin — backend RBAC rejects
-                      those roles with 403. */}
-                  {isManager && canManagerCancel(order.status) && (
+                      backend rules permit (manager/admin + pending/preparing).
+                      Staff and customer roles cannot use this operational action. */}
+                  {canManageOperations && canManagerCancel(order.status) && (
                     <Button
                       size="sm"
                       variant="danger"
@@ -1056,7 +1056,7 @@ export default function OrdersPage() {
                           Confirm
                         </Button>
                       )}
-                      {isManager && (
+                      {canManageOperations && (
                         <Button
                           size="sm"
                           variant="danger"
@@ -1109,7 +1109,7 @@ export default function OrdersPage() {
                   )}
                 </>
               )}
-              {detailsModal.detail && isManager && canManagerCancel(detailsModal.detail.status) && (
+              {detailsModal.detail && canManageOperations && canManagerCancel(detailsModal.detail.status) && (
                 <Button
                   size="sm"
                   variant="danger"
