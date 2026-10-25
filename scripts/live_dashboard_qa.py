@@ -62,7 +62,8 @@ def browser_login(page,role):
     with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as response:
         page.get_by_role('button',name='Sign In',exact=True).click()
     assert response.value.status==200
-    page.wait_for_url('**/dashboard**',timeout=60000)
+    destination = '**/mobile-required' if role in ('student','faculty') else '**/dashboard**'
+    page.wait_for_url(destination,timeout=60000)
 
 try:
     (OUT/'test-origin.json').write_text(json.dumps({'browser_origin':WEB,'candidate_static_proxy':PREVIEW if CANDIDATE_PROXY else None,'api_requests_intercepted':False},indent=2))
@@ -138,20 +139,24 @@ try:
         assert 'Item name unavailable' not in page.inner_text('body')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.screenshot(path=str(OUT/'03a-staff-named-inventory.png'),full_page=True)
+        for width in (1280,1024,390):
+            page.set_viewport_size({'width':width,'height':900})
+            page.goto(WEB+'/dashboard/favorites',wait_until='networkidle',timeout=60000)
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Staff favorites overflow at {width}'
+            page.screenshot(path=str(OUT/f'03a-staff-favorites-{width}.png'),full_page=True)
         for role in ('student', 'faculty'):
             context.close()
             context=browser_context(browser,viewport={'width':1280,'height':900})
             page=context.new_page()
             browser_login(page,role)
-            page.goto(WEB+'/dashboard/profile',wait_until='networkidle',timeout=60000)
+            page.get_by_role('heading',name='Use the Mobile App',exact=True).wait_for(timeout=30000)
             page.get_by_text(ACCOUNTS[role]['email'],exact=True).first.wait_for(timeout=30000)
-            assert 'Access restricted' not in page.inner_text('body')
-            page.screenshot(path=str(OUT/f'03b-{role}-web-profile.png'),full_page=True)
             for width in (1280,1024,390):
                 page.set_viewport_size({'width':width,'height':900})
-                page.goto(WEB+'/dashboard/favorites',wait_until='networkidle',timeout=60000)
-                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'{role} favorites overflow at {width}'
-                page.screenshot(path=str(OUT/f'03c-{role}-favorites-{width}.png'),full_page=True)
+                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'{role} mobile-required overflow at {width}'
+                page.screenshot(path=str(OUT/f'03b-{role}-mobile-required-{width}.png'),full_page=True)
+            page.goto(WEB+'/dashboard/profile',wait_until='networkidle',timeout=60000)
+            page.wait_for_url('**/mobile-required',timeout=30000)
         context.close(); context=browser_context(browser);page=context.new_page()
         browser_login(page,'admin')
         page.goto(WEB+'/dashboard/admin/overview',wait_until='networkidle',timeout=60000)
