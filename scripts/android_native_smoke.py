@@ -560,7 +560,12 @@ try:
     tap(labelled_nodes(root, 'Sign Out')[0])
     root = wait_text('Are you sure you want to sign out?', 30)
     tap(labelled_nodes(root, 'Sign Out')[0])
-    link('login')
+    # Sign-out intentionally returns to the welcome entry. Use its real
+    # login action; an immediate deep link races the unauthenticated guard.
+    root = wait_text('Get Started', 45)
+    entry = [n for n in root.iter('node') if n.attrib.get('content-desc', '').lower() == 'log in']
+    assert entry, 'Welcome login action missing after sign-out'
+    tap(entry[0])
     root = wait_text('Welcome Back', 45)
     fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
     assert len(fields) == 2
