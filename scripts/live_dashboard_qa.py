@@ -128,6 +128,30 @@ try:
         assert any('/menu-items' in url and status==200 for url,status in responses)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Dashboard overflows narrow viewport'
         page.screenshot(path=str(OUT/'03-staff-mobile-menu.png'),full_page=True)
+        page.get_by_text('No menu for today yet', exact=True).wait_for(state='hidden', timeout=30000)
+        inventory = api('GET', f'/cafeterias/{CID}/inventory/', staff)['items']
+        assert inventory and all(row.get('menu_item_name') for row in inventory)
+        catalogue = api('GET', f'/cafeterias/{CID}/menu-items/', staff)['items']
+        assert {row['menu_item_id'] for row in inventory} <= {row['id'] for row in catalogue}
+        page.goto(WEB+'/dashboard/inventory',wait_until='networkidle',timeout=60000)
+        page.get_by_text(inventory[0]['menu_item_name'],exact=True).first.wait_for(timeout=30000)
+        assert 'Item name unavailable' not in page.inner_text('body')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.screenshot(path=str(OUT/'03a-staff-named-inventory.png'),full_page=True)
+        for role in ('student', 'faculty'):
+            context.close()
+            context=browser_context(browser,viewport={'width':1280,'height':900})
+            page=context.new_page()
+            browser_login(page,role)
+            page.goto(WEB+'/dashboard/profile',wait_until='networkidle',timeout=60000)
+            page.get_by_text(ACCOUNTS[role]['email'],exact=True).first.wait_for(timeout=30000)
+            assert 'Access restricted' not in page.inner_text('body')
+            page.screenshot(path=str(OUT/f'03b-{role}-web-profile.png'),full_page=True)
+            for width in (1280,1024,390):
+                page.set_viewport_size({'width':width,'height':900})
+                page.goto(WEB+'/dashboard/favorites',wait_until='networkidle',timeout=60000)
+                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'{role} favorites overflow at {width}'
+                page.screenshot(path=str(OUT/f'03c-{role}-favorites-{width}.png'),full_page=True)
         context.close(); context=browser_context(browser);page=context.new_page()
         browser_login(page,'admin')
         page.goto(WEB+'/dashboard/admin/overview',wait_until='networkidle',timeout=60000)
