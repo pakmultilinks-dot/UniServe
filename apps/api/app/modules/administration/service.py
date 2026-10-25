@@ -65,7 +65,7 @@ class AdminService:
     # -- Users -------------------------------------------------------------
 
     async def get_user_summary(self) -> dict[str, Any]:
-        """University-wide user counts by role and status."""
+        """Count current accounts, matching the user directory's deletion filter."""
         q = select(
             func.count(User.id).label("total"),
             func.count().filter(User.role == Role.STUDENT).label("students"),
@@ -76,7 +76,7 @@ class AdminService:
             func.count().filter(User.status == AccountStatus.ACTIVE).label("active"),
             func.count().filter(User.status == AccountStatus.SUSPENDED).label("suspended"),
             func.count().filter(User.ordering_suspended == True).label("ordering_suspended"),
-        )
+        ).where(User.status != AccountStatus.DELETED)
         result = await self.db.execute(q)
         r = result.one()
         return {
@@ -109,6 +109,8 @@ class AdminService:
             func.count()
             .filter(CafeteriaAssignment.role == Role.CAFETERIA_STAFF)
             .label("staff_count"),
+        ).join(User, User.id == CafeteriaAssignment.user_id).where(
+            User.status != AccountStatus.DELETED
         ).group_by(CafeteriaAssignment.cafeteria_id)
         assign_result = await self.db.execute(assign_q)
         assign_map: dict[str, dict[str, int]] = {}
