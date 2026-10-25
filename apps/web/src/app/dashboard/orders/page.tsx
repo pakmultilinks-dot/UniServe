@@ -200,6 +200,14 @@ export default function OrdersPage() {
       }
       setOrders(list);
       setTotal(totalCount);
+      setDetailsModal((current) => {
+        if (!current?.detail) return current;
+        const latest = list.find((order) => order.id === current.orderId);
+        if (!latest || Date.parse(latest.updated_at) < Date.parse(current.detail.updated_at)) return current;
+        return { ...current, detail: { ...current.detail, ...latest },
+          customer: latest.customer_name ?? current.customer,
+          eta: ["completed", "cancelled"].includes(latest.status) ? null : current.eta };
+      });
     } catch (err: any) {
       // P3-2 / P3-10 — a scoped 403 (foreign cafeteria, revoked
       // assignment) surfaces as an explicit access notice, never as a
@@ -248,6 +256,7 @@ export default function OrdersPage() {
     try {
       await action();
       await loadOrders();
+      if (detailsModal?.orderId === orderId) await reloadDetails(orderId);
     } catch (err: any) {
       toast(err?.message ?? "Action failed", "error");
     } finally {
@@ -283,6 +292,7 @@ export default function OrdersPage() {
       setCollectModal(null);
       toast(`Order #${orderNumber} collected`, "success");
       await loadOrders();
+      if (detailsModal?.orderId === orderId) await reloadDetails(orderId);
     } catch (err: any) {
       toast(err?.message ?? "Collect failed", "error");
       setCollectModal(null);
@@ -302,6 +312,7 @@ export default function OrdersPage() {
       setCancelModal(null);
       toast(`Order #${orderNumber} cancelled`, "success");
       await loadOrders();
+      if (detailsModal?.orderId === orderId) await reloadDetails(orderId);
     } catch (err: any) {
       toast(err?.message ?? "Cancel failed", "error");
       setCancelModal(null);
@@ -345,8 +356,8 @@ export default function OrdersPage() {
   const reloadDetails = useCallback(async (orderId: string) => {
     try {
       const detail = await getOrderDetail(orderId);
-      let customer: string | null = null;
-      if (isAdmin) {
+      let customer: string | null = detail.customer_name ?? null;
+      if (isAdmin && !customer) {
         try {
           const u = await getUserDetail(detail.user_id);
           customer = `${u.first_name} ${u.last_name} (${u.university_email})`;
@@ -366,7 +377,8 @@ export default function OrdersPage() {
         }
       }
       setDetailsModal((m) =>
-        m && m.orderId === orderId ? { ...m, detail, customer, eta, loading: false, error: null } : m,
+        m && m.orderId === orderId && (!m.detail || Date.parse(detail.updated_at) >= Date.parse(m.detail.updated_at))
+          ? { ...m, detail, customer, eta, loading: false, error: null } : m,
       );
     } catch (err) {
       setDetailsModal((m) =>
@@ -374,6 +386,15 @@ export default function OrdersPage() {
       );
     }
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!detailsModal?.orderId) return;
+    const orderId = detailsModal.orderId;
+    const interval = setInterval(() => {
+      if (!document.hidden) void reloadDetails(orderId);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [detailsModal?.orderId, reloadDetails]);
 
   const handleOpenDetails = (orderId: string, orderNumber: number) => {
     setDetailsModal({ orderId, orderNumber, detail: null, customer: null, eta: null, loading: true, error: null });
@@ -820,6 +841,9 @@ export default function OrdersPage() {
       {detailsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDetailsModal(null)}>
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Order #${detailsModal.orderNumber}`}
             className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
@@ -849,7 +873,7 @@ export default function OrdersPage() {
                     <p className="text-[var(--text-primary)] break-words">
                       {detailsModal.customer ?? (
                         <span title={detailsModal.detail.user_id}>
-                          User {String(detailsModal.detail.user_id).slice(0, 8)}…
+                          Customer name unavailable
                         </span>
                       )}
                     </p>

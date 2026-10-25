@@ -12,6 +12,7 @@ import structlog
 from fastapi import Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import raiseload
 
 from app.core.audit import AuditEventType, log_audit_event
 from app.core.database import get_db
@@ -95,7 +96,13 @@ async def get_current_user(
     if not user_id:
         raise AuthenticationError("Invalid token subject")
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    # Polling endpoints need identity/status and one active session, not the
+    # password/PIN hashes and every historical session on each request.
+    result = await db.execute(
+        select(User)
+        .where(User.id == user_id)
+        .options(raiseload(User.credential), raiseload(User.sessions))
+    )
     user = result.scalar_one_or_none()
 
     if user is None:

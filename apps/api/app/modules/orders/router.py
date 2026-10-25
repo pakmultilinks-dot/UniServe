@@ -12,6 +12,7 @@ from app.core.deps import (
     RequireRole,
     get_current_user,
 )
+from app.modules.orders.responses import order_response, order_responses
 from app.modules.orders.schemas import (
     CafeteriaCloseRequest,
     EtaResponse,
@@ -63,7 +64,7 @@ async def list_cafeteria_orders(
         offset=offset,
     )
     return OrderListResponse(
-        orders=[OrderResponse.model_validate(o) for o in orders],
+        orders=await order_responses(db, orders),
         total=total,
     )
 
@@ -88,7 +89,7 @@ async def list_my_orders(
         days=days,
     )
     return OrderListResponse(
-        orders=[OrderResponse.model_validate(o) for o in orders],
+        orders=await order_responses(db, orders),
         total=len(orders),
     )
 
@@ -106,7 +107,7 @@ async def get_order_by_number(
         from app.core.exceptions import AuthorizationError
 
         raise AuthorizationError("Order not found")
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 @router.get("/{order_id}", response_model=OrderResponse)
@@ -132,11 +133,11 @@ async def get_order(
 
     # Owner always allowed
     if order.user_id == auth.user.id:
-        return OrderResponse.model_validate(order)
+        return await order_response(db, order)
 
     # University Admin — universal access
     if auth.user.role == Role.UNIVERSITY_ADMIN:
-        return OrderResponse.model_validate(order)
+        return await order_response(db, order)
 
     # Manager / Staff assigned to the order's cafeteria
     if auth.user.role in (Role.CAFETERIA_MANAGER, Role.CAFETERIA_STAFF):
@@ -147,7 +148,7 @@ async def get_order(
             )
         )
         if result.scalar_one_or_none() is not None:
-            return OrderResponse.model_validate(order)
+            return await order_response(db, order)
 
     raise AuthorizationError("Order not found")
 
@@ -168,7 +169,7 @@ async def cancel_order(
         reason=body.reason,
         is_manager=False,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 @router.put("/{order_id}/status", response_model=OrderResponse)
@@ -202,7 +203,7 @@ async def update_order_status(
         actor_id=auth.user.id,
         notes=body.notes,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 @router.post("/collect", response_model=OrderResponse)
@@ -242,7 +243,7 @@ async def collect_order(
         collector_id=auth.user.id,
         cafeteria_id=cafeteria_id,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 # Manager-only: cancel any order in the cafeteria
@@ -275,7 +276,7 @@ async def manager_cancel_order(
         reason=body.reason,
         is_manager=True,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 # ===================================================================
@@ -308,7 +309,7 @@ async def confirm_order(
         actor_id=auth.user.id,
         notes=body.notes,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 @router.post("/{order_id}/reject", response_model=OrderResponse)
@@ -335,7 +336,7 @@ async def reject_order(
         reason=body.reason,
         notes=body.notes,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 @router.post("/{order_id}/prepare", response_model=OrderResponse)
@@ -363,7 +364,7 @@ async def start_preparation(
         actor_id=auth.user.id,
         notes=body.notes,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 @router.put("/{order_id}/ready", response_model=OrderResponse)
@@ -391,7 +392,7 @@ async def mark_ready(
         actor_id=auth.user.id,
         notes=body.notes,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 @router.put("/{order_id}/delay", response_model=OrderResponse)
@@ -420,7 +421,7 @@ async def mark_delayed(
         additional_minutes=body.additional_minutes,
         notes=body.notes,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 @router.get("/{order_id}/eta", response_model=EtaResponse)
@@ -491,7 +492,7 @@ async def partial_item_cancel(
         actor_id=auth.user.id,
         reason=body.reason,
     )
-    return OrderResponse.model_validate(order)
+    return await order_response(db, order)
 
 
 @router.post(

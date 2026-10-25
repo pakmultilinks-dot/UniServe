@@ -249,9 +249,9 @@ export default function InventoryPage() {
                     <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
                       {/* P3-4 — resolved menu item name; id prefix only as a
                           last-resort fallback when the catalog is unavailable */}
-                      {menuNames[item.menu_item_id] ??
+                      {item.menu_item_name ?? menuNames[item.menu_item_id] ??
                         (item as any).menu_item?.name ??
-                        `Item ${item.menu_item_id.slice(0, 8)}…`}
+                        "Item name unavailable"}
                     </td>
                     <td className="px-4 py-3 text-[var(--text-primary)]">{item.quantity}</td>
                     <td className="px-4 py-3 text-[var(--text-secondary)] capitalize">{item.unit}</td>

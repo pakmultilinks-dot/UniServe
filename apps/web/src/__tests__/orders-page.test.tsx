@@ -6,7 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ApiClientError } from "@uniserve/shared-types";
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -16,6 +16,9 @@ vi.mock("@/lib/api", async (importOriginal) => {
     getCafeterias: vi.fn(),
     getMyCafeterias: vi.fn(),
     getCafeteriaOrders: vi.fn(),
+    getOrderDetail: vi.fn(),
+    getOrderEta: vi.fn(),
+    collectOrder: vi.fn(),
   };
 });
 
@@ -296,5 +299,30 @@ describe("OrdersPage — Prepare action gating (F-ACC-06)", () => {
     expect(screen.getByText("Collect")).toBeInTheDocument();
     expect(screen.queryByText("Prepare")).not.toBeInTheDocument();
     expect(screen.queryByText("Confirm")).not.toBeInTheDocument();
+  });
+});
+
+
+describe("OrdersPage — open details after collection", () => {
+  it("updates the dialog as well as the queue and removes stale Collect/Delay actions", async () => {
+    let current = makeOrder({ order_number: 991, status: "ready", customer_name: "Demo Student" });
+    apiMock.getCafeteriaOrders.mockImplementation(async () => ({ orders: [current], total: 1 }));
+    apiMock.getOrderDetail.mockImplementation(async () => current);
+    apiMock.getOrderEta.mockResolvedValue({ eta_minutes: 25 } as any);
+    apiMock.collectOrder.mockImplementation(async () => {
+      current = { ...current, status: "completed", collected_at: "2026-10-08T12:20:00Z", updated_at: "2026-10-08T12:20:00Z" };
+      return current;
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Details" }));
+    const dialog = await screen.findByRole("dialog", { name: "Order #991" });
+    expect(await within(dialog).findByText("Demo Student")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Collect" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm Collect" }));
+    await waitFor(() => expect(within(dialog).getByText(/^completed$/i)).toBeInTheDocument());
+    expect(within(dialog).queryByRole("button", { name: "Collect" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Delay" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/Computed ETA/)).not.toBeInTheDocument();
+    expect(apiMock.collectOrder).toHaveBeenCalledWith({ order_number: 991 });
   });
 });

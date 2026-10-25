@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      QA_DEMO_PASSWORD: ${{ secrets.QA_DEMO_PASSWORD }}
+      QA_TEST_ACCOUNTS_JSON: ${{ secrets.QA_TEST_ACCOUNTS_JSON }}
       EXPECTED_SOURCE: ${{ inputs.source_sha }}
     steps:
       - uses: actions/checkout@v4

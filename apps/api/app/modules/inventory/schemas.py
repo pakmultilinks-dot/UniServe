@@ -35,6 +35,7 @@ class InventoryItemResponse(BaseModel):
     id: str
     cafeteria_id: str
     menu_item_id: str
+    menu_item_name: str | None = None
     quantity: int
     unit: InventoryUnit
     low_threshold: int

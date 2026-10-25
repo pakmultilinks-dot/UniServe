@@ -19,7 +19,7 @@ export function EmptyState({
   className = "",
 }: EmptyStateProps) {
   return (
-    <div className={`flex flex-col items-center justify-center py-12 px-6 text-center ${className}`}>
+    <div className={`flex w-full min-w-0 max-w-full flex-col items-center justify-center py-12 px-6 text-center ${className}`}>
       {icon && (
         <div className="mb-4 text-[var(--text-muted)] opacity-50">
           {icon}
@@ -28,7 +28,7 @@ export function EmptyState({
       <h3 className="text-base font-semibold text-[var(--text-primary)] mb-1.5">
         {title}
       </h3>
-      <p className="text-sm text-[var(--text-muted)] max-w-sm mb-5">
+      <p className="text-sm text-[var(--text-muted)] w-full max-w-sm break-words mb-5">
         {description}
       </p>
       {action}

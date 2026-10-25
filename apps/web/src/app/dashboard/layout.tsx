@@ -40,9 +40,9 @@ export default function DashboardLayout({
       />
 
       {/* Main content area — offset by sidebar width on desktop */}
-      <div className={`transition-all duration-300 ${sidebarCollapsed ? "lg:ml-[68px]" : "lg:ml-64"}`}>
+      <div className={`min-w-0 transition-all duration-300 ${sidebarCollapsed ? "lg:ml-[68px]" : "lg:ml-64"}`}>
         <Header onMenuToggle={() => setMobileSidebarOpen(true)} />
-        <main className="p-4 sm:p-6 lg:p-8">
+        <main className="min-w-0 max-w-full overflow-x-clip p-4 sm:p-6 lg:p-8">
           {children}
         </main>
       </div>

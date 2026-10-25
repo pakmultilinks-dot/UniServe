@@ -3,6 +3,8 @@
 Provides basic health and readiness checks for the API.
 """
 
+import os
+import re
 from datetime import UTC, datetime
 
 import structlog
@@ -23,6 +25,12 @@ async def health_check() -> dict[str, str]:
         "status": "healthy",
         "service": "uniserve-api",
         "timestamp": datetime.now(UTC).isoformat(),
+        "build_commit": (
+            os.environ["RENDER_GIT_COMMIT"]
+            if re.fullmatch(r"[0-9a-f]{40}", os.environ.get("RENDER_GIT_COMMIT", ""))
+            else "unknown"
+        ),
+        "demo_seed_on_startup": "disabled",
     }
 
 
@@ -56,9 +64,7 @@ async def readiness_check(response: Response, db: AsyncSession = Depends(get_db)
         await db.execute(text("SELECT 1 FROM users LIMIT 1"))
         schema_status = "present"
     except Exception as exc:
-        logger.error(
-            "Schema readiness check failed (core tables missing)", error=str(exc)
-        )
+        logger.error("Schema readiness check failed (core tables missing)", error=str(exc))
         schema_status = "missing"
 
     if schema_status != "present":

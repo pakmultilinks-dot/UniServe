@@ -9,6 +9,9 @@ import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from qa_accounts import load_qa_accounts
+
+ACCOUNTS = load_qa_accounts()
 
 OUT = Path('native-evidence')
 OUT.mkdir(exist_ok=True)
@@ -38,8 +41,8 @@ def api(method, path, token=None, body=None):
         return json.loads(raw) if raw else None
 
 def login_api(role):
-    email = qa_student_email if role == 'student' and qa_student_email else role + '@demo.uniserve.pk'
-    password = qa_student_password if role == 'student' and qa_student_password else os.environ['QA_DEMO_PASSWORD']
+    account = ACCOUNTS['admin' if role == 'manager' else role]
+    email, password = account['email'], account['password']
     return api('POST', '/auth/login', body={'university_email': email, 'password': password})['tokens']['access_token']
 
 def backend_ready():
@@ -119,20 +122,16 @@ def link(path):
 try:
     backend_ready()
     admin = login_api('admin')
-    qa_student_email = 'qa-native-' + uuid.uuid4().hex[:12] + '@demo.uniserve.pk'
-    created_user = api('POST', '/users/', admin, {'first_name':'QA', 'last_name':'Native',
-        'university_id':'QA-'+uuid.uuid4().hex[:16], 'university_email':qa_student_email, 'role':'student'})
-    qa_student_id = created_user['user']['id']
-    qa_student_password = created_user['temporary_password']
-    print('::add-mask::'+qa_student_password, flush=True)
+    qa_student_email = ACCOUNTS['student']['email']
+    qa_student_password = ACCOUNTS['student']['password']
     student = login_api('student')
-    print('Isolated native QA credentials verified through API; existing demo carts remain untouched', flush=True)
+    print('Configured dummy student verified; no additional account is created',flush=True)
     adb('shell', 'svc', 'power', 'stayon', 'true')
     adb('shell', 'input', 'keyevent', '224')
     adb('shell', 'wm', 'dismiss-keyguard')
     adb('install', '-r', 'native-apk/app-release.apk')
     package_info = adb('shell', 'dumpsys', 'package', PACKAGE)
-    assert re.search(r'\bversionCode=12\b', package_info) and 'versionName=0.1.11' in package_info, 'Expected fresh 0.1.11 / code 12 binary'
+    assert re.search(r'\bversionCode=13\b', package_info) and 'versionName=0.1.12' in package_info, 'Expected fresh 0.1.12 / code 13 binary'
     component = adb('shell', 'cmd', 'package', 'resolve-activity', '--brief', PACKAGE).strip().splitlines()[-1]
     assert component.startswith(PACKAGE + '/'), 'Unexpected resolved app component'
     adb('shell', 'am', 'start', '-W', '-n', component)
@@ -352,10 +351,10 @@ try:
     page.wait_for_load_state('networkidle', timeout=60000)
     email_field = page.get_by_placeholder('your.name@lgu.edu.pk')
     password_field = page.get_by_placeholder('Enter your password')
-    email_field.fill('staff@demo.uniserve.pk')
-    password_field.fill(os.environ['QA_DEMO_PASSWORD'])
-    assert email_field.input_value() == 'staff@demo.uniserve.pk', 'Staff email field lost its value'
-    assert password_field.input_value() == os.environ['QA_DEMO_PASSWORD'], 'Staff password field lost its value'
+    email_field.fill(ACCOUNTS['staff']['email'])
+    password_field.fill(ACCOUNTS['staff']['password'])
+    assert email_field.input_value() == ACCOUNTS['staff']['email'], 'Staff email field lost its value'
+    assert password_field.input_value() == ACCOUNTS['staff']['password'], 'Staff password field lost its value'
     with page.expect_response(lambda r: r.url.startswith(BASE + '/auth/login') and r.request.method == 'POST', timeout=30000) as login_response:
         page.get_by_role('button', name='Sign In', exact=True).click()
     assert login_response.value.status == 200, 'Staff browser login API did not succeed'
@@ -455,8 +454,8 @@ try:
     page.context.close()
     page = browser.new_page(viewport={'width':1440,'height':1000})
     page.goto(web+'/login',wait_until='networkidle',timeout=120000)
-    page.get_by_placeholder('your.name@lgu.edu.pk').fill('manager@demo.uniserve.pk')
-    page.get_by_placeholder('Enter your password').fill(os.environ['QA_DEMO_PASSWORD'])
+    page.get_by_placeholder('your.name@lgu.edu.pk').fill(ACCOUNTS['admin']['email'])
+    page.get_by_placeholder('Enter your password').fill(ACCOUNTS['admin']['password'])
     with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as manager_response:
         page.get_by_role('button',name='Sign In',exact=True).click()
     assert manager_response.value.status==200
@@ -488,6 +487,15 @@ try:
     print('PASS actual manager dashboard rejection synchronizes to native student',flush=True)
 
     # Read actual staff statistics and menu, without changing live catalog data.
+    page.context.close()
+    page = browser.new_page(viewport={'width':1440,'height':1000})
+    page.goto(web+'/login',wait_until='networkidle',timeout=120000)
+    page.get_by_placeholder('your.name@lgu.edu.pk').fill(ACCOUNTS['staff']['email'])
+    page.get_by_placeholder('Enter your password').fill(ACCOUNTS['staff']['password'])
+    with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as staff_again:
+        page.get_by_role('button',name='Sign In',exact=True).click()
+    assert staff_again.value.status==200
+    page.wait_for_url('**/dashboard**',timeout=60000)
     responses=[]
     page.on('response',lambda response: responses.append((response.url,response.status)))
     page.goto(web+'/dashboard',wait_until='networkidle',timeout=60000)
@@ -502,10 +510,10 @@ try:
     link('profile')
     for _ in range(4):
         raw, root = dump()
-        if 'v0.1.11' in raw: break
+        if 'v0.1.12' in raw: break
         adb('shell','input','swipe','500','1500','500','400','450'); time.sleep(1)
-    wait_text('v0.1.11',30); snap('16-profile-actual-build-version')
-    print('PASS native profile displays actual build version v0.1.11',flush=True)
+    wait_text('v0.1.12',30); snap('16-profile-actual-build-version')
+    print('PASS native profile displays actual build version v0.1.12',flush=True)
 
 except BaseException:
     try: snap('failure-last-screen')

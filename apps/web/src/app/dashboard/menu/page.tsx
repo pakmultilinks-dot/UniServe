@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getCafeterias, getMyCafeterias, getMenuItems, updateMenuItem, createMenuItem, deleteMenuItem, getDailyMenus, createDailyMenu, copyDailyMenu, addDailyMenuItem, publishDailyMenu, unpublishDailyMenu, removeDailyMenuItem, uploadMenuItemImage, removeMenuItemImage, ApiClientError, getApiErrorInfo } from "@/lib/api";
@@ -69,6 +69,8 @@ export default function MenuPage() {
   const [editItem, setEditItem] = useState<MenuItem | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   /* Today's daily-menu workflow (manager/admin — backend write scope) */
+  const dailyRequest = useRef(0);
+  const [dailyMenuLoading, setDailyMenuLoading] = useState(true);
   const [dailyMenu, setDailyMenu] = useState<DailyMenu | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [showAddDailyItem, setShowAddDailyItem] = useState(false);
@@ -168,8 +170,11 @@ export default function MenuPage() {
 
   const loadDailyMenu = useCallback(async () => {
     if (!selectedCafeteria) return;
+    const request = ++dailyRequest.current;
+    setDailyMenuLoading(true);
     try {
       const data = await getDailyMenus(selectedCafeteria);
+      if (request !== dailyRequest.current) return;
       const today = todayISO();
       // WS4 — today's LIVE menu only. Archived menus (e.g. one unpublished
       // earlier today) must not shadow the active published/draft menu.
@@ -186,8 +191,12 @@ export default function MenuPage() {
       // Phase 46 — a failed daily-menu request must not masquerade as
       // "No menu for today yet" (that claim is only true after a successful
       // response with no active menu).
-      setDailyMenu(null);
-      setDailyMenuError(getApiErrorInfo(err));
+      if (request === dailyRequest.current) {
+        setDailyMenu(null);
+        setDailyMenuError(getApiErrorInfo(err));
+      }
+    } finally {
+      if (request === dailyRequest.current) setDailyMenuLoading(false);
     }
   }, [selectedCafeteria]);
 
@@ -359,7 +368,7 @@ export default function MenuPage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] w-64"
         />
-        <div className="flex gap-1 overflow-x-auto">
+        <div className="flex min-w-0 max-w-full flex-wrap gap-1">
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
@@ -380,11 +389,13 @@ export default function MenuPage() {
            manager/admin — backend enforces the same write scope) ─── */}
       {hasAccess && (
         <div className="mb-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 shadow-card">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <div>
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">Today&apos;s Daily Menu</h2>
               <p className="text-xs text-[var(--text-muted)]">
-                {dailyMenuError
+                {dailyMenuLoading
+                  ? "Loading today’s menu…"
+                  : dailyMenuError
                   ? "Unable to load today's menu status"
                   : dailyMenu
                   ? `Date: ${dailyMenu.menu_date}`
@@ -413,18 +424,20 @@ export default function MenuPage() {
                   Unpublish
                 </Button>
               )}
-              {canEdit && !dailyMenu && !dailyMenuError && (
+              {canEdit && !dailyMenuLoading && !dailyMenu && !dailyMenuError && (
                 <Button size="sm" loading={dailyLoading} onClick={handleCreateDailyMenu}>
                   Create Draft for Today
                 </Button>
               )}
-              {isStaff && !dailyMenu && (
+              {isStaff && !dailyMenuLoading && !dailyMenu && (
                 <span className="text-xs text-[var(--text-muted)]">Not published yet</span>
               )}
             </div>
           </div>
 
-          {dailyMenuError ? (
+          {dailyMenuLoading ? (
+            <p role="status" className="text-sm text-[var(--text-muted)]">Loading today’s menu…</p>
+          ) : dailyMenuError ? (
             <LoadErrorState
               compact
               error={dailyMenuError}

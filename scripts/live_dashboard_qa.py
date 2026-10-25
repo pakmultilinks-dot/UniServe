@@ -8,6 +8,9 @@ import urllib.request
 from urllib.error import HTTPError
 import uuid
 from playwright.sync_api import sync_playwright
+from qa_accounts import load_qa_accounts
+
+ACCOUNTS = load_qa_accounts()
 
 BASE='https://uniserve-api.onrender.com/api/v1'
 WEB=os.environ.get('QA_WEB_URL','https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app')
@@ -36,8 +39,8 @@ def api(method,path,token=None,body=None,expected=200):
     return json.loads(raw) if raw else None
 
 def login(role):
-    return api('POST','/auth/login',body={'university_email':role+'@demo.uniserve.pk',
-        'password':os.environ['QA_DEMO_PASSWORD']})['tokens']['access_token']
+    return api('POST','/auth/login',body={'university_email':ACCOUNTS['admin' if role == 'manager' else role]['email'],
+        'password':ACCOUNTS['admin' if role == 'manager' else role]['password']})['tokens']['access_token']
 
 def browser_context(browser, **kwargs):
     context = browser.new_context(**kwargs)
@@ -54,8 +57,8 @@ def browser_context(browser, **kwargs):
 
 def browser_login(page,role):
     page.goto(WEB+'/login',wait_until='networkidle',timeout=120000)
-    page.get_by_placeholder('your.name@lgu.edu.pk').fill(role+'@demo.uniserve.pk')
-    page.get_by_placeholder('Enter your password').fill(os.environ['QA_DEMO_PASSWORD'])
+    page.get_by_placeholder('your.name@lgu.edu.pk').fill(ACCOUNTS['admin' if role == 'manager' else role]['email'])
+    page.get_by_placeholder('Enter your password').fill(ACCOUNTS['admin' if role == 'manager' else role]['password'])
     with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as response:
         page.get_by_role('button',name='Sign In',exact=True).click()
     assert response.value.status==200
@@ -66,7 +69,7 @@ try:
     print('Browser QA mode:', 'candidate static assets at approved origin; real API' if CANDIDATE_PROXY else 'direct deployed dashboard',flush=True)
     api('GET','/health/ready')
     student,staff,manager,admin=(login(role) for role in ('student','staff','manager','admin'))
-    for token in (student,staff,manager): api('GET','/administration/overview',token,expected=403)
+    for token in (student,staff,login('faculty')): api('GET','/administration/overview',token,expected=403)
     overview=api('GET','/administration/overview',admin)
     assert 'users' in overview and 'orders' in overview
     api('GET',f'/cafeterias/{CID}/menu-items',staff)
@@ -83,6 +86,7 @@ try:
         page=context.new_page()
         browser_login(page,'manager')
         page.goto(WEB+'/dashboard/menu',wait_until='networkidle',timeout=60000)
+        page.get_by_role('combobox').first.select_option(CID)
         card=page.get_by_role('heading',name=name,exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
         card.wait_for(timeout=60000)
         card.get_by_role('button',name='Edit',exact=True).click()
