@@ -1,8 +1,8 @@
 /**
- * CartBar — Floating cart summary bar above the tab bar.
+ * CartBar — Cart summary docked in layout above the tab bar.
  *
  * Design spec:
- * - position absolute, bottom 70, left/right 16
+ * - Reserves its own space, with 16dp horizontal margins
  * - height 52, borderRadius 14
  * - Espresso background with high-contrast white text
  * - shadow: 0 4 8 rgba(0,0,0,0.2)
@@ -13,7 +13,6 @@
 import React, { useEffect, useRef } from "react";
 import { View, Text, Pressable, StyleSheet, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../contexts/ThemeContext";
 import { colors } from "../theme";
 
 interface CartBarProps {
@@ -27,7 +26,6 @@ function formatPrice(paisa: number): string {
 }
 
 export default function CartBar({ itemCount, total, onPress }: CartBarProps) {
-  const { resolvedTheme } = useTheme();
   const bounceAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -47,7 +45,7 @@ export default function CartBar({ itemCount, total, onPress }: CartBarProps) {
   }, [itemCount]);
 
   return (
-    <Pressable onPress={onPress} style={[styles.bar, { backgroundColor: colors.brand[900] }]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`View cart, ${itemCount} items, ${formatPrice(total)}`} onPress={onPress} style={[styles.bar, { backgroundColor: colors.brand[900] }]}>
       <View style={styles.left}>
         <View style={styles.cartIconWrap}>
           <Ionicons name="cart" size={20} color="#ffffff" />
@@ -63,6 +61,7 @@ export default function CartBar({ itemCount, total, onPress }: CartBarProps) {
           )}
         </View>
       </View>
+      <Text style={styles.total}>View cart</Text>
       <View style={styles.right}>
         <Text style={styles.total}>{formatPrice(total)}</Text>
         <Ionicons name="arrow-forward" size={16} color="#ffffff" />
@@ -73,10 +72,10 @@ export default function CartBar({ itemCount, total, onPress }: CartBarProps) {
 
 const styles = StyleSheet.create({
   bar: {
-    position: "absolute",
-    bottom: 70,
-    left: 16,
-    right: 16,
+    marginTop: "auto",
+    marginBottom: 8,
+    marginHorizontal: 16,
+    flexShrink: 0,
     height: 52,
     borderRadius: 14,
     flexDirection: "row",

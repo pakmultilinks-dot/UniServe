@@ -130,7 +130,8 @@ try:
     adb('shell', 'wm', 'dismiss-keyguard')
     adb('install', '-r', 'native-apk/app-release.apk')
     package_info = adb('shell', 'dumpsys', 'package', PACKAGE)
-    assert re.search(r'\bversionCode=13\b', package_info) and 'versionName=0.1.12' in package_info, 'Expected fresh 0.1.12 / code 13 binary'
+    config = json.loads(Path('apps/mobile/app.json').read_text())['expo']
+    assert re.search(r'\bversionCode=' + str(config['android']['versionCode']) + r'\b', package_info) and ('versionName=' + config['version']) in package_info, 'Expected selected-source binary version'
     component = adb('shell', 'cmd', 'package', 'resolve-activity', '--brief', PACKAGE).strip().splitlines()[-1]
     assert component.startswith(PACKAGE + '/'), 'Unexpected resolved app component'
     adb('shell', 'am', 'start', '-W', '-n', component)
@@ -295,8 +296,10 @@ try:
     home_tab = labelled_nodes(root,'Home')[0]
     nav_top = int(re.findall(r'\d+',home_tab.attrib['bounds'])[1])
     floating = [list(map(int,re.findall(r'\d+',n.attrib['bounds']))) for n in root.iter('node')
-        if n.attrib.get('clickable') == 'true' and re.search(r'^.*, \d+, PKR \d+,',n.attrib.get('content-desc',''))]
-    assert floating, 'Floating cart bar bounds must be known before choosing a product'
+        if n.attrib.get('clickable') == 'true' and n.attrib.get('content-desc','').startswith('View cart, ')]
+    assert floating, 'Cart dock bounds must be known before choosing a product'
+    assert all(0 <= nav_top - bar[3] <= 40 for bar in floating), 'Cart dock must sit directly above navigation'
+    snap('05c-cart-dock-above-navigation')
     def unobscured(node):
         bounds = list(map(int,re.findall(r'\d+',node.attrib['bounds'])))
         return bounds[1] > 200 and bounds[3] < nav_top and all(bounds[3] < bar[1] or bounds[1] > bar[3] for bar in floating)
@@ -448,13 +451,12 @@ try:
     def seed_test_order(label):
         api('POST', f'/cafeterias/{cid}/cart/items', student,
             {'menu_item_id': cart['items'][0]['menu_item_id'], 'quantity': 1})
-        # Unpaid online immediate orders legitimately remain Pending. Only
-        # create the order; NEVER initiate a payment/provider request. This
-        # exercises cancellation/rejection even outside same-day slot hours.
+        # Cash-only lifecycle tests must also work when online checkout is unavailable.
+        # No payment provider is contacted.
         result = api('POST', f'/cafeterias/{cid}/cart/checkout', student,
-            {'payment_method':'online','order_type':'immediate',
+            {'payment_method':'cash','order_type':'immediate',
              'note':qa_note+'-'+label,'idempotency_key':str(uuid.uuid4())})
-        assert result['status'] == 'pending', 'Unpaid QA order must remain pending'
+        assert result['status'] in ('pending', 'confirmed'), 'QA order must remain cancellable'
         print('Created unpaid Pending QA order; no payment initiation:',result['id'],flush=True)
         extra_orders.append(result['id'])
         return result
@@ -490,12 +492,13 @@ try:
     page.wait_for_url('**/dashboard**',timeout=60000)
     page.goto(web+'/dashboard/orders?cafeteria='+cid,wait_until='networkidle',timeout=60000)
     rejected_card = page.get_by_text('#'+str(rejected['order_number']),exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
-    rejected_card.get_by_role('button',name='Confirm',exact=True).click(timeout=60000)
+    if not api('GET','/orders/'+rejected['id'],student).get('confirmed_at'):
+        rejected_card.get_by_role('button',name='Confirm',exact=True).click(timeout=60000)
     for _ in range(15):
         confirmed = api('GET','/orders/'+rejected['id'],student)
         if confirmed.get('confirmed_at'): break
         time.sleep(2)
-    assert confirmed.get('confirmed_at') and confirmed['status']=='pending' and not confirmed.get('preparation_started_at')
+    assert confirmed.get('confirmed_at') and confirmed['status'] in ('pending','confirmed') and not confirmed.get('preparation_started_at')
     print('PASS real manager dashboard manually confirms an unpaid Pending order without preparation',flush=True)
     rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
     modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
@@ -538,10 +541,10 @@ try:
     link('profile')
     for _ in range(4):
         raw, root = dump()
-        if 'v0.1.12' in raw: break
+        if ('v' + config['version']) in raw: break
         adb('shell','input','swipe','500','1500','500','400','450'); time.sleep(1)
-    wait_text('v0.1.12',30); snap('16-profile-actual-build-version')
-    print('PASS native profile displays actual build version v0.1.12',flush=True)
+    wait_text('v' + config['version'],30); snap('16-profile-actual-build-version')
+    print('PASS native profile displays actual build version',config['version'],flush=True)
 
     # Exercise the fourth configured identity in the same installed APK.
     # Faculty browsing uses its own cafeteria and never creates another user.

@@ -366,3 +366,7 @@ export async function addFavorite(menuItemId: string): Promise<FavoriteResponse>
 export async function removeFavorite(menuItemId: string): Promise<void> {
   await apiClient.delete<void>(`/favorites/${menuItemId}`);
 }
+
+export async function getPaymentCapabilities(): Promise<{ online_available: boolean; message: string }> {
+  return apiClient.get("/payments/capabilities");
+}

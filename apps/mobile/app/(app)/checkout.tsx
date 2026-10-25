@@ -4,7 +4,7 @@
  * Payment method, order note, order summary, and place order button.
  * On success navigates to the order detail screen.
  */
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../src/contexts/ThemeContext";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useCart } from "../../src/contexts/CartContext";
-import { checkoutCart, initiatePayment } from "../../src/services/data";
+import { checkoutCart, initiatePayment, getPaymentCapabilities } from "../../src/services/data";
 import { textColor, bgColor, borderColor, brandGreen, functionalColor } from "../../src/theme";
 import type { OrderType, PaymentMethod } from "@uniserve/shared-types";
 
@@ -91,6 +91,13 @@ export default function CheckoutScreen() {
   const errorBg = resolvedTheme === "dark" ? "#3b1515" : "#fef2f2";
   const errorBorder = resolvedTheme === "dark" ? "#5c2020" : "#fecaca";
 
+  const [onlineAvailable, setOnlineAvailable] = useState(false);
+  useEffect(() => {
+    let active = true;
+    getPaymentCapabilities().then((result) => { if (active) setOnlineAvailable(result.online_available); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [orderType, setOrderType] = useState<OrderType>("immediate");
   const [scheduledTime, setScheduledTime] = useState<string | null>(null);
@@ -140,6 +147,10 @@ export default function CheckoutScreen() {
       setError("Choose a collection time for your scheduled order.");
       return;
     }
+    if (paymentMethod === "online" && !onlineAvailable) {
+      setError("Online payment is unavailable. Please choose Pay at Counter.");
+      return;
+    }
     setIsPlacing(true);
     setError("");
     let createdOrder: { id: string } | null = null;
@@ -175,7 +186,7 @@ export default function CheckoutScreen() {
     } finally {
       setIsPlacing(false);
     }
-  }, [selectedCafeteria, paymentMethod, orderType, scheduledTime, note, checkoutKey, refreshCart, router, isSuspended]);
+  }, [selectedCafeteria, paymentMethod, orderType, scheduledTime, note, checkoutKey, refreshCart, router, isSuspended, onlineAvailable]);
 
   if (!cart || items.length === 0) {
     return (
@@ -243,7 +254,9 @@ export default function CheckoutScreen() {
                   {type === "immediate"
                     ? "Prepared now — usually ready in 10–20 min"
                     : scheduledDisabled
-                      ? "Not available right now — cafeteria hours are not published"
+                      ? selectedCafeteria?.operating_hours
+                        ? "No collection times remain today"
+                        : "Cafeteria hours are not published yet"
                       : "Choose a time during cafeteria hours"}
                 </Text>
               </View>
@@ -323,6 +336,8 @@ export default function CheckoutScreen() {
                 borderColor: paymentMethod === "online" ? brand : bc,
               },
             ]}
+            disabled={!onlineAvailable}
+            accessibilityState={{ disabled: !onlineAvailable }}
             onPress={() => setPaymentMethod("online")}
           >
             <Ionicons

@@ -124,9 +124,13 @@ export default function LoginScreen() {
       const message = err instanceof Error ? err.message : "Login failed";
       setError(message === "Request timed out"
         ? "UniServe took too long to respond. Check your connection and try again."
-        : message);
+        : /network|fetch failed|SocketException|connection abort/i.test(message)
+          ? "Connection interrupted. Check your internet connection and try again. The free server may still be waking up."
+          : message);
       // Clear password on failure for security (audit recommendation)
-      setPassword("");
+      if (!/network|fetch failed|SocketException|connection abort|timed out/i.test(message)) {
+        setPassword("");
+      }
     } finally {
       setIsLoading(false);
       setIsConnectingSlowly(false);

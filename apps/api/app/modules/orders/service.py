@@ -26,6 +26,7 @@ from app.core.config import settings
 from app.core.exceptions import (
     AccountSuspendedError,
     NotFoundException,
+    ServiceUnavailableError,
     ValidationError,
 )
 from app.modules.carts.models import Cart, CartStatus
@@ -126,6 +127,16 @@ class OrderService:
             existing_order = existing_result.scalar_one_or_none()
             if existing_order is not None:
                 return await self.get_order(existing_order.id)
+
+        # Refuse unavailable online checkout before consuming cart or reserving stock.
+        if payment_method == "online" and settings.APP_ENV == "production":
+            from app.modules.payments.providers import create_payment_provider
+            from app.modules.payments.providers.test_provider import TestPaymentProvider
+
+            if isinstance(create_payment_provider(), TestPaymentProvider):
+                raise ServiceUnavailableError(
+                    "Online payment is not available yet. Please pay at the counter."
+                )
 
         # 1. Get active cart with items
         cart = await self._get_active_cart_with_items(user_id, cafeteria_id)

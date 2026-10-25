@@ -221,3 +221,18 @@ class TestOTPResend:
             json={"user_id": "fake-id", "purpose": "email_verification"},
         )
         assert resp.status_code in (400, 422)
+
+
+@pytest.mark.asyncio
+async def test_registration_reports_delivery_failure(client, monkeypatch):
+    from app.core.email import DevelopmentEmailProvider
+
+    async def fail_delivery(self, **kwargs):
+        return False
+
+    monkeypatch.setattr(DevelopmentEmailProvider, "send_otp", fail_delivery)
+    response = await client.post(
+        "/api/v1/auth/register", json=TestRegistration.VALID_PAYLOAD
+    )
+    assert response.status_code == 503
+    assert "could not send" in response.text

@@ -354,3 +354,33 @@ class TestWebhookProductionGuard:
         assert stored.scalar_one_or_none() is None
         await db.refresh(payment)
         assert payment.status.value == status_before_webhook
+
+
+@pytest.mark.asyncio
+async def test_capabilities_blocks_production_test_provider(client, monkeypatch):
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    response = await client.get("/api/v1/payments/capabilities")
+    assert response.status_code == 200
+    assert response.json()["online_available"] is False
+    assert "counter" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_capabilities_unknown_provider_is_unavailable(client, monkeypatch):
+    monkeypatch.setattr(settings, "PAYMENT_PROVIDER", "missing")
+    response = await client.get("/api/v1/payments/capabilities")
+    assert response.status_code == 200
+    assert response.json()["online_available"] is False
+
+
+@pytest.mark.asyncio
+async def test_unavailable_online_checkout_preserves_cart(student_client, student_user, db, monkeypatch):
+    cafeteria, item, _ = await _setup_test_data(db)
+    await _add_cart_item(student_client, cafeteria.id, item.id)
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    response = await _checkout(student_client, cafeteria.id, payment_method="online")
+    assert response.status_code == 503
+    monkeypatch.setattr(settings, "APP_ENV", "testing")
+    response = await _checkout(student_client, cafeteria.id, payment_method="cash")
+    assert response.status_code == 201
+    assert len(response.json()["items"]) == 1

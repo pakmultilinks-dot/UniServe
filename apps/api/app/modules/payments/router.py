@@ -50,6 +50,22 @@ def _get_payment_service(db: AsyncSession) -> PaymentService:
     return PaymentService(db, _get_payment_provider())
 
 
+@router.get("/capabilities")
+async def payment_capabilities() -> dict[str, bool | str]:
+    """Expose checkout availability without merchant credentials."""
+    try:
+        provider = _get_payment_provider()
+        available = not (
+            settings.APP_ENV == "production" and isinstance(provider, TestPaymentProvider)
+        )
+    except ServiceUnavailableError:
+        available = False
+    return {
+        "online_available": available,
+        "message": "" if available else "Online payment is not available yet. Pay at the counter.",
+    }
+
+
 @router.get("/", response_model=PaymentListResponse)
 async def list_my_payments(
     auth: AuthContext = Depends(get_current_user),

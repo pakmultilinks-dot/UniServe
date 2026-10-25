@@ -52,6 +52,8 @@ it("filters search/categories locally without extra network requests", async () 
   await screen.findByText("Chicken Biryani", {}, { timeout: 10000 });
   fireEvent.press(screen.getByTestId("breakfast"));
   await waitFor(() => expect(screen.queryByText("Chicken Biryani")).toBeNull());
+  expect(screen.getByText("No items in this category")).toBeTruthy();
+  expect(screen.queryByText("Today's menu is being prepared")).toBeNull();
   expect(menu).toHaveBeenCalledTimes(1);
 });
 

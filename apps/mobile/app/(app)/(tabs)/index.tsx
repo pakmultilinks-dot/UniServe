@@ -8,7 +8,7 @@
  *   Zone 3: Search bar
  *   Zone 4: Category chips (horizontal scroll, Ionicons, no emojis)
  *   Zone 5: Food grid (2-column, vertical scroll)
- *   Zone 6: Floating cart bar (absolute, bottom: 70)
+ *   Zone 6: Cart dock reserves space above navigation
  *   — Bottom Tab Bar (below cart bar)
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -452,16 +452,20 @@ export default function HomeScreen() {
           title={
             searchQuery
               ? "No items found"
-              : selectedCafeteria
-                ? "Today's menu is being prepared"
-                : "Find your campus cafe"
+              : selectedCategory !== "all"
+                ? "No items in this category"
+                : selectedCafeteria
+                  ? "Today's menu is being prepared"
+                  : "Find your campus cafe"
           }
           description={
             searchQuery
               ? `No items match "${searchQuery}"`
-              : selectedCafeteria
-                ? "Fresh campus favorites will appear here once today's menu is published."
-                : "Choose a campus cafe to explore meals, snacks, and drinks."
+              : selectedCategory !== "all"
+                ? "Choose another category or select All to browse the menu."
+                : selectedCafeteria
+                  ? "Fresh campus favorites will appear here once today's menu is published."
+                  : "Choose a campus cafe to explore meals, snacks, and drinks."
           }
         />
       )}
@@ -491,9 +495,8 @@ export default function HomeScreen() {
           style={styles.scrollContent}
           contentContainerStyle={[
             styles.scrollContainer,
-            // Room for the tab bar (56) + inset + floating CartBar (52 + gap),
-            // so the last row is never hidden behind the bar.
-            { paddingBottom: cartItemCount > 0 ? 168 : 92 },
+            // The navigator and cart dock reserve their own space.
+            { paddingBottom: 16 },
           ]}
           refreshControl={
             <RefreshControl
@@ -541,7 +544,7 @@ export default function HomeScreen() {
         </ScrollView>
       )}
 
-      {/* ── Zone 6: Floating Cart Bar ── */}
+      {/* ── Zone 6: Cart Dock ── */}
       {cartItemCount > 0 && (
         <CartBar
           itemCount={cartItemCount}
