@@ -407,7 +407,9 @@ try:
     details.get_by_role('button', name='Collect', exact=True).click()
     page.get_by_role('button', name='Confirm Collect', exact=True).click()
     order = wait_order_status('completed')
-    details.get_by_text('Completed', exact=True).wait_for(timeout=30000)
+    completed = True
+    # StatusBadge uses CSS capitalize; its DOM text remains the enum value.
+    details.get_by_text('completed', exact=True).wait_for(timeout=30000)
     assert details.get_by_role('button', name='Collect', exact=True).count() == 0
     assert details.get_by_role('button', name='Delay', exact=True).count() == 0
     assert details.get_by_text('Computed ETA:', exact=False).count() == 0
