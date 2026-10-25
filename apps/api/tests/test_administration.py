@@ -173,6 +173,27 @@ class TestUserAggregation:
     """Verify user counts in the overview."""
 
     @pytest.mark.asyncio
+    async def test_deleted_accounts_do_not_inflate_current_user_or_staff_counts(
+        self, admin_client: AsyncClient, db: AsyncSession, student_cafeteria: Cafeteria
+    ):
+        before = (await admin_client.get("/api/v1/administration/overview")).json()
+        deleted = await create_test_user(
+            db,
+            university_id="DELETED-STAFF",
+            university_email="deleted-staff@lgu.edu.pk",
+            role=Role.CAFETERIA_STAFF,
+            status=AccountStatus.DELETED,
+        )
+        deleted.ordering_suspended = True
+        await assign_user_to_cafeteria(
+            db, deleted.id, student_cafeteria.id, Role.CAFETERIA_STAFF
+        )
+        await db.flush()
+        after = (await admin_client.get("/api/v1/administration/overview")).json()
+        assert after["users"] == before["users"]
+        assert after["cafeterias"] == before["cafeterias"]
+
+    @pytest.mark.asyncio
     async def test_user_counts(
         self,
         admin_client: AsyncClient,
