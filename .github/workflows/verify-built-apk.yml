@@ -1,0 +1,75 @@
+name: Verify exact previously built APK
+on:
+  push:
+    branches: [fix/android-install-repair-20261023]
+    paths: [.github/workflows/verify-built-apk.yml]
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Same-repository APK build run ID
+        required: true
+      source_sha:
+        description: Exact expected build source commit
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  emulator:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      QA_TEST_ACCOUNTS_JSON: ${{ secrets.QA_TEST_ACCOUNTS_JSON }}
+      EXPECTED_SOURCE: ${{ inputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: uniserve-apk
+          path: native-apk
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-package-verification
+          path: package-evidence
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+      - name: Verify immutable artifact source, version and checksum
+        run: |
+          python3 - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          metadata=json.loads(Path('package-evidence/provenance.json').read_text())
+          config=json.loads(Path('apps/mobile/app.json').read_text())['expo']
+          assert metadata['source_commit']==os.environ['EXPECTED_SOURCE']
+          assert metadata['version']==config['version'] and metadata['versionCode']==config['android']['versionCode']
+          assert metadata['certificate_sha256']==Path('docs/android-release-certificate.sha256').read_text().strip()
+          assert hashlib.sha256(Path('native-apk/app-release.apk').read_bytes()).hexdigest()==metadata['sha256']
+          print('Exact APK source/version/certificate/checksum matched:',metadata['source_commit'],metadata['version'],metadata['sha256'])
+          PY
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Prepare isolated browser
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Install and test immutable APK with current QA harness
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-metrics -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: python3 scripts/android_native_smoke.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-native-screen-evidence
+          path: native-evidence/

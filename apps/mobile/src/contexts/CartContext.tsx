@@ -7,6 +7,7 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
+import { AppState } from "react-native";
 import type { CartResponse, CartItemResponse, Cafeteria } from "@uniserve/shared-types";
 import { SecureStorage } from "../services/secure-storage";
 import { useAuth } from "./AuthContext";
@@ -19,6 +20,9 @@ import {
 } from "../services/data";
 
 interface CartContextValue {
+  cafeterias: Cafeteria[];
+  cafeteriasError: string;
+  refreshCafeterias: () => Promise<Cafeteria[]>;
   /** Currently selected cafeteria */
   selectedCafeteria: Cafeteria | null;
   /** Whether we're still determining the default cafeteria */
@@ -65,6 +69,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [isCartLoading, setIsCartLoading] = useState(false);
   const [cartError, setCartError] = useState<string | null>(null);
 
+  const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
+  const [cafeteriasError, setCafeteriasError] = useState("");
+  const cafeteriaRequest = useRef<Promise<Cafeteria[]> | null>(null);
+  const session = useRef(0);
+  const cartRequest = useRef(0);
+
   // Prevent concurrent cart operations
   const cartLockRef = useRef(false);
 
@@ -73,46 +83,74 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
      selection the user made on the home screen. */
   const CAFETERIA_STORAGE_KEY = "uniserve_selected_cafeteria";
 
-  /** Auto-select the remembered cafeteria (or the first one) once signed in */
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    (async () => {
+  // Home and cart share one request/state; a failed duplicate must not leave
+  // a stale error beside a successful selection. Keep the last valid data
+  // during refresh, but always surface a genuine refresh failure.
+  const refreshCafeterias = useCallback((): Promise<Cafeteria[]> => {
+    if (cafeteriaRequest.current) return cafeteriaRequest.current;
+    const generation = session.current;
+    setIsCafeteriaLoading(true);
+    setCafeteriasError("");
+    const request = (async () => {
       try {
-        const cafeterias = await getCafeterias();
-        if (cafeterias.length > 0) {
-          let preferredId: string | null = null;
-          try {
-            preferredId = await SecureStorage.getItemAsync(CAFETERIA_STORAGE_KEY);
-          } catch {
-            // Storage unavailable — fall back to the first cafeteria
-          }
-          // The stored id may reference a cafeteria that was removed or
-          // deactivated — only honour it when it is still in the list.
-          const remembered = preferredId
-            ? cafeterias.find((c) => c.id === preferredId)
-            : undefined;
-          setSelectedCafeteria(remembered ?? cafeterias[0]);
-        }
-      } catch {
-        // Silent — cafeteria selection will be manual
+        const data = await getCafeterias();
+        let preferredId: string | null = null;
+        try { preferredId = await SecureStorage.getItemAsync(CAFETERIA_STORAGE_KEY); } catch { /* best effort */ }
+        if (generation !== session.current) return data;
+        setCafeterias(data);
+        setSelectedCafeteria((current) => data.find((c) => c.id === (current?.id ?? preferredId)) ?? data[0] ?? null);
+        return data;
+      } catch (error) {
+        if (generation === session.current) setCafeteriasError("Unable to connect. Check your connection and try again.");
+        throw error;
       } finally {
-        setIsCafeteriaLoading(false);
+        if (generation === session.current) {
+          setIsCafeteriaLoading(false);
+          cafeteriaRequest.current = null;
+        }
       }
     })();
-  }, [isAuthenticated]);
+    cafeteriaRequest.current = request;
+    return request;
+  }, []);
+
+  useEffect(() => {
+    session.current += 1;
+    cartRequest.current += 1;
+    cafeteriaRequest.current = null;
+    if (!isAuthenticated) {
+      setSelectedCafeteria(null);
+      setCafeterias([]);
+      setCafeteriasError("");
+      setCart(null);
+      setCartError(null);
+      setIsCartLoading(false);
+      setIsCafeteriaLoading(false);
+      return;
+    }
+    void refreshCafeterias().catch(() => {});
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refreshCafeterias().catch(() => {});
+    });
+    return () => { session.current += 1; subscription.remove(); };
+  }, [isAuthenticated, refreshCafeterias]);
 
   /** Load cart when cafeteria is selected */
   const loadCart = useCallback(async (cafeteriaId: string) => {
+    const generation = session.current;
+    const request = ++cartRequest.current;
     setIsCartLoading(true);
     try {
       const cartData = await getCart(cafeteriaId);
+      if (generation !== session.current || request !== cartRequest.current) return;
       setCart(cartData);
       setCartError(null);
     } catch (error) {
+      if (generation !== session.current || request !== cartRequest.current) return;
       setCart(null);
       setCartError(error instanceof Error ? error.message : "Failed to load cart");
     } finally {
-      setIsCartLoading(false);
+      if (generation === session.current && request === cartRequest.current) setIsCartLoading(false);
     }
   }, []);
 
@@ -199,6 +237,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value: CartContextValue = {
+    cafeterias,
+    cafeteriasError,
+    refreshCafeterias,
     selectedCafeteria,
     isCafeteriaLoading,
     selectCafeteria,

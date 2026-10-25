@@ -419,6 +419,7 @@ export interface InventoryItem {
   id: string;
   cafeteria_id: string;
   menu_item_id: string;
+  menu_item_name?: string | null;
   quantity: number;
   unit: InventoryUnit;
   low_threshold: number;
@@ -505,6 +506,7 @@ export interface Order {
   order_number: number;
   collection_token: string;
   user_id: string;
+  customer_name?: string | null;
   cafeteria_id: string;
   status: OrderStatus;
   order_type: OrderType;

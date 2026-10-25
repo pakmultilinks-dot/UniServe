@@ -1,0 +1,36 @@
+name: Verify live dashboard operations
+on:
+  push:
+    branches: [fix/android-install-repair-20261023]
+    paths: [scripts/live_dashboard_qa.py, .github/workflows/live-dashboard-qa.yml]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Dashboard deployment to verify
+        type: choice
+        options: [production, preview, candidate]
+        default: production
+permissions:
+  contents: read
+jobs:
+  dashboard:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      QA_TEST_ACCOUNTS_JSON: ${{ secrets.QA_TEST_ACCOUNTS_JSON }}
+      QA_CANDIDATE_BUNDLE_PROXY: ${{ inputs.target == 'candidate' && '1' || '0' }}
+      QA_WEB_URL: ${{ inputs.target == 'preview' && 'https://uniserve-web-dashboard-git-fix-android-a47c77-pakmultilinks-dot.vercel.app' || 'https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated browser
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Test exact live dashboard and real backend
+        run: python3 scripts/live_dashboard_qa.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-dashboard-evidence
+          path: dashboard-evidence/

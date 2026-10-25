@@ -7,7 +7,9 @@
  */
 
 jest.mock("../services/api", () => ({
+  ApiClientError: jest.requireActual("@uniserve/shared-types").ApiClientError,
   apiClient: {
+    request: jest.fn(),
     get: jest.fn(),
     post: jest.fn(),
     patch: jest.fn(),
@@ -34,19 +36,19 @@ beforeEach(() => {
 
 describe("data service — cafeterias", () => {
   it("requests active-only cafeterias for the customer ordering path", async () => {
-    apiMock.get.mockResolvedValue({ cafeterias: [{ id: "c1" }], total: 1 });
+    apiMock.request.mockResolvedValue({ cafeterias: [{ id: "c1" }], total: 1 });
 
     const result = await getCafeterias();
 
     // The backend route is GET /cafeterias/ (trailing slash) — FastAPI
     // 307-redirects the non-slash form, but the client hits the canonical
     // path directly to avoid the extra round-trip.
-    expect(apiMock.get).toHaveBeenCalledWith("/cafeterias/?is_active=true");
+    expect(apiMock.request).toHaveBeenCalledWith("GET", "/cafeterias/?is_active=true", { timeout: 60000 });
     expect(result).toEqual([{ id: "c1" }]);
   });
 
   it("returns an empty list when the payload omits cafeterias", async () => {
-    apiMock.get.mockResolvedValue({ total: 0 });
+    apiMock.request.mockResolvedValue({ total: 0 });
 
     expect(await getCafeterias()).toEqual([]);
   });

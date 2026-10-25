@@ -77,6 +77,8 @@ function CartItemRow({ item, onUpdateQuantity, theme }: CartItemRowProps) {
         <View style={[styles.qtyControl, { borderColor: bc, backgroundColor: bgColor(theme, "primary") }]}>
           <Pressable
             style={styles.qtyBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Decrease ${item.item_name ?? "item"} quantity`}
             onPress={() => onUpdateQuantity(item.id, item.quantity - 1)}
             hitSlop={6}
           >
@@ -89,6 +91,8 @@ function CartItemRow({ item, onUpdateQuantity, theme }: CartItemRowProps) {
           <Text style={[styles.qtyValue, { color: tc }]}>{item.quantity}</Text>
           <Pressable
             style={styles.qtyBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Increase ${item.item_name ?? "item"} quantity`}
             onPress={() => onUpdateQuantity(item.id, item.quantity + 1)}
             disabled={item.quantity >= 10}
             hitSlop={6}

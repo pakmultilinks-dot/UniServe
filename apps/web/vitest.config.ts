@@ -32,6 +32,7 @@ export default defineConfig({
       { find: /^react-dom\/jsx-runtime$/, replacement: path.join(rootReactDom, "jsx-runtime") },
       { find: /^react-dom\/jsx-dev-runtime$/, replacement: path.join(rootReactDom, "jsx-dev-runtime") },
       { find: /^react-dom\/test-utils$/, replacement: path.join(rootReactDom, "test-utils") },
+      { find: "@uniserve/shared-types", replacement: fileURLToPath(new URL("../../packages/shared-types/src/index.ts", import.meta.url)) },
       { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
     ],
   },

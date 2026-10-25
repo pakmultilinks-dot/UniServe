@@ -1,0 +1,309 @@
+{
+  "purpose": "Fresh dummy-account testing menu. Opening quantities are sample stock, not physical stock counts.",
+  "cafeterias": {
+    "Student Cafeteria": [
+      {
+        "name": "Chicken Biryani",
+        "category": "main_course",
+        "price": 22000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chicken-biryani.jpg",
+        "description": "Basmati rice with spiced chicken and raita.",
+        "preparation_time_minutes": 15,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Beef Biryani",
+        "category": "main_course",
+        "price": 28000,
+        "currency": "PKR",
+        "image_url": "https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=800&q=85",
+        "description": "Slow-cooked beef with aromatic basmati rice.",
+        "preparation_time_minutes": 20,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Chicken Karahi",
+        "category": "main_course",
+        "price": 35000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chicken-karahi.jpg",
+        "description": "Tomato and green-chilli chicken karahi with naan.",
+        "preparation_time_minutes": 20,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Chicken Korma",
+        "category": "main_course",
+        "price": 24000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chicken-korma.jpg",
+        "description": "Gently spiced chicken curry with naan.",
+        "preparation_time_minutes": 18,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Chicken Pulao",
+        "category": "main_course",
+        "price": 20000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chicken-pulao.jpg",
+        "description": "Chicken and rice simmered in fragrant stock.",
+        "preparation_time_minutes": 15,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Daal Fry with Rice",
+        "category": "main_course",
+        "price": 18000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/dal.jpg",
+        "description": "Seasoned lentils with steamed rice.",
+        "preparation_time_minutes": 12,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Chicken Shawarma",
+        "category": "snack",
+        "price": 18000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chicken-shawarma.jpg",
+        "description": "Chicken wrap with salad and garlic sauce.",
+        "preparation_time_minutes": 8,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Paratha Roll",
+        "category": "snack",
+        "price": 16000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chicken-roll.jpg",
+        "description": "Chicken and chutney in a flaky paratha.",
+        "preparation_time_minutes": 10,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Beef Burger",
+        "category": "snack",
+        "price": 25000,
+        "currency": "PKR",
+        "image_url": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=85",
+        "description": "Beef burger with lettuce and house sauce.",
+        "preparation_time_minutes": 12,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Chicken Sandwich",
+        "category": "snack",
+        "price": 15000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/club-sandwich.jpg",
+        "description": "Chicken sandwich with fresh salad.",
+        "preparation_time_minutes": 8,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Finger Fries",
+        "category": "side_dish",
+        "price": 10000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/fries.jpg",
+        "description": "Crisp potato fries with ketchup.",
+        "preparation_time_minutes": 7,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Samosa (2 pcs)",
+        "category": "snack",
+        "price": 6000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/samosa.jpg",
+        "description": "Two crisp potato-filled samosas.",
+        "preparation_time_minutes": 5,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Paratha",
+        "category": "breakfast",
+        "price": 5000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/paratha.jpg",
+        "description": "Freshly cooked layered flatbread.",
+        "preparation_time_minutes": 7,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Omelette",
+        "category": "breakfast",
+        "price": 9000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/omelette.jpg",
+        "description": "Two-egg omelette with onions and herbs.",
+        "preparation_time_minutes": 8,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Doodh Patti Chai",
+        "category": "beverage",
+        "price": 6000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chai.jpg",
+        "description": "Freshly brewed milk tea.",
+        "preparation_time_minutes": 5,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Bottled Water",
+        "category": "beverage",
+        "price": 5000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/water.jpg",
+        "description": "Sealed drinking water, 500 ml.",
+        "preparation_time_minutes": 1,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Fresh Orange Juice",
+        "category": "beverage",
+        "price": 12000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/fresh-juice.jpg",
+        "description": "A chilled glass of orange juice.",
+        "preparation_time_minutes": 5,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Gulab Jamun",
+        "category": "dessert",
+        "price": 10000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/gulab-jamun.jpg",
+        "description": "Two warm gulab jamun in syrup.",
+        "preparation_time_minutes": 3,
+        "initial_quantity": 60
+      }
+    ],
+    "Faculty Cafe": [
+      {
+        "name": "Chicken Biryani",
+        "category": "main_course",
+        "price": 22000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chicken-biryani.jpg",
+        "description": "Basmati rice with spiced chicken and raita.",
+        "preparation_time_minutes": 15,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Chicken Karahi",
+        "category": "main_course",
+        "price": 35000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chicken-karahi.jpg",
+        "description": "Tomato and green-chilli chicken karahi with naan.",
+        "preparation_time_minutes": 20,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Daal Fry with Rice",
+        "category": "main_course",
+        "price": 18000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/dal.jpg",
+        "description": "Seasoned lentils with steamed rice.",
+        "preparation_time_minutes": 12,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Mixed Vegetables",
+        "category": "main_course",
+        "price": 20000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/mixed-veg.jpg",
+        "description": "Seasonal vegetable curry with naan.",
+        "preparation_time_minutes": 12,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Club Sandwich",
+        "category": "snack",
+        "price": 28000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/club-sandwich.jpg",
+        "description": "Layered chicken sandwich with salad and fries.",
+        "preparation_time_minutes": 12,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Chicken Shami Kebab",
+        "category": "snack",
+        "price": 18000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chicken-shami-kebab.jpg",
+        "description": "Two chicken and lentil kebabs.",
+        "preparation_time_minutes": 10,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Raita",
+        "category": "side_dish",
+        "price": 5000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/raita.jpg",
+        "description": "Yogurt with cucumber and light seasoning.",
+        "preparation_time_minutes": 2,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Green Tea",
+        "category": "beverage",
+        "price": 8000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/green-tea.jpg",
+        "description": "Freshly brewed green tea.",
+        "preparation_time_minutes": 4,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Doodh Patti Chai",
+        "category": "beverage",
+        "price": 6000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chai.jpg",
+        "description": "Freshly brewed milk tea.",
+        "preparation_time_minutes": 5,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Bottled Water",
+        "category": "beverage",
+        "price": 5000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/water.jpg",
+        "description": "Sealed drinking water, 500 ml.",
+        "preparation_time_minutes": 1,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Chocolate Cake",
+        "category": "dessert",
+        "price": 18000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/chocolate-cake.jpg",
+        "description": "A slice of chocolate cake.",
+        "preparation_time_minutes": 2,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Gulab Jamun",
+        "category": "dessert",
+        "price": 10000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/gulab-jamun.jpg",
+        "description": "Two warm gulab jamun in syrup.",
+        "preparation_time_minutes": 3,
+        "initial_quantity": 60
+      }
+    ]
+  }
+}

@@ -1,6 +1,7 @@
 """Inventory module — API endpoints for inventory management."""
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -17,6 +18,7 @@ from app.modules.inventory.schemas import (
     InventoryListResponse,
 )
 from app.modules.inventory.service import InventoryService
+from app.modules.menus.models import MenuItem
 from app.modules.users.models import Role
 
 router = APIRouter()
@@ -57,6 +59,7 @@ async def create_inventory_item(
     )
     response = InventoryItemResponse.model_validate(item)
     response.is_low = item.quantity <= item.low_threshold
+    response.menu_item_name = menu_item.name
     return response
 
 
@@ -85,10 +88,19 @@ async def list_inventory_items(
         cafeteria_id=cafeteria_id,
         low_only=low_only,
     )
+    names = {}
+    if items:
+        result = await db.execute(
+            select(MenuItem.id, MenuItem.name).where(
+                MenuItem.id.in_({item.menu_item_id for item in items})
+            )
+        )
+        names = {row.id: row.name for row in result}
     response_items = []
     for item in items:
         resp = InventoryItemResponse.model_validate(item)
         resp.is_low = item.quantity <= item.low_threshold
+        resp.menu_item_name = names.get(item.menu_item_id)
         response_items.append(resp)
     return InventoryListResponse(items=response_items, total=len(response_items))
 
@@ -143,9 +155,18 @@ async def get_low_stock_items(
     """Get inventory items below their low-stock threshold (staff/manager/admin only)."""
     service = InventoryService(db)
     items = await service.get_low_stock_items(cafeteria_id)
+    names = {}
+    if items:
+        result = await db.execute(
+            select(MenuItem.id, MenuItem.name).where(
+                MenuItem.id.in_({item.menu_item_id for item in items})
+            )
+        )
+        names = {row.id: row.name for row in result}
     response_items = []
     for item in items:
         resp = InventoryItemResponse.model_validate(item)
         resp.is_low = item.quantity <= item.low_threshold
+        resp.menu_item_name = names.get(item.menu_item_id)
         response_items.append(resp)
     return InventoryListResponse(items=response_items, total=len(response_items))

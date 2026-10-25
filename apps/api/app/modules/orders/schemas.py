@@ -27,6 +27,7 @@ class OrderResponse(BaseModel):
     order_number: int
     collection_token: str
     user_id: str
+    customer_name: str | None = None
     cafeteria_id: str
     order_type: str
     payment_method: str

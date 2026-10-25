@@ -7,14 +7,8 @@ echo "Running database migrations..."
 alembic upgrade head
 echo "Migrations complete."
 
-# Seed demo data on first deploy (only when SEED_DEMO_DATA=true).
-# Both seed scripts are idempotent and safe to rerun.
-if [ "$SEED_DEMO_DATA" = "true" ]; then
-  echo "Seeding demo data..."
-  PYTHONPATH=/app python scripts/seed_student_cafeteria.py
-  PYTHONPATH=/app python scripts/seed_demo_users.py
-  echo "Demo data seeded."
-fi
+# Production startup never creates demo users, resets passwords, or imports menus.
+# Provisioning is an explicit operator task, separate from restarts/cold starts.
 
 echo "Starting API..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2

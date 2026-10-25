@@ -6,7 +6,7 @@
  * All types come from @uniserve/shared-types for consistency.
  */
 
-import { apiClient } from "./api";
+import { apiClient, ApiClientError } from "./api";
 import type {
   Cafeteria,
   MenuItem,
@@ -24,6 +24,19 @@ import type {
   RefundReason,
 } from "@uniserve/shared-types";
 
+// Only repeat safe catalog reads; checkout/payment mutations are never retried.
+async function readCatalog<T>(endpoint: string): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await apiClient.request<T>("GET", endpoint, { timeout: 60000 });
+    } catch (error) {
+      const transient = error instanceof ApiClientError && [0, 408, 502, 503, 504].includes(error.status);
+      if (!transient || attempt >= 1) throw error;
+      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+}
+
 // ---- Cafeterias ----
 
 interface CafeteriaListResponse {
@@ -40,7 +53,7 @@ interface CafeteriaListResponse {
  * For students, the backend additionally filters to student cafeterias.
  */
 export async function getCafeterias(): Promise<Cafeteria[]> {
-  const data = await apiClient.get<CafeteriaListResponse>("/cafeterias/?is_active=true");
+  const data = await readCatalog<CafeteriaListResponse>("/cafeterias/?is_active=true");
   return data.cafeterias ?? [];
 }
 
@@ -58,7 +71,7 @@ export async function getMenuItem(
 
 /** Fetch today's published daily menu for a cafeteria. Returns null if no menu is published. */
 export async function getTodaysMenu(cafeteriaId: string): Promise<DailyMenu | null> {
-  return apiClient.get<DailyMenu | null>(
+  return readCatalog<DailyMenu | null>(
     `/cafeterias/${cafeteriaId}/daily-menus/today`,
   );
 }

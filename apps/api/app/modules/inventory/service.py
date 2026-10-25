@@ -134,7 +134,15 @@ class InventoryService:
         low_only: bool = False,
     ) -> list[InventoryItem]:
         """List inventory items for a cafeteria."""
-        query = select(InventoryItem).where(InventoryItem.cafeteria_id == cafeteria_id)
+        from app.modules.menus.models import MenuItem
+
+        # Retired catalogue items retain their audit history but must not
+        # appear as unnamed, zero-stock products in the operational list.
+        query = (
+            select(InventoryItem)
+            .join(MenuItem, InventoryItem.menu_item_id == MenuItem.id)
+            .where(InventoryItem.cafeteria_id == cafeteria_id, MenuItem.is_active.is_(True))
+        )
         if low_only:
             query = query.where(InventoryItem.quantity <= InventoryItem.low_threshold)
         query = query.order_by(InventoryItem.created_at.desc())
