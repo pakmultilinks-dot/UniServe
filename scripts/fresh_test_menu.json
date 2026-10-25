@@ -27,7 +27,7 @@
         "category": "main_course",
         "price": 35000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/chicken-karahi.jpg",
+        "image_url": "/api/v1/static/food/chicken-karahi-v2.jpg",
         "description": "Tomato and green-chilli chicken karahi with naan.",
         "preparation_time_minutes": 20,
         "initial_quantity": 60
@@ -37,7 +37,7 @@
         "category": "main_course",
         "price": 24000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/chicken-korma.jpg",
+        "image_url": "/api/v1/static/food/chicken-korma-v2.jpg",
         "description": "Gently spiced chicken curry with naan.",
         "preparation_time_minutes": 18,
         "initial_quantity": 60
@@ -53,12 +53,12 @@
         "initial_quantity": 60
       },
       {
-        "name": "Daal Fry with Rice",
+        "name": "Daal Fry with Roti",
         "category": "main_course",
         "price": 18000,
         "currency": "PKR",
         "image_url": "/api/v1/static/food/dal.jpg",
-        "description": "Seasoned lentils with steamed rice.",
+        "description": "Seasoned lentils served with roti.",
         "preparation_time_minutes": 12,
         "initial_quantity": 60
       },
@@ -73,12 +73,12 @@
         "initial_quantity": 60
       },
       {
-        "name": "Paratha Roll",
+        "name": "Chicken Tikka",
         "category": "snack",
         "price": 16000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/chicken-roll.jpg",
-        "description": "Chicken and chutney in a flaky paratha.",
+        "image_url": "/api/v1/static/food/chicken-pakora.jpg",
+        "description": "Grilled chicken tikka with a side of chutney.",
         "preparation_time_minutes": 10,
         "initial_quantity": 60
       },
@@ -127,18 +127,18 @@
         "category": "breakfast",
         "price": 5000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/paratha.jpg",
+        "image_url": "/api/v1/static/food/paratha-v2.jpg",
         "description": "Freshly cooked layered flatbread.",
         "preparation_time_minutes": 7,
         "initial_quantity": 60
       },
       {
-        "name": "Omelette",
+        "name": "Fried Egg Toast",
         "category": "breakfast",
         "price": 9000,
         "currency": "PKR",
         "image_url": "/api/v1/static/food/omelette.jpg",
-        "description": "Two-egg omelette with onions and herbs.",
+        "description": "Fried egg on toasted bread.",
         "preparation_time_minutes": 8,
         "initial_quantity": 60
       },
@@ -153,12 +153,12 @@
         "initial_quantity": 60
       },
       {
-        "name": "Bottled Water",
+        "name": "Drinking Water",
         "category": "beverage",
         "price": 5000,
         "currency": "PKR",
         "image_url": "/api/v1/static/food/water.jpg",
-        "description": "Sealed drinking water, 500 ml.",
+        "description": "Drinking water, 500 ml.",
         "preparation_time_minutes": 1,
         "initial_quantity": 60
       },
@@ -177,7 +177,7 @@
         "category": "dessert",
         "price": 10000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/gulab-jamun.jpg",
+        "image_url": "/api/v1/static/food/gulab-jamun-v2.jpg",
         "description": "Two warm gulab jamun in syrup.",
         "preparation_time_minutes": 3,
         "initial_quantity": 60
@@ -199,18 +199,18 @@
         "category": "main_course",
         "price": 35000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/chicken-karahi.jpg",
+        "image_url": "/api/v1/static/food/chicken-karahi-v2.jpg",
         "description": "Tomato and green-chilli chicken karahi with naan.",
         "preparation_time_minutes": 20,
         "initial_quantity": 60
       },
       {
-        "name": "Daal Fry with Rice",
+        "name": "Daal Fry with Roti",
         "category": "main_course",
         "price": 18000,
         "currency": "PKR",
         "image_url": "/api/v1/static/food/dal.jpg",
-        "description": "Seasoned lentils with steamed rice.",
+        "description": "Seasoned lentils served with roti.",
         "preparation_time_minutes": 12,
         "initial_quantity": 60
       },
@@ -219,7 +219,7 @@
         "category": "main_course",
         "price": 20000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/mixed-veg.jpg",
+        "image_url": "/api/v1/static/food/mixed-veg-v2.jpg",
         "description": "Seasonal vegetable curry with naan.",
         "preparation_time_minutes": 12,
         "initial_quantity": 60
@@ -239,7 +239,7 @@
         "category": "snack",
         "price": 18000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/chicken-shami-kebab.jpg",
+        "image_url": "/api/v1/static/food/chicken-shami-kebab-v2.jpg",
         "description": "Two chicken and lentil kebabs.",
         "preparation_time_minutes": 10,
         "initial_quantity": 60
@@ -249,7 +249,7 @@
         "category": "side_dish",
         "price": 5000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/raita.jpg",
+        "image_url": "/api/v1/static/food/raita-v2.jpg",
         "description": "Yogurt with cucumber and light seasoning.",
         "preparation_time_minutes": 2,
         "initial_quantity": 60
@@ -259,7 +259,7 @@
         "category": "beverage",
         "price": 8000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/green-tea.jpg",
+        "image_url": "/api/v1/static/food/green-tea-v2.jpg",
         "description": "Freshly brewed green tea.",
         "preparation_time_minutes": 4,
         "initial_quantity": 60
@@ -275,12 +275,12 @@
         "initial_quantity": 60
       },
       {
-        "name": "Bottled Water",
+        "name": "Drinking Water",
         "category": "beverage",
         "price": 5000,
         "currency": "PKR",
         "image_url": "/api/v1/static/food/water.jpg",
-        "description": "Sealed drinking water, 500 ml.",
+        "description": "Drinking water, 500 ml.",
         "preparation_time_minutes": 1,
         "initial_quantity": 60
       },
@@ -299,7 +299,7 @@
         "category": "dessert",
         "price": 10000,
         "currency": "PKR",
-        "image_url": "/api/v1/static/food/gulab-jamun.jpg",
+        "image_url": "/api/v1/static/food/gulab-jamun-v2.jpg",
         "description": "Two warm gulab jamun in syrup.",
         "preparation_time_minutes": 3,
         "initial_quantity": 60
