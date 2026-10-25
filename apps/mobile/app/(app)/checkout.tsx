@@ -334,6 +334,7 @@ export default function CheckoutScreen() {
               {
                 backgroundColor: bg,
                 borderColor: paymentMethod === "online" ? brand : bc,
+                opacity: onlineAvailable ? 1 : 0.5,
               },
             ]}
             disabled={!onlineAvailable}
@@ -348,7 +349,7 @@ export default function CheckoutScreen() {
             <View style={styles.paymentOptionInfo}>
               <Text style={[styles.paymentOptionLabel, { color: tc }]}>Online Payment</Text>
               <Text style={[styles.paymentOptionSub, { color: tcMuted }]}>
-                JazzCash or card — you'll continue to the secure payment page
+                {onlineAvailable ? "Continue to secure payment" : "Not available yet — please pay at the counter"}
               </Text>
             </View>
             {paymentMethod === "online" && (
