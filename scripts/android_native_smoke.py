@@ -288,12 +288,17 @@ try:
     # lie under the floating cart bar; tapping it would open Cart instead.
     for _ in range(2):
         adb('shell','input','swipe','500','500','500','1500','450'); time.sleep(1)
+    # Move first-row controls above the actual floating bar on short screens.
+    adb('shell','input','swipe','500','1100','500','700','450'); time.sleep(2)
     root = snap('05b-home-before-second-product')
     home_tab = labelled_nodes(root,'Home')[0]
     nav_top = int(re.findall(r'\d+',home_tab.attrib['bounds'])[1])
+    floating = [list(map(int,re.findall(r'\d+',n.attrib['bounds']))) for n in root.iter('node')
+        if n.attrib.get('clickable') == 'true' and re.search(r'^.*, \d+, PKR \d+,',n.attrib.get('content-desc',''))]
+    assert floating, 'Floating cart bar bounds must be known before choosing a product'
     def unobscured(node):
         bounds = list(map(int,re.findall(r'\d+',node.attrib['bounds'])))
-        return bounds[1] > 200 and bounds[3] < nav_top - 180
+        return bounds[1] > 200 and bounds[3] < nav_top and all(bounds[3] < bar[1] or bounds[1] > bar[3] for bar in floating)
     second_add = [n for n in root.iter('node') if n.attrib.get('content-desc','').startswith('Add ')
         and n.attrib.get('content-desc','').endswith(' to cart') and n.attrib.get('enabled') == 'true'
         and n.attrib.get('clickable') == 'true' and unobscured(n)
