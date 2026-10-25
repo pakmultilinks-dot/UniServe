@@ -456,66 +456,78 @@ try:
         result = api('POST', f'/cafeterias/{cid}/cart/checkout', student,
             {'payment_method':'cash','order_type':'immediate',
              'note':qa_note+'-'+label,'idempotency_key':str(uuid.uuid4())})
-        assert result['status'] in ('pending', 'confirmed'), 'QA order must remain cancellable'
         print('Created unpaid Pending QA order; no payment initiation:',result['id'],flush=True)
         extra_orders.append(result['id'])
         return result
 
     cancelled = seed_test_order('student-cancel')
-    link('order/' + cancelled['id'])
-    wait_text('Order #' + str(cancelled['order_number']), 45)
-    snap('14-cancel-before-scroll')
-    for _ in range(5):
-        raw, root = dump()
-        buttons = labelled_nodes(root, 'Cancel Order')
-        if buttons: break
-        adb('shell','input','swipe','500','1500','500','500','400'); time.sleep(1)
-    assert buttons, 'Pending student cancellation missing'
-    tap(buttons[0]); root = wait_text('Yes, cancel',30)
-    tap(labelled_nodes(root, 'Yes, cancel')[0])
-    wait_text('This order was cancelled',45)
-    assert api('GET','/orders/'+cancelled['id'],student)['status'] == 'cancelled'
-    snap('14-student-cancelled-order')
-    print('PASS actual native student cancellation saved; QA order:',cancelled['id'],flush=True)
+    if cancelled['status'] != 'pending':
+        assert cancelled['status'] == 'preparing', 'Unexpected cash acceptance policy'
+        link('order/' + cancelled['id'])
+        wait_text('Preparing', 45)
+        _, root = dump()
+        assert not labelled_nodes(root, 'Cancel Order'), 'Student must not cancel after preparation starts'
+        api('POST', '/orders/' + cancelled['id'] + '/manager-cancel', admin,
+            {'reason': 'Automated QA cash auto-acceptance check; no food or money'})
+        wait_text('This order was cancelled', 45)
+        snap('14-auto-accepted-cash-admin-cancelled')
+        print('PASS cash auto-acceptance hides student cancellation and admin cancellation synchronizes to native', flush=True)
+        print('SKIP Pending-only student cancel and rejection live cases: immediate cash auto-starts preparation; no online provider or future collection slots are available. API regression covers Pending rules.', flush=True)
+    else:
+        link('order/' + cancelled['id'])
+        wait_text('Order #' + str(cancelled['order_number']), 45)
+        snap('14-cancel-before-scroll')
+        for _ in range(5):
+            raw, root = dump()
+            buttons = labelled_nodes(root, 'Cancel Order')
+            if buttons: break
+            adb('shell','input','swipe','500','1500','500','500','400'); time.sleep(1)
+        assert buttons, 'Pending student cancellation missing'
+        tap(buttons[0]); root = wait_text('Yes, cancel',30)
+        tap(labelled_nodes(root, 'Yes, cancel')[0])
+        wait_text('This order was cancelled',45)
+        assert api('GET','/orders/'+cancelled['id'],student)['status'] == 'cancelled'
+        snap('14-student-cancelled-order')
+        print('PASS actual native student cancellation saved; QA order:',cancelled['id'],flush=True)
 
-    rejected = seed_test_order('manager-reject')
-    # Rejection is intentionally a manager-only dashboard action. Do not
-    # change RBAC or disable production auto-acceptance to satisfy QA.
-    page.context.close()
-    page = browser.new_page(viewport={'width':1440,'height':1000})
-    page.goto(web+'/login',wait_until='networkidle',timeout=120000)
-    page.get_by_placeholder('your.name@lgu.edu.pk').fill(ACCOUNTS['admin']['email'])
-    page.get_by_placeholder('Enter your password').fill(ACCOUNTS['admin']['password'])
-    with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as manager_response:
-        page.get_by_role('button',name='Sign In',exact=True).click()
-    assert manager_response.value.status==200
-    page.wait_for_url('**/dashboard**',timeout=60000)
-    page.goto(web+'/dashboard/orders?cafeteria='+cid,wait_until='networkidle',timeout=60000)
-    rejected_card = page.get_by_text('#'+str(rejected['order_number']),exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
-    if not api('GET','/orders/'+rejected['id'],student).get('confirmed_at'):
-        rejected_card.get_by_role('button',name='Confirm',exact=True).click(timeout=60000)
-    for _ in range(15):
-        confirmed = api('GET','/orders/'+rejected['id'],student)
-        if confirmed.get('confirmed_at'): break
-        time.sleep(2)
-    assert confirmed.get('confirmed_at') and confirmed['status'] in ('pending','confirmed') and not confirmed.get('preparation_started_at')
-    print('PASS real manager dashboard manually confirms an unpaid Pending order without preparation',flush=True)
-    rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
-    modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
-    modal.locator('select').select_option('other')
-    modal.locator('textarea').fill('Automated QA rejection; no food or payment')
-    modal.get_by_role('button',name='Confirm Reject',exact=True).click()
-    for _ in range(15):
-        rejected_state = api('GET','/orders/'+rejected['id'],student)
-        if rejected_state['status']=='cancelled': break
-        time.sleep(2)
-    assert rejected_state['status']=='cancelled' and rejected_state['rejection_reason']=='other'
-    rejected_card.screenshot(path=str(OUT/'web-04-staff-rejected.png'))
-    link('order/'+rejected['id']); wait_text('This order was cancelled',45)
-    root = snap('15-staff-rejection-on-student')
-    assert not any(n.attrib.get('text') == 'Preparing' for n in root.iter('node')), 'Rejected-before-preparation order must not claim Preparing'
-    assert any(n.attrib.get('text') == 'Cancelled' for n in root.iter('node')), 'Cancelled must be the primary terminal status'
-    print('PASS actual manager dashboard rejection synchronizes to native student',flush=True)
+        rejected = seed_test_order('manager-reject')
+        # Rejection is intentionally a manager-only dashboard action. Do not
+        # change RBAC or disable production auto-acceptance to satisfy QA.
+        page.context.close()
+        page = browser.new_page(viewport={'width':1440,'height':1000})
+        page.goto(web+'/login',wait_until='networkidle',timeout=120000)
+        page.get_by_placeholder('your.name@lgu.edu.pk').fill(ACCOUNTS['admin']['email'])
+        page.get_by_placeholder('Enter your password').fill(ACCOUNTS['admin']['password'])
+        with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as manager_response:
+            page.get_by_role('button',name='Sign In',exact=True).click()
+        assert manager_response.value.status==200
+        page.wait_for_url('**/dashboard**',timeout=60000)
+        page.goto(web+'/dashboard/orders?cafeteria='+cid,wait_until='networkidle',timeout=60000)
+        rejected_card = page.get_by_text('#'+str(rejected['order_number']),exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
+        if not api('GET','/orders/'+rejected['id'],student).get('confirmed_at'):
+            rejected_card.get_by_role('button',name='Confirm',exact=True).click(timeout=60000)
+        for _ in range(15):
+            confirmed = api('GET','/orders/'+rejected['id'],student)
+            if confirmed.get('confirmed_at'): break
+            time.sleep(2)
+        assert confirmed.get('confirmed_at') and confirmed['status'] in ('pending','confirmed') and not confirmed.get('preparation_started_at')
+        print('PASS real manager dashboard manually confirms an unpaid Pending order without preparation',flush=True)
+        rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
+        modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
+        modal.locator('select').select_option('other')
+        modal.locator('textarea').fill('Automated QA rejection; no food or payment')
+        modal.get_by_role('button',name='Confirm Reject',exact=True).click()
+        for _ in range(15):
+            rejected_state = api('GET','/orders/'+rejected['id'],student)
+            if rejected_state['status']=='cancelled': break
+            time.sleep(2)
+        assert rejected_state['status']=='cancelled' and rejected_state['rejection_reason']=='other'
+        rejected_card.screenshot(path=str(OUT/'web-04-staff-rejected.png'))
+        link('order/'+rejected['id']); wait_text('This order was cancelled',45)
+        root = snap('15-staff-rejection-on-student')
+        assert not any(n.attrib.get('text') == 'Preparing' for n in root.iter('node')), 'Rejected-before-preparation order must not claim Preparing'
+        assert any(n.attrib.get('text') == 'Cancelled' for n in root.iter('node')), 'Cancelled must be the primary terminal status'
+        print('PASS actual manager dashboard rejection synchronizes to native student',flush=True)
 
     # Read actual staff statistics and menu, without changing live catalog data.
     page.context.close()
