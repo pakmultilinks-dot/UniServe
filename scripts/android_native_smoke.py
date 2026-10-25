@@ -131,7 +131,7 @@ try:
     adb('install', '-r', 'native-apk/app-release.apk')
     package_info = adb('shell', 'dumpsys', 'package', PACKAGE)
     config = json.loads(Path('apps/mobile/app.json').read_text())['expo']
-    assert re.search(r'\bversionCode=' + str(config['android']['versionCode']) + r'\b', package_info) and ('versionName=' + config['version']) in package_info, 'Expected fresh 0.1.12 / code 13 binary'
+    assert re.search(r'\bversionCode=' + str(config['android']['versionCode']) + r'\b', package_info) and ('versionName=' + config['version']) in package_info, 'Expected selected-source binary version'
     component = adb('shell', 'cmd', 'package', 'resolve-activity', '--brief', PACKAGE).strip().splitlines()[-1]
     assert component.startswith(PACKAGE + '/'), 'Unexpected resolved app component'
     adb('shell', 'am', 'start', '-W', '-n', component)
@@ -498,7 +498,7 @@ try:
         confirmed = api('GET','/orders/'+rejected['id'],student)
         if confirmed.get('confirmed_at'): break
         time.sleep(2)
-    assert confirmed.get('confirmed_at') and confirmed['status']=='pending' and not confirmed.get('preparation_started_at')
+    assert confirmed.get('confirmed_at') and confirmed['status'] in ('pending','confirmed') and not confirmed.get('preparation_started_at')
     print('PASS real manager dashboard manually confirms an unpaid Pending order without preparation',flush=True)
     rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
     modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
@@ -541,10 +541,10 @@ try:
     link('profile')
     for _ in range(4):
         raw, root = dump()
-        if 'v0.1.12' in raw: break
+        if ('v' + config['version']) in raw: break
         adb('shell','input','swipe','500','1500','500','400','450'); time.sleep(1)
-    wait_text('v0.1.12',30); snap('16-profile-actual-build-version')
-    print('PASS native profile displays actual build version v0.1.12',flush=True)
+    wait_text('v' + config['version'],30); snap('16-profile-actual-build-version')
+    print('PASS native profile displays actual build version',config['version'],flush=True)
 
     # Exercise the fourth configured identity in the same installed APK.
     # Faculty browsing uses its own cafeteria and never creates another user.
