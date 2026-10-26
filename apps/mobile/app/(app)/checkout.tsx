@@ -126,8 +126,9 @@ export default function CheckoutScreen() {
 
   // The button must agree with what the backend will accept: a scheduled
   // order needs a chosen slot, and a suspended account can't order at all.
+  const immediateClosed = orderType === "immediate" && selectedCafeteria?.operational_status === "closed";
   const canPlaceOrder =
-    !isSuspended && (orderType !== "scheduled" || !!scheduledTime);
+    !isSuspended && !immediateClosed && (orderType !== "scheduled" || !!scheduledTime);
 
   const items = cart?.items ?? [];
   const collectionSlots = getCollectionSlots(
@@ -216,6 +217,11 @@ export default function CheckoutScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {immediateClosed && (
+          <Text accessibilityRole="alert" style={[styles.sectionTitle, { color: tcMuted }]}>
+            Cafeteria is closed for immediate orders. Hours: {selectedCafeteria?.operating_hours ?? "not published"}.
+          </Text>
+        )}
         {/* ── Collection Type ── */}
         <Text style={[styles.sectionTitle, { color: tc }]}>Collection</Text>
         <View style={styles.paymentOptions}>
@@ -496,6 +502,8 @@ export default function CheckoutScreen() {
               <Text style={styles.placeOrderBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                 {isSuspended
                   ? "Ordering suspended"
+                  : immediateClosed
+                    ? "Cafeteria closed"
                   : !canPlaceOrder
                     ? "Choose a collection time"
                     : paymentMethod === "online"
