@@ -115,11 +115,13 @@ function CartItemRow({ item, onUpdateQuantity, theme }: CartItemRowProps) {
 // ── Main Cart Screen ──
 
 interface CartScreenProps {
+  /** Tabs already reserve the bottom safe area. */
+  bottomSafeArea?: boolean;
   /** "Browse menu" handler; defaults to stack pop when not provided. */
   onBrowseMenu?: () => void;
 }
 
-export default function CartScreen({ onBrowseMenu }: CartScreenProps) {
+export default function CartScreen({ onBrowseMenu, bottomSafeArea = true }: CartScreenProps) {
   const { resolvedTheme } = useTheme();
   const router = useRouter();
   const {
@@ -273,7 +275,7 @@ export default function CartScreen({ onBrowseMenu }: CartScreenProps) {
           </ScrollView>
 
           {/* ── Bottom checkout bar ── */}
-          <SafeAreaView edges={["bottom"]} style={{ backgroundColor: bg }}>
+          <SafeAreaView edges={bottomSafeArea ? ["bottom"] : []} style={{ backgroundColor: bg }}>
             <View style={[styles.bottomBar, { backgroundColor: bg, borderTopColor: bc }]}>
               <View style={styles.bottomBarInfo}>
                 <Text style={[styles.bottomBarCount, { color: tc }]}>

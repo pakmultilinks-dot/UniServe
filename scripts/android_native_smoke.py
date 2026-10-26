@@ -23,6 +23,7 @@ order_id = None
 owns_cart = False
 completed = False
 extra_orders = []
+original_cart_items = None
 pw = browser = page = None
 qa_student_email = None
 qa_student_password = None
@@ -124,6 +125,12 @@ try:
     qa_student_email = ACCOUNTS['student']['email']
     qa_student_password = ACCOUNTS['student']['password']
     student = login_api('student')
+    baseline_cart = api('GET', f'/cafeterias/{cid}/cart/', student)
+    original_cart_items = baseline_cart['items']
+    (OUT / 'cart-before-qa.json').write_text(json.dumps(baseline_cart))
+    owns_cart = True
+    for baseline_item in original_cart_items:
+        api('DELETE', f'/cafeterias/{cid}/cart/items/{baseline_item["id"]}', student)
     print('Configured dummy student verified; no additional account is created',flush=True)
     adb('shell', 'svc', 'power', 'stayon', 'true')
     adb('shell', 'input', 'keyevent', '224')
@@ -272,6 +279,14 @@ try:
     print('PASS native add-to-cart persists to API', flush=True)
     link('cart')
     root = wait_text('Checkout', 30)
+    parents = {child: parent for parent in root.iter() for child in parent}
+    checkout_node = labelled_nodes(root, 'Checkout')[0]
+    while checkout_node.attrib.get('clickable') != 'true' and checkout_node in parents:
+        checkout_node = parents[checkout_node]
+    button_bounds = list(map(int, re.findall(r'\d+', checkout_node.attrib['bounds'])))
+    home_bounds = list(map(int, re.findall(r'\d+', labelled_nodes(root, 'Home')[0].attrib['bounds'])))
+    assert 0 <= home_bounds[1] - button_bounds[3] <= 64, 'Checkout footer must not duplicate the tab safe area'
+    snap('05d-cart-footer-spacing')
     tap(labelled_nodes(root,'Increase '+cart['items'][0]['item_name']+' quantity')[0])
     time.sleep(4)
     changed = api('GET', f'/cafeterias/{cid}/cart/', student)
@@ -453,9 +468,18 @@ try:
             {'menu_item_id': cart['items'][0]['menu_item_id'], 'quantity': 1})
         # Cash-only lifecycle tests must also work when online checkout is unavailable.
         # No payment provider is contacted.
-        result = api('POST', f'/cafeterias/{cid}/cart/checkout', student,
-            {'payment_method':'cash','order_type':'immediate',
-             'note':qa_note+'-'+label,'idempotency_key':str(uuid.uuid4())})
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        cafe = api('GET', f'/cafeterias/{cid}', student)
+        local_now = datetime.now(ZoneInfo(cafe.get('timezone') or 'Asia/Karachi'))
+        slot = (local_now + timedelta(minutes=90)).replace(second=0, microsecond=0)
+        slot += timedelta(minutes=(-slot.minute) % 30)
+        hours = cafe.get('operating_hours') or ''
+        scheduled = bool(re.fullmatch(r'\d{2}:\d{2}-\d{2}:\d{2}', hours) and slot.date() == local_now.date() and hours[:5] <= slot.strftime('%H:%M') <= hours[6:])
+        payload = {'payment_method': 'cash', 'order_type': 'scheduled' if scheduled else 'immediate',
+            'note': qa_note+'-'+label, 'idempotency_key': str(uuid.uuid4())}
+        if scheduled: payload['scheduled_collection_time'] = slot.strftime('%H:%M')
+        result = api('POST', f'/cafeterias/{cid}/cart/checkout', student, payload)
         print('Created unpaid Pending QA order; no payment initiation:',result['id'],flush=True)
         extra_orders.append(result['id'])
         return result
@@ -638,5 +662,8 @@ finally:
         try:
             cart = api('GET', f'/cafeterias/{cid}/cart/', student)
             for item in cart['items']: api('DELETE', f'/cafeterias/{cid}/cart/items/{item["id"]}', student)
+            for item in original_cart_items or []:
+                api('POST', f'/cafeterias/{cid}/cart/items', student, {'menu_item_id': item['menu_item_id'], 'quantity': item['quantity']})
+            print('Restored original dummy cart:', len(original_cart_items or []), 'items', flush=True)
         except Exception as exc: print('QA cart cleanup requires review:', type(exc).__name__, flush=True)
 

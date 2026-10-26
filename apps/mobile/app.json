@@ -2,7 +2,7 @@
   "expo": {
     "name": "UniServe",
     "slug": "uniserve-mobile",
-    "version": "0.1.13",
+    "version": "0.1.14",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -20,7 +20,7 @@
         "backgroundColor": "#f6efdf"
       },
       "package": "com.uniserve.mobile",
-      "versionCode": 14
+      "versionCode": 15
     },
     "plugins": [
       "expo-router",

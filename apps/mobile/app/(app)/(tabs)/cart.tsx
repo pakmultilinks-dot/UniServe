@@ -24,7 +24,7 @@ export default function CartTab() {
 
   return (
     <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: bg }}>
-      <CartScreen onBrowseMenu={handleBrowseMenu} />
+      <CartScreen onBrowseMenu={handleBrowseMenu} bottomSafeArea={false} />
     </SafeAreaView>
   );
 }
