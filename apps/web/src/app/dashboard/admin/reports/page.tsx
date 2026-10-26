@@ -721,6 +721,7 @@ export default function ReportsPage() {
         />
       ) : loading ? (
         <>
+          <p role="status" className="text-sm text-[var(--text-muted)] mb-4">Loading reports…</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
               <div

@@ -157,12 +157,12 @@ export default function DashboardPage() {
           setOrdersError(null);
         }
         merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        setOrders(merged.slice(0, 5));
+        setOrders(merged);
       } else {
         // Backend GET /orders has no limit param (7-day window default);
-        // take the 5 most recent client-side.
+        // retain all orders for the active count; limit only the recent list.
         const myOrders = await getOrders();
-        setOrders(myOrders.slice(0, 5));
+        setOrders(myOrders);
         setOrdersError(null);
       }
     } catch (err) {
@@ -345,7 +345,7 @@ export default function DashboardPage() {
                 description="When you place an order, it will appear here."
               />
             ) : (
-              orders.map((order) => (
+              orders.slice(0, 5).map((order) => (
                 <div
                   key={order.id}
                   className="flex items-center justify-between px-5 py-3.5 hover:bg-[var(--bg-secondary)] transition-colors"

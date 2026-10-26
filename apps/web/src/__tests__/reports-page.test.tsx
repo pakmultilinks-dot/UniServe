@@ -172,3 +172,10 @@ describe("ReportsPage — page states", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+
+it("identifies report loading instead of showing unexplained blank cards", async () => {
+  apiMock.getSalesReport.mockReturnValue(new Promise(() => {}));
+  render(<ReportsPage />);
+  expect(await screen.findByRole("status")).toHaveTextContent("Loading reports");
+});
