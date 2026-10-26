@@ -299,7 +299,7 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <SafeAreaView edges={[]} style={[styles.screen, { backgroundColor: bg }]}>
+    <SafeAreaView edges={["bottom"]} style={[styles.screen, { backgroundColor: bg }]}>
       <Toast
         message={toast?.message ?? ""}
         type={toast?.type ?? "info"}

@@ -267,313 +267,369 @@ try:
     snap('05-menu-scrolled')
     print('PASS native demo login and menu screen capture', flush=True)
     student, staff = login_api('student'), login_api('staff')
-    cart = api('GET', f'/cafeterias/{cid}/cart/', student)
-    assert not cart['items'], 'Preserve pre-existing demo cart contents'
-    owns_cart = True
-    _, root = dump()
-    plus = [n for n in root.iter('node') if n.attrib.get('content-desc','').startswith('Add ') and n.attrib.get('content-desc','').endswith(' to cart') and n.attrib.get('clickable') == 'true' and n.attrib.get('enabled') == 'true']
-    assert plus, 'Available native add-to-cart action missing'
-    tap(plus[0]); time.sleep(5)
-    cart = api('GET', f'/cafeterias/{cid}/cart/', student)
-    assert len(cart['items']) == 1, 'Native add-to-cart did not persist exactly one item'
-    print('PASS native add-to-cart persists to API', flush=True)
-    link('cart')
-    root = wait_text('Checkout', 30)
-    parents = {child: parent for parent in root.iter() for child in parent}
-    checkout_node = labelled_nodes(root, 'Checkout')[0]
-    while checkout_node.attrib.get('clickable') != 'true' and checkout_node in parents:
-        checkout_node = parents[checkout_node]
-    button_bounds = list(map(int, re.findall(r'\d+', checkout_node.attrib['bounds'])))
-    home_bounds = list(map(int, re.findall(r'\d+', labelled_nodes(root, 'Home')[0].attrib['bounds'])))
-    assert 0 <= home_bounds[1] - button_bounds[3] <= 64, 'Checkout footer must not duplicate the tab safe area'
-    snap('05d-cart-footer-spacing')
-    tap(labelled_nodes(root,'Increase '+cart['items'][0]['item_name']+' quantity')[0])
-    time.sleep(4)
-    changed = api('GET', f'/cafeterias/{cid}/cart/', student)
-    assert changed['items'][0]['quantity'] == 2, 'Native cart increment did not persist'
-    _, root = dump()
-    tap(labelled_nodes(root,'Decrease '+cart['items'][0]['item_name']+' quantity')[0])
-    time.sleep(4)
-    changed = api('GET', f'/cafeterias/{cid}/cart/', student)
-    assert changed['items'][0]['quantity'] == 1, 'Native cart decrement did not persist'
-    snap('05a-cart-quantity-controls')
-    print('PASS native quantity increment/decrement persisted to backend', flush=True)
-    # Reproduce the two-item cart shown in the user's phone screenshots.
-    link('')
-    root = wait_text('Current cafeteria: Student Cafeteria',45)
-    # Returning to Home preserves scroll position. An accessibility node may
-    # lie under the floating cart bar; tapping it would open Cart instead.
-    for _ in range(2):
-        adb('shell','input','swipe','500','500','500','1500','450'); time.sleep(1)
-    # Move first-row controls above the actual floating bar on short screens.
-    adb('shell','input','swipe','500','1100','500','700','450'); time.sleep(2)
-    root = snap('05b-home-before-second-product')
-    home_tab = labelled_nodes(root,'Home')[0]
-    nav_top = int(re.findall(r'\d+',home_tab.attrib['bounds'])[1])
-    floating = [list(map(int,re.findall(r'\d+',n.attrib['bounds']))) for n in root.iter('node')
-        if n.attrib.get('clickable') == 'true' and n.attrib.get('content-desc','').startswith('View cart, ')]
-    assert floating, 'Cart dock bounds must be known before choosing a product'
-    assert all(0 <= nav_top - bar[3] <= 40 for bar in floating), 'Cart dock must sit directly above navigation'
-    snap('05c-cart-dock-above-navigation')
-    def unobscured(node):
-        bounds = list(map(int,re.findall(r'\d+',node.attrib['bounds'])))
-        return bounds[1] > 200 and bounds[3] < nav_top and all(bounds[3] < bar[1] or bounds[1] > bar[3] for bar in floating)
-    second_add = [n for n in root.iter('node') if n.attrib.get('content-desc','').startswith('Add ')
-        and n.attrib.get('content-desc','').endswith(' to cart') and n.attrib.get('enabled') == 'true'
-        and n.attrib.get('clickable') == 'true' and unobscured(n)
-        and n.attrib['content-desc'] != 'Add '+cart['items'][0]['item_name']+' to cart']
-    assert second_add, 'Second distinct product must have an unobscured native Add action'
-    print('Native second-product action:',second_add[0].attrib['content-desc'],second_add[0].attrib['bounds'],flush=True)
-    tap(second_add[0])
-    for _ in range(15):
-        cart = api('GET',f'/cafeterias/{cid}/cart/',student)
-        if len(cart['items']) == 2: break
-        time.sleep(2)
-    assert len(cart['items']) == 2 and all(item['quantity']==1 for item in cart['items']), 'Two native products must persist: '+str([(i['item_name'],i['quantity']) for i in cart['items']])
-    assert cart['total_amount'] == sum(item['subtotal'] for item in cart['items'])
-    link('cart'); wait_text('Checkout',30); snap('05b-two-item-cart-total')
-    print('PASS actual native second product and two-item cart total',flush=True)
-
-    link('checkout')
-    wait_text('Payment Method', 30)
-    snap('06-checkout-top')
-    fields = []
-    for _ in range(4):
-        _, root = dump()
-        fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
-        if fields: break
-        adb('shell', 'input', 'swipe', '500', '1500', '500', '500', '400')
-        time.sleep(1)
-    assert fields, 'Checkout order-note input missing'
-    tap(fields[0]); type_text(qa_note)
-    adb('shell', 'input', 'keyevent', '4')
-    root = snap('07-checkout-submit-visible')
-    place = [n for n in root.iter('node') if n.attrib.get('text', '').lower().startswith('place order')]
-    assert place, 'Cash checkout action must have a visible text label'
-    tap(place[0])
-    snap('08-checkout-after-submit')
-    wait_text('Order Details', 90)
-    orders = api('GET', '/orders/?limit=100', student)['orders']
-    order = next(o for o in orders if o.get('note') == qa_note)
-    order_id = order['id']
-    assert len(order['items']) == 2, 'Two-item native checkout must persist both products'
-    assert order['payment_method'] == 'cash', 'QA must never use an online payment'
-    queue = api('GET', f'/orders/cafeteria/{cid}?limit=100', staff)['orders']
-    assert any(o['id'] == order_id for o in queue), 'Native order missing from staff queue'
-    print('PASS native checkout -> staff queue; QA order:', order_id, flush=True)
-    pw = sync_playwright().start()
-    browser = pw.chromium.launch(headless=True)
-    page = browser.new_page(viewport={'width': 1440, 'height': 1000})
-    web = 'https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app'
-    page.goto(web + '/login', wait_until='domcontentloaded', timeout=120000)
-    # Static HTML can be visible before Next hydrates controlled inputs.
-    # Wait for initial scripts, then prove an actual API login occurred.
-    page.wait_for_load_state('networkidle', timeout=60000)
-    email_field = page.get_by_placeholder('your.name@lgu.edu.pk')
-    password_field = page.get_by_placeholder('Enter your password')
-    email_field.fill(ACCOUNTS['staff']['email'])
-    password_field.fill(ACCOUNTS['staff']['password'])
-    assert email_field.input_value() == ACCOUNTS['staff']['email'], 'Staff email field lost its value'
-    assert password_field.input_value() == ACCOUNTS['staff']['password'], 'Staff password field lost its value'
-    with page.expect_response(lambda r: r.url.startswith(BASE + '/auth/login') and r.request.method == 'POST', timeout=30000) as login_response:
-        page.get_by_role('button', name='Sign In', exact=True).click()
-    assert login_response.value.status == 200, 'Staff browser login API did not succeed'
-    print('PASS staff browser login POST HTTP 200', flush=True)
-    page.wait_for_url('**/dashboard**', timeout=60000)
-    page.goto(web + '/dashboard/orders?cafeteria=' + cid, wait_until='domcontentloaded', timeout=60000)
-    card = page.get_by_text('#' + str(order['order_number']), exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
-    card.wait_for(state='visible', timeout=60000)
-    card.screenshot(path=str(OUT / 'web-01-new-native-order.png'))
-    if order['status'] == 'pending':
-        if not order.get('confirmed_at'):
-            card.get_by_role('button', name='Confirm', exact=True).click()
-            time.sleep(2)
-        card.get_by_role('button', name='Prepare', exact=True).click()
-        order = wait_order_status('preparing')
-    if order['status'] == 'preparing':
-        card.get_by_role('button', name='Ready', exact=True).click()
-    order = wait_order_status('ready')
-    card.get_by_role('button', name='Collect', exact=True).wait_for(state='visible', timeout=30000)
-    card.screenshot(path=str(OUT / 'web-02-ready.png'))
-    card.get_by_role('button', name='Details', exact=True).click()
-    details = page.get_by_role('dialog', name='Order #' + str(order['order_number']), exact=True)
-    details.wait_for(state='visible', timeout=30000)
-    assert order.get('customer_name'), 'Authorized order response must resolve customer name'
-    details.get_by_text(order['customer_name'], exact=True).wait_for(timeout=30000)
-    print('PASS real staff dashboard login, queue visibility and Ready action', flush=True)
-    time.sleep(17)
-    snap('09-order-ready')
-    link('order/' + order_id)
-    root = wait_text('Show Pickup QR Code', 45)
-    for _ in range(3):
-        nodes = labelled_nodes(root, 'Show Pickup QR Code')
-        if nodes: break
-        adb('shell', 'input', 'swipe', '500', '1500', '500', '500', '450')
-        _, root = dump()
-    assert nodes, 'Ready-order QR action must be reachable'
-    tap(nodes[0])
-    wait_text('Show this screen to the cafeteria staff', 45)
-    qr_root = snap('09a-ready-pickup-qr')
-    assert any(n.attrib.get('text') == '#' + str(order['order_number']) for n in qr_root.iter('node'))
-    print('PASS native Ready pickup QR opens for exact order', flush=True)
-    notifications = api('GET', '/notifications?limit=100', student)['items']
-    assert any(n.get('order_id') == order_id and 'ready' in (n['title'] + n['body']).lower() for n in notifications)
-    link('notifications')
-    wait_text('ready', 30)
-    snap('10-native-ready-notification')
-    print('PASS ready notification correlated by exact new order ID', flush=True)
-    details.get_by_role('button', name='Collect', exact=True).click()
-    page.get_by_role('button', name='Confirm Collect', exact=True).click()
-    order = wait_order_status('completed')
-    completed = True
-    # StatusBadge uses CSS capitalize; its DOM text remains the enum value.
-    details.get_by_text('completed', exact=True).wait_for(timeout=30000)
-    assert details.get_by_role('button', name='Collect', exact=True).count() == 0
-    assert details.get_by_role('button', name='Delay', exact=True).count() == 0
-    assert details.get_by_text('Computed ETA:', exact=False).count() == 0
-    details.screenshot(path=str(OUT / 'web-03a-dialog-completed.png'))
-    details.get_by_role('button', name='Close', exact=True).click()
-    card.screenshot(path=str(OUT / 'web-03-collected.png'))
-    print('PASS real staff dashboard collection action', flush=True)
-    completed = True
-    link('order/' + order_id)
-    # "Completed" also exists as a future timeline label while READY.
-    # Wait beyond the documented 15s poll, then require READY-only QR UI
-    # to disappear; a text-only match would be a false positive.
-    time.sleep(17)
-    terminal_deadline = time.monotonic() + 45
-    while time.monotonic() < terminal_deadline:
-        raw, root = dump()
-        if 'completed' in raw.lower() and 'show pickup qr code' not in raw.lower():
-            break
-        time.sleep(3)
-    else:
-        snap('failure-completion-refresh')
-        raise AssertionError('Native order did not refresh from ready to completed')
-    snap('11-completed-order')
-    adb('shell', 'input', 'swipe', '500', '1500', '500', '400', '450')
-    time.sleep(2)
-    snap('12-order-scrolled')
-    print('PASS native flow through collection; no money transferred', flush=True)
-    link('orders')
-    wait_text('Orders', 30)
-    # History must include the exact completed order, not an arbitrary old label.
-    raw, _ = dump()
-    assert '#' + str(order['order_number']) in raw, 'New completed order absent from native history'
-    snap('13-order-history')
-    print('PASS native history contains exact completed QA order', flush=True)
-
-    def seed_test_order(label):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    cafeteria_now = api('GET', f'/cafeterias/{cid}', student)
+    hours = cafeteria_now.get('operating_hours') or ''
+    match = re.fullmatch(r'(\d{2}:\d{2})-(\d{2}:\d{2})', hours)
+    local_hhmm = datetime.now(ZoneInfo(cafeteria_now['timezone'])).strftime('%H:%M')
+    after_hours = bool(match and not (match[1] <= local_hhmm < match[2]))
+    if after_hours:
+        link(''); root = wait_text('Closed', 45)
+        snap('05-after-hours-closed-catalog')
+        # Populate only our isolated cart to prove the API rejects checkout
+        # without consuming it; do not reopen a live cafeteria for QA.
+        daily = api('GET', f'/cafeterias/{cid}/daily-menus/today', student)
+        item_id = daily['items'][0]['menu_item_id']
         api('POST', f'/cafeterias/{cid}/cart/items', student,
-            {'menu_item_id': cart['items'][0]['menu_item_id'], 'quantity': 1})
-        # Cash-only lifecycle tests must also work when online checkout is unavailable.
-        # No payment provider is contacted.
-        from datetime import datetime, timedelta
-        from zoneinfo import ZoneInfo
-        cafe = api('GET', f'/cafeterias/{cid}', student)
-        local_now = datetime.now(ZoneInfo(cafe.get('timezone') or 'Asia/Karachi'))
-        slot = (local_now + timedelta(minutes=90)).replace(second=0, microsecond=0)
-        slot += timedelta(minutes=(-slot.minute) % 30)
-        hours = cafe.get('operating_hours') or ''
-        scheduled = bool(re.fullmatch(r'\d{2}:\d{2}-\d{2}:\d{2}', hours) and slot.date() == local_now.date() and hours[:5] <= slot.strftime('%H:%M') <= hours[6:])
-        payload = {'payment_method': 'cash', 'order_type': 'scheduled' if scheduled else 'immediate',
-            'note': qa_note+'-'+label, 'idempotency_key': str(uuid.uuid4())}
-        if scheduled: payload['scheduled_collection_time'] = slot.strftime('%H:%M')
-        result = api('POST', f'/cafeterias/{cid}/cart/checkout', student, payload)
-        print('Created unpaid Pending QA order; no payment initiation:',result['id'],flush=True)
-        extra_orders.append(result['id'])
-        return result
-
-    cancelled = seed_test_order('student-cancel')
-    if cancelled['status'] != 'pending':
-        assert cancelled['status'] == 'preparing', 'Unexpected cash acceptance policy'
-        link('order/' + cancelled['id'])
-        wait_text('Preparing', 45)
-        _, root = dump()
-        assert not labelled_nodes(root, 'Cancel Order'), 'Student must not cancel after preparation starts'
-        api('POST', '/orders/' + cancelled['id'] + '/manager-cancel', admin,
-            {'reason': 'Automated QA cash auto-acceptance check; no food or money'})
-        wait_text('This order was cancelled', 45)
-        snap('14-auto-accepted-cash-admin-cancelled')
-        print('PASS cash auto-acceptance hides student cancellation and admin cancellation synchronizes to native', flush=True)
-        print('SKIP Pending-only student cancel and rejection live cases: immediate cash auto-starts preparation; no online provider or future collection slots are available. API regression covers Pending rules.', flush=True)
+            {'menu_item_id':item_id,'quantity':1})
+        from urllib.error import HTTPError
+        try:
+            api('POST', f'/cafeterias/{cid}/cart/checkout', student,
+                {'order_type':'immediate','payment_method':'cash','idempotency_key':str(uuid.uuid4())})
+        except HTTPError as denied:
+            assert denied.code == 400 and b'operating hours' in denied.read()
+        else:
+            raise AssertionError('Immediate checkout accepted outside published hours')
+        assert api('GET', f'/cafeterias/{cid}/cart/', student)['items']
+        print('PASS after-hours native Closed status and API checkout rejection; cart preserved',flush=True)
+        print('SKIP open-hours ordering/collection/cancellation: live cafeteria is outside published hours; do not override owner hours for QA. API suite covers lifecycle.',flush=True)
     else:
-        link('order/' + cancelled['id'])
-        wait_text('Order #' + str(cancelled['order_number']), 45)
-        snap('14-cancel-before-scroll')
-        for _ in range(5):
-            raw, root = dump()
-            buttons = labelled_nodes(root, 'Cancel Order')
-            if buttons: break
-            adb('shell','input','swipe','500','1500','500','500','400'); time.sleep(1)
-        assert buttons, 'Pending student cancellation missing'
-        tap(buttons[0]); root = wait_text('Yes, cancel',30)
-        tap(labelled_nodes(root, 'Yes, cancel')[0])
-        wait_text('This order was cancelled',45)
-        assert api('GET','/orders/'+cancelled['id'],student)['status'] == 'cancelled'
-        snap('14-student-cancelled-order')
-        print('PASS actual native student cancellation saved; QA order:',cancelled['id'],flush=True)
+        cart = api('GET', f'/cafeterias/{cid}/cart/', student)
+        assert not cart['items'], 'Preserve pre-existing demo cart contents'
+        owns_cart = True
+        _, root = dump()
+        plus = [n for n in root.iter('node') if n.attrib.get('content-desc','').startswith('Add ') and n.attrib.get('content-desc','').endswith(' to cart') and n.attrib.get('clickable') == 'true' and n.attrib.get('enabled') == 'true']
+        assert plus, 'Available native add-to-cart action missing'
+        tap(plus[0]); time.sleep(5)
+        cart = api('GET', f'/cafeterias/{cid}/cart/', student)
+        assert len(cart['items']) == 1, 'Native add-to-cart did not persist exactly one item'
+        print('PASS native add-to-cart persists to API', flush=True)
+        link('cart')
+        root = wait_text('Checkout', 30)
+        parents = {child: parent for parent in root.iter() for child in parent}
+        checkout_node = labelled_nodes(root, 'Checkout')[0]
+        while checkout_node.attrib.get('clickable') != 'true' and checkout_node in parents:
+            checkout_node = parents[checkout_node]
+        button_bounds = list(map(int, re.findall(r'\d+', checkout_node.attrib['bounds'])))
+        home_bounds = list(map(int, re.findall(r'\d+', labelled_nodes(root, 'Home')[0].attrib['bounds'])))
+        assert 0 <= home_bounds[1] - button_bounds[3] <= 64, 'Checkout footer must not duplicate the tab safe area'
+        snap('05d-cart-footer-spacing')
+        tap(labelled_nodes(root,'Increase '+cart['items'][0]['item_name']+' quantity')[0])
+        time.sleep(4)
+        changed = api('GET', f'/cafeterias/{cid}/cart/', student)
+        assert changed['items'][0]['quantity'] == 2, 'Native cart increment did not persist'
+        _, root = dump()
+        tap(labelled_nodes(root,'Decrease '+cart['items'][0]['item_name']+' quantity')[0])
+        time.sleep(4)
+        changed = api('GET', f'/cafeterias/{cid}/cart/', student)
+        assert changed['items'][0]['quantity'] == 1, 'Native cart decrement did not persist'
+        snap('05a-cart-quantity-controls')
+        print('PASS native quantity increment/decrement persisted to backend', flush=True)
+        # Reproduce the two-item cart shown in the user's phone screenshots.
+        link('')
+        root = wait_text('Current cafeteria: Student Cafeteria',45)
+        # Returning to Home preserves scroll position. An accessibility node may
+        # lie under the floating cart bar; tapping it would open Cart instead.
+        for _ in range(2):
+            adb('shell','input','swipe','500','500','500','1500','450'); time.sleep(1)
+        # Move first-row controls above the actual floating bar on short screens.
+        adb('shell','input','swipe','500','1100','500','700','450'); time.sleep(2)
+        root = snap('05b-home-before-second-product')
+        home_tab = labelled_nodes(root,'Home')[0]
+        nav_top = int(re.findall(r'\d+',home_tab.attrib['bounds'])[1])
+        floating = [list(map(int,re.findall(r'\d+',n.attrib['bounds']))) for n in root.iter('node')
+            if n.attrib.get('clickable') == 'true' and n.attrib.get('content-desc','').startswith('View cart, ')]
+        assert floating, 'Cart dock bounds must be known before choosing a product'
+        assert all(0 <= nav_top - bar[3] <= 40 for bar in floating), 'Cart dock must sit directly above navigation'
+        snap('05c-cart-dock-above-navigation')
+        def unobscured(node):
+            bounds = list(map(int,re.findall(r'\d+',node.attrib['bounds'])))
+            return bounds[1] > 200 and bounds[3] < nav_top and all(bounds[3] < bar[1] or bounds[1] > bar[3] for bar in floating)
+        second_add = [n for n in root.iter('node') if n.attrib.get('content-desc','').startswith('Add ')
+            and n.attrib.get('content-desc','').endswith(' to cart') and n.attrib.get('enabled') == 'true'
+            and n.attrib.get('clickable') == 'true' and unobscured(n)
+            and n.attrib['content-desc'] != 'Add '+cart['items'][0]['item_name']+' to cart']
+        assert second_add, 'Second distinct product must have an unobscured native Add action'
+        print('Native second-product action:',second_add[0].attrib['content-desc'],second_add[0].attrib['bounds'],flush=True)
+        tap(second_add[0])
+        for _ in range(15):
+            cart = api('GET',f'/cafeterias/{cid}/cart/',student)
+            if len(cart['items']) == 2: break
+            time.sleep(2)
+        assert len(cart['items']) == 2 and all(item['quantity']==1 for item in cart['items']), 'Two native products must persist: '+str([(i['item_name'],i['quantity']) for i in cart['items']])
+        assert cart['total_amount'] == sum(item['subtotal'] for item in cart['items'])
+        link('cart'); wait_text('Checkout',30); snap('05b-two-item-cart-total')
+        print('PASS actual native second product and two-item cart total',flush=True)
 
-        rejected = seed_test_order('manager-reject')
-        # Rejection is intentionally a manager-only dashboard action. Do not
-        # change RBAC or disable production auto-acceptance to satisfy QA.
+        link('checkout')
+        wait_text('Payment Method', 30)
+        snap('06-checkout-top')
+        fields = []
+        for _ in range(4):
+            _, root = dump()
+            fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
+            if fields: break
+            adb('shell', 'input', 'swipe', '500', '1500', '500', '500', '400')
+            time.sleep(1)
+        assert fields, 'Checkout order-note input missing'
+        tap(fields[0]); type_text(qa_note)
+        adb('shell', 'input', 'keyevent', '4')
+        root = snap('07-checkout-submit-visible')
+        place = [n for n in root.iter('node') if n.attrib.get('text', '').lower().startswith('place order')]
+        assert place, 'Cash checkout action must have a visible text label'
+        tap(place[0])
+        snap('08-checkout-after-submit')
+        wait_text('Order Details', 90)
+        orders = api('GET', '/orders/?limit=100', student)['orders']
+        order = next(o for o in orders if o.get('note') == qa_note)
+        order_id = order['id']
+        assert len(order['items']) == 2, 'Two-item native checkout must persist both products'
+        assert order['payment_method'] == 'cash', 'QA must never use an online payment'
+        queue = api('GET', f'/orders/cafeteria/{cid}?limit=100', staff)['orders']
+        assert any(o['id'] == order_id for o in queue), 'Native order missing from staff queue'
+        print('PASS native checkout -> staff queue; QA order:', order_id, flush=True)
+        pw = sync_playwright().start()
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+        web = 'https://uniserve-web-dashboard-git-main-pakmultilinks-dot.vercel.app'
+        page.goto(web + '/login', wait_until='domcontentloaded', timeout=120000)
+        # Static HTML can be visible before Next hydrates controlled inputs.
+        # Wait for initial scripts, then prove an actual API login occurred.
+        page.wait_for_load_state('networkidle', timeout=60000)
+        email_field = page.get_by_placeholder('your.name@lgu.edu.pk')
+        password_field = page.get_by_placeholder('Enter your password')
+        email_field.fill(ACCOUNTS['staff']['email'])
+        password_field.fill(ACCOUNTS['staff']['password'])
+        assert email_field.input_value() == ACCOUNTS['staff']['email'], 'Staff email field lost its value'
+        assert password_field.input_value() == ACCOUNTS['staff']['password'], 'Staff password field lost its value'
+        with page.expect_response(lambda r: r.url.startswith(BASE + '/auth/login') and r.request.method == 'POST', timeout=30000) as login_response:
+            page.get_by_role('button', name='Sign In', exact=True).click()
+        assert login_response.value.status == 200, 'Staff browser login API did not succeed'
+        print('PASS staff browser login POST HTTP 200', flush=True)
+        page.wait_for_url('**/dashboard**', timeout=60000)
+        page.goto(web + '/dashboard/orders?cafeteria=' + cid, wait_until='domcontentloaded', timeout=60000)
+        card = page.get_by_text('#' + str(order['order_number']), exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
+        card.wait_for(state='visible', timeout=60000)
+        card.screenshot(path=str(OUT / 'web-01-new-native-order.png'))
+        if order['status'] == 'pending':
+            if not order.get('confirmed_at'):
+                card.get_by_role('button', name='Confirm', exact=True).click()
+                time.sleep(2)
+            card.get_by_role('button', name='Prepare', exact=True).click()
+            order = wait_order_status('preparing')
+        if order['status'] == 'preparing':
+            card.get_by_role('button', name='Ready', exact=True).click()
+        order = wait_order_status('ready')
+        card.get_by_role('button', name='Collect', exact=True).wait_for(state='visible', timeout=30000)
+        card.screenshot(path=str(OUT / 'web-02-ready.png'))
+        card.get_by_role('button', name='Details', exact=True).click()
+        details = page.get_by_role('dialog', name='Order #' + str(order['order_number']), exact=True)
+        details.wait_for(state='visible', timeout=30000)
+        assert order.get('customer_name'), 'Authorized order response must resolve customer name'
+        details.get_by_text(order['customer_name'], exact=True).wait_for(timeout=30000)
+        print('PASS real staff dashboard login, queue visibility and Ready action', flush=True)
+        time.sleep(17)
+        snap('09-order-ready')
+        link('order/' + order_id)
+        root = wait_text('Show Pickup QR Code', 45)
+        for _ in range(3):
+            nodes = labelled_nodes(root, 'Show Pickup QR Code')
+            if nodes: break
+            adb('shell', 'input', 'swipe', '500', '1500', '500', '500', '450')
+            _, root = dump()
+        assert nodes, 'Ready-order QR action must be reachable'
+        tap(nodes[0])
+        wait_text('Show this screen to the cafeteria staff', 45)
+        qr_root = snap('09a-ready-pickup-qr')
+        assert any(n.attrib.get('text') == '#' + str(order['order_number']) for n in qr_root.iter('node'))
+        print('PASS native Ready pickup QR opens for exact order', flush=True)
+        notifications = api('GET', '/notifications?limit=100', student)['items']
+        assert any(n.get('order_id') == order_id and 'ready' in (n['title'] + n['body']).lower() for n in notifications)
+        link('notifications')
+        wait_text('ready', 30)
+        snap('10-native-ready-notification')
+        print('PASS ready notification correlated by exact new order ID', flush=True)
+        details.get_by_role('button', name='Collect', exact=True).click()
+        page.get_by_role('button', name='Confirm Collect', exact=True).click()
+        order = wait_order_status('completed')
+        completed = True
+        # StatusBadge uses CSS capitalize; its DOM text remains the enum value.
+        details.get_by_text('completed', exact=True).wait_for(timeout=30000)
+        assert details.get_by_role('button', name='Collect', exact=True).count() == 0
+        assert details.get_by_role('button', name='Delay', exact=True).count() == 0
+        assert details.get_by_text('Computed ETA:', exact=False).count() == 0
+        details.screenshot(path=str(OUT / 'web-03a-dialog-completed.png'))
+        details.get_by_role('button', name='Close', exact=True).click()
+        card.screenshot(path=str(OUT / 'web-03-collected.png'))
+        print('PASS real staff dashboard collection action', flush=True)
+        completed = True
+        link('order/' + order_id)
+        # "Completed" also exists as a future timeline label while READY.
+        # Wait beyond the documented 15s poll, then require READY-only QR UI
+        # to disappear; a text-only match would be a false positive.
+        time.sleep(17)
+        terminal_deadline = time.monotonic() + 45
+        while time.monotonic() < terminal_deadline:
+            raw, root = dump()
+            if 'completed' in raw.lower() and 'show pickup qr code' not in raw.lower():
+                break
+            time.sleep(3)
+        else:
+            snap('failure-completion-refresh')
+            raise AssertionError('Native order did not refresh from ready to completed')
+        snap('11-completed-order')
+        adb('shell', 'input', 'swipe', '500', '1500', '500', '400', '450')
+        time.sleep(2)
+        snap('12-order-scrolled')
+        print('PASS native flow through collection; no money transferred', flush=True)
+        link('orders')
+        wait_text('Orders', 30)
+        # History must include the exact completed order, not an arbitrary old label.
+        raw, _ = dump()
+        assert '#' + str(order['order_number']) in raw, 'New completed order absent from native history'
+        snap('13-order-history')
+        print('PASS native history contains exact completed QA order', flush=True)
+
+        def seed_test_order(label):
+            api('POST', f'/cafeterias/{cid}/cart/items', student,
+                {'menu_item_id': cart['items'][0]['menu_item_id'], 'quantity': 1})
+            # Cash-only lifecycle tests must also work when online checkout is unavailable.
+            # No payment provider is contacted.
+            from datetime import datetime, timedelta
+            from zoneinfo import ZoneInfo
+            cafe = api('GET', f'/cafeterias/{cid}', student)
+            local_now = datetime.now(ZoneInfo(cafe.get('timezone') or 'Asia/Karachi'))
+            slot = (local_now + timedelta(minutes=90)).replace(second=0, microsecond=0)
+            slot += timedelta(minutes=(-slot.minute) % 30)
+            hours = cafe.get('operating_hours') or ''
+            scheduled = bool(re.fullmatch(r'\d{2}:\d{2}-\d{2}:\d{2}', hours) and slot.date() == local_now.date() and hours[:5] <= slot.strftime('%H:%M') <= hours[6:])
+            payload = {'payment_method': 'cash', 'order_type': 'scheduled' if scheduled else 'immediate',
+                'note': qa_note+'-'+label, 'idempotency_key': str(uuid.uuid4())}
+            if scheduled: payload['scheduled_collection_time'] = slot.strftime('%H:%M')
+            result = api('POST', f'/cafeterias/{cid}/cart/checkout', student, payload)
+            print('Created unpaid Pending QA order; no payment initiation:',result['id'],flush=True)
+            extra_orders.append(result['id'])
+            return result
+
+        cancelled = seed_test_order('student-cancel')
+        if cancelled['status'] != 'pending':
+            assert cancelled['status'] == 'preparing', 'Unexpected cash acceptance policy'
+            link('order/' + cancelled['id'])
+            wait_text('Preparing', 45)
+            _, root = dump()
+            assert not labelled_nodes(root, 'Cancel Order'), 'Student must not cancel after preparation starts'
+            api('POST', '/orders/' + cancelled['id'] + '/manager-cancel', admin,
+                {'reason': 'Automated QA cash auto-acceptance check; no food or money'})
+            wait_text('This order was cancelled', 45)
+            snap('14-auto-accepted-cash-admin-cancelled')
+            print('PASS cash auto-acceptance hides student cancellation and admin cancellation synchronizes to native', flush=True)
+            print('SKIP Pending-only student cancel and rejection live cases: immediate cash auto-starts preparation; no online provider or future collection slots are available. API regression covers Pending rules.', flush=True)
+        else:
+            link('order/' + cancelled['id'])
+            wait_text('Order #' + str(cancelled['order_number']), 45)
+            snap('14-cancel-before-scroll')
+            for _ in range(5):
+                raw, root = dump()
+                buttons = labelled_nodes(root, 'Cancel Order')
+                if buttons: break
+                adb('shell','input','swipe','500','1500','500','500','400'); time.sleep(1)
+            assert buttons, 'Pending student cancellation missing'
+            tap(buttons[0]); root = wait_text('Yes, cancel',30)
+            tap(labelled_nodes(root, 'Yes, cancel')[0])
+            wait_text('This order was cancelled',45)
+            assert api('GET','/orders/'+cancelled['id'],student)['status'] == 'cancelled'
+            snap('14-student-cancelled-order')
+            print('PASS actual native student cancellation saved; QA order:',cancelled['id'],flush=True)
+
+            rejected = seed_test_order('manager-reject')
+            # Rejection is intentionally a manager-only dashboard action. Do not
+            # change RBAC or disable production auto-acceptance to satisfy QA.
+            page.context.close()
+            page = browser.new_page(viewport={'width':1440,'height':1000})
+            page.goto(web+'/login',wait_until='networkidle',timeout=120000)
+            page.get_by_placeholder('your.name@lgu.edu.pk').fill(ACCOUNTS['admin']['email'])
+            page.get_by_placeholder('Enter your password').fill(ACCOUNTS['admin']['password'])
+            with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as manager_response:
+                page.get_by_role('button',name='Sign In',exact=True).click()
+            assert manager_response.value.status==200
+            page.wait_for_url('**/dashboard**',timeout=60000)
+            page.goto(web+'/dashboard/orders?cafeteria='+cid,wait_until='networkidle',timeout=60000)
+            rejected_card = page.get_by_text('#'+str(rejected['order_number']),exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
+            if not api('GET','/orders/'+rejected['id'],student).get('confirmed_at'):
+                rejected_card.get_by_role('button',name='Confirm',exact=True).click(timeout=60000)
+            for _ in range(15):
+                confirmed = api('GET','/orders/'+rejected['id'],student)
+                if confirmed.get('confirmed_at'): break
+                time.sleep(2)
+            assert confirmed.get('confirmed_at') and confirmed['status'] in ('pending','confirmed') and not confirmed.get('preparation_started_at')
+            print('PASS real manager dashboard manually confirms an unpaid Pending order without preparation',flush=True)
+            rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
+            modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
+            modal.locator('select').select_option('other')
+            modal.locator('textarea').fill('Automated QA rejection; no food or payment')
+            modal.get_by_role('button',name='Confirm Reject',exact=True).click()
+            for _ in range(15):
+                rejected_state = api('GET','/orders/'+rejected['id'],student)
+                if rejected_state['status']=='cancelled': break
+                time.sleep(2)
+            assert rejected_state['status']=='cancelled' and rejected_state['rejection_reason']=='other'
+            rejected_card.screenshot(path=str(OUT/'web-04-staff-rejected.png'))
+            link('order/'+rejected['id']); wait_text('This order was cancelled',45)
+            root = snap('15-staff-rejection-on-student')
+            assert not any(n.attrib.get('text') == 'Preparing' for n in root.iter('node')), 'Rejected-before-preparation order must not claim Preparing'
+            assert any(n.attrib.get('text') == 'Cancelled' for n in root.iter('node')), 'Cancelled must be the primary terminal status'
+            print('PASS actual manager dashboard rejection synchronizes to native student',flush=True)
+
+        # Read actual staff statistics and menu, without changing live catalog data.
         page.context.close()
         page = browser.new_page(viewport={'width':1440,'height':1000})
         page.goto(web+'/login',wait_until='networkidle',timeout=120000)
-        page.get_by_placeholder('your.name@lgu.edu.pk').fill(ACCOUNTS['admin']['email'])
-        page.get_by_placeholder('Enter your password').fill(ACCOUNTS['admin']['password'])
-        with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as manager_response:
+        page.get_by_placeholder('your.name@lgu.edu.pk').fill(ACCOUNTS['staff']['email'])
+        page.get_by_placeholder('Enter your password').fill(ACCOUNTS['staff']['password'])
+        with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as staff_again:
             page.get_by_role('button',name='Sign In',exact=True).click()
-        assert manager_response.value.status==200
+        assert staff_again.value.status==200
         page.wait_for_url('**/dashboard**',timeout=60000)
-        page.goto(web+'/dashboard/orders?cafeteria='+cid,wait_until='networkidle',timeout=60000)
-        rejected_card = page.get_by_text('#'+str(rejected['order_number']),exact=True).locator('xpath=ancestor::div[contains(@class,"shadow-card")][1]')
-        if not api('GET','/orders/'+rejected['id'],student).get('confirmed_at'):
-            rejected_card.get_by_role('button',name='Confirm',exact=True).click(timeout=60000)
-        for _ in range(15):
-            confirmed = api('GET','/orders/'+rejected['id'],student)
-            if confirmed.get('confirmed_at'): break
-            time.sleep(2)
-        assert confirmed.get('confirmed_at') and confirmed['status'] in ('pending','confirmed') and not confirmed.get('preparation_started_at')
-        print('PASS real manager dashboard manually confirms an unpaid Pending order without preparation',flush=True)
-        rejected_card.get_by_role('button',name='Reject',exact=True).click(timeout=60000)
-        modal = page.locator('div').filter(has=page.get_by_role('heading',name='Reject Order #'+str(rejected['order_number']),exact=True)).last
-        modal.locator('select').select_option('other')
-        modal.locator('textarea').fill('Automated QA rejection; no food or payment')
-        modal.get_by_role('button',name='Confirm Reject',exact=True).click()
-        for _ in range(15):
-            rejected_state = api('GET','/orders/'+rejected['id'],student)
-            if rejected_state['status']=='cancelled': break
-            time.sleep(2)
-        assert rejected_state['status']=='cancelled' and rejected_state['rejection_reason']=='other'
-        rejected_card.screenshot(path=str(OUT/'web-04-staff-rejected.png'))
-        link('order/'+rejected['id']); wait_text('This order was cancelled',45)
-        root = snap('15-staff-rejection-on-student')
-        assert not any(n.attrib.get('text') == 'Preparing' for n in root.iter('node')), 'Rejected-before-preparation order must not claim Preparing'
-        assert any(n.attrib.get('text') == 'Cancelled' for n in root.iter('node')), 'Cancelled must be the primary terminal status'
-        print('PASS actual manager dashboard rejection synchronizes to native student',flush=True)
-
-    # Read actual staff statistics and menu, without changing live catalog data.
-    page.context.close()
-    page = browser.new_page(viewport={'width':1440,'height':1000})
-    page.goto(web+'/login',wait_until='networkidle',timeout=120000)
-    page.get_by_placeholder('your.name@lgu.edu.pk').fill(ACCOUNTS['staff']['email'])
-    page.get_by_placeholder('Enter your password').fill(ACCOUNTS['staff']['password'])
-    with page.expect_response(lambda r:r.url.startswith(BASE+'/auth/login') and r.request.method=='POST',timeout=120000) as staff_again:
-        page.get_by_role('button',name='Sign In',exact=True).click()
-    assert staff_again.value.status==200
-    page.wait_for_url('**/dashboard**',timeout=60000)
-    responses=[]
-    page.on('response',lambda response: responses.append((response.url,response.status)))
-    page.goto(web+'/dashboard',wait_until='networkidle',timeout=60000)
-    page.get_by_text('Active Orders',exact=True).first.wait_for(timeout=30000)
-    page.screenshot(path=str(OUT/'web-05-staff-statistics.png'),full_page=True)
-    assert any('/orders/cafeteria/' in url and status==200 for url,status in responses)
-    page.goto(web+'/dashboard/menu',wait_until='networkidle',timeout=60000)
-    page.get_by_role('heading',name='Menu Management',exact=True).wait_for(timeout=30000)
-    assert any('/menu-items' in url and status==200 for url,status in responses)
-    page.screenshot(path=str(OUT/'web-06-real-menu.png'),full_page=True)
-    print('PASS dashboard statistics and menu loaded from actual API responses',flush=True)
+        responses=[]
+        page.on('response',lambda response: responses.append((response.url,response.status)))
+        page.goto(web+'/dashboard',wait_until='networkidle',timeout=60000)
+        page.get_by_text('Active Orders',exact=True).first.wait_for(timeout=30000)
+        page.screenshot(path=str(OUT/'web-05-staff-statistics.png'),full_page=True)
+        assert any('/orders/cafeteria/' in url and status==200 for url,status in responses)
+        page.goto(web+'/dashboard/menu',wait_until='networkidle',timeout=60000)
+        page.get_by_role('heading',name='Menu Management',exact=True).wait_for(timeout=30000)
+        assert any('/menu-items' in url and status==200 for url,status in responses)
+        page.screenshot(path=str(OUT/'web-06-real-menu.png'),full_page=True)
+        print('PASS dashboard statistics and menu loaded from actual API responses',flush=True)
+    link('profile')
+    # Exercise the tall security forms without changing shared credentials/PIN.
+    for title, action, label in [
+        ('Change Password', 'Update Password', '19-password-sheet'),
+        ('PIN Login', 'Enable PIN', '20-pin-sheet'),
+    ]:
+        for _ in range(4):
+            _, root = dump()
+            entries = labelled_nodes(root, title)
+            if entries: break
+            adb('shell','input','swipe','500','1400','500','500','450'); time.sleep(1)
+        assert entries, 'Profile security action missing: ' + title
+        tap(entries[0]); root = wait_text(title, 30)
+        fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
+        assert fields, 'Security form missing editable inputs'
+        tap(fields[0]); type_text('x'); time.sleep(1)
+        snap(label + '-keyboard')
+        adb('shell','input','keyevent','4'); time.sleep(1)
+        for _ in range(5):
+            _, root = dump()
+            actions = labelled_nodes(root, action)
+            if actions: break
+            adb('shell','input','swipe','500','1400','500','700','450'); time.sleep(1)
+        assert actions, 'Security submit action is clipped: ' + action
+        snap(label + '-submit-visible')
+        # Android back dismisses the modal; no form request is submitted.
+        adb('shell','input','keyevent','4'); time.sleep(1)
+    print('PASS native password/PIN keyboard and scroll-to-submit; credentials unchanged',flush=True)
     link('profile')
     for _ in range(4):
         raw, root = dump()

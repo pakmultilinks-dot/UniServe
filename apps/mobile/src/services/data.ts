@@ -1,3 +1,4 @@
+import { withCurrentHours } from "./cafeteria-hours";
 /**
  * UniServe — Data API Service (Mobile)
  *
@@ -54,7 +55,7 @@ interface CafeteriaListResponse {
  */
 export async function getCafeterias(): Promise<Cafeteria[]> {
   const data = await readCatalog<CafeteriaListResponse>("/cafeterias/?is_active=true");
-  return data.cafeterias ?? [];
+  return (data.cafeterias ?? []).map(cafeteria => withCurrentHours(cafeteria));
 }
 
 // ---- Menu Items ----
