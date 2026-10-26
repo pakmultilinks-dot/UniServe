@@ -575,6 +575,34 @@ try:
     page.screenshot(path=str(OUT/'web-06-real-menu.png'),full_page=True)
     print('PASS dashboard statistics and menu loaded from actual API responses',flush=True)
     link('profile')
+    # Exercise the tall security forms without changing shared credentials/PIN.
+    for title, action, label in [
+        ('Change Password', 'Update Password', '19-password-sheet'),
+        ('PIN Login', 'Enable PIN', '20-pin-sheet'),
+    ]:
+        for _ in range(4):
+            _, root = dump()
+            entries = labelled_nodes(root, title)
+            if entries: break
+            adb('shell','input','swipe','500','1400','500','500','450'); time.sleep(1)
+        assert entries, 'Profile security action missing: ' + title
+        tap(entries[0]); root = wait_text(title, 30)
+        fields = [n for n in root.iter('node') if n.attrib.get('class') == 'android.widget.EditText']
+        assert fields, 'Security form missing editable inputs'
+        tap(fields[0]); type_text('x'); time.sleep(1)
+        snap(label + '-keyboard')
+        adb('shell','input','keyevent','4'); time.sleep(1)
+        for _ in range(5):
+            _, root = dump()
+            actions = labelled_nodes(root, action)
+            if actions: break
+            adb('shell','input','swipe','500','1400','500','700','450'); time.sleep(1)
+        assert actions, 'Security submit action is clipped: ' + action
+        snap(label + '-submit-visible')
+        # Android back dismisses the modal; no form request is submitted.
+        adb('shell','input','keyevent','4'); time.sleep(1)
+    print('PASS native password/PIN keyboard and scroll-to-submit; credentials unchanged',flush=True)
+    link('profile')
     for _ in range(4):
         raw, root = dump()
         if ('v' + config['version']) in raw: break

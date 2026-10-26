@@ -10,7 +10,7 @@
  */
 
 import React from "react";
-import { ScrollView, Text } from "react-native";
+import { ScrollView, Text, KeyboardAvoidingView, StyleSheet } from "react-native";
 import { render } from "@testing-library/react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -57,6 +57,19 @@ describe("BottomSheet content clipping", () => {
     );
 
     expect(UNSAFE_queryAllByType(ScrollView).length).toBeGreaterThan(0);
+  });
+
+  it("lets the body shrink inside the sheet and adjusts for the keyboard", () => {
+    const { UNSAFE_getByType } = renderSheet(
+      <BottomSheet visible onClose={jest.fn()} title="PIN Login" maxHeight={520}>
+        <Text>Enable PIN</Text>
+      </BottomSheet>,
+    );
+    const body = UNSAFE_getByType(ScrollView);
+    expect(StyleSheet.flatten(body.props.style).flexShrink).toBe(1);
+    expect(StyleSheet.flatten(body.props.style).maxHeight).toBeUndefined();
+    expect(UNSAFE_getByType(KeyboardAvoidingView).props.behavior).toBeTruthy();
+    expect(body.props.automaticallyAdjustKeyboardInsets).toBe(true);
   });
 
   it("renders nothing while closed", () => {

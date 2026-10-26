@@ -161,6 +161,11 @@ class OrderService:
         if cafeteria.operational_status == OperationalStatus.MAINTENANCE:
             raise ValidationError("Cafeteria is under maintenance")
 
+        # Published hours constrain new immediate orders even if the manual
+        # operational switch was left open. Existing orders remain processable.
+        if parsed_order_type == OrderType.IMMEDIATE:
+            self._validate_immediate_hours(cafeteria)
+
         # 3b. Validate scheduled order time constraints (requires cafeteria)
         if parsed_order_type == OrderType.SCHEDULED:
             self._validate_scheduled_order_time(scheduled_collection_time, cafeteria)
@@ -1604,6 +1609,40 @@ class OrderService:
         if not (0 <= hour <= 23 and 0 <= minute <= 59):
             raise ValidationError("Invalid time values")
 
+    @staticmethod
+    def _published_hours(cafeteria):
+        import re
+        from datetime import time as dt_time
+
+        value = getattr(cafeteria, "operating_hours", None) or ""
+        match = re.fullmatch(r"(\d{2}):(\d{2})-(\d{2}):(\d{2})", value)
+        if not match:
+            return None
+        try:
+            h1, m1, h2, m2 = map(int, match.groups())
+            return dt_time(h1, m1), dt_time(h2, m2)
+        except ValueError:
+            return None
+
+    def _validate_immediate_hours(self, cafeteria):
+        hours = self._published_hours(cafeteria)
+        if not hours:
+            return
+        from zoneinfo import ZoneInfo
+        try:
+            tz = ZoneInfo(cafeteria.timezone)
+        except (ValueError, KeyError):
+            tz = UTC
+        local_time = datetime.now(tz).time()
+        opens, closes = hours
+        within = opens <= local_time < closes if opens < closes else (
+            local_time >= opens or local_time < closes
+        )
+        if not within:
+            raise ValidationError(
+                f"Cafeteria is closed outside its operating hours ({cafeteria.operating_hours})"
+            )
+
     def _validate_scheduled_order_time(
         self,
         scheduled_collection_time: str | None,
@@ -1640,6 +1679,15 @@ class OrderService:
                 f"Scheduled collection time {scheduled_collection_time} is in the past. "
                 f"Orders must be scheduled for a future time today."
             )
+
+        hours = self._published_hours(cafeteria)
+        if hours:
+            opens, closes = hours
+            within = opens <= collection_time < closes if opens < closes else (
+                collection_time >= opens or collection_time < closes
+            )
+            if not within:
+                raise ValidationError("Scheduled collection must be within cafeteria operating hours")
 
         # 2. Operating-hours enforcement: collection time must be before closing
         if cafeteria.closing_time:

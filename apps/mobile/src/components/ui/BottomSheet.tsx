@@ -18,6 +18,9 @@ import {
   Pressable,
   TouchableWithoutFeedback,
   Dimensions,
+  useWindowDimensions,
+  KeyboardAvoidingView,
+  Platform,
   Animated,
   PanResponder,
 } from "react-native";
@@ -41,10 +44,12 @@ export function BottomSheet({
   onClose,
   title,
   children,
-  maxHeight = SCREEN_HEIGHT * 0.5,
+  maxHeight,
 }: BottomSheetProps) {
   const { resolvedTheme } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const heightLimit = Math.min(maxHeight ?? windowHeight * 0.8, windowHeight - insets.top - 16);
   // Bottom padding clears the Android gesture/nav bar: base 16 + the
   // actual bottom safe-area inset so rows are never clipped.
   const sheetPaddingBottom = 16 + Math.max(insets.bottom, 0);
@@ -105,7 +110,10 @@ export function BottomSheet({
 
   return (
     <Modal transparent visible={visible} onRequestClose={onClose} animationType="none">
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
         <TouchableWithoutFeedback onPress={onClose}>
           <Animated.View
             style={[styles.backdrop, { opacity: backdropOpacity }]}
@@ -117,15 +125,14 @@ export function BottomSheet({
             {
               backgroundColor: bg,
               borderTopColor: bc,
-              maxHeight,
+              maxHeight: heightLimit,
               paddingBottom: sheetPaddingBottom,
               transform: [{ translateY }],
             },
           ]}
-          {...panResponder.panHandlers}
         >
           {/* Drag indicator */}
-          <View style={styles.dragIndicator}>
+          <View style={styles.dragIndicator} {...panResponder.panHandlers}>
             <View style={[styles.dragBar, { backgroundColor: bc }]} />
           </View>
 
@@ -139,21 +146,19 @@ export function BottomSheet({
             </View>
           )}
 
-          {/* Content — scrollable so rows past maxHeight stay reachable
-              instead of being clipped by the sheet's fixed cap. The cap and
-              the horizontal padding both live on `styles.content`: a
-              ScrollView applies its own padding once, so repeating
-              paddingHorizontal on contentContainerStyle would inset the
-              sheet body twice. */}
+          {/* The body shrinks within the available sheet height. Its own
+              scrolling must not compete with the drag-to-close handle. */}
           <ScrollView
             style={styles.content}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator
+            automaticallyAdjustKeyboardInsets
+            keyboardDismissMode="on-drag"
           >
             {children}
           </ScrollView>
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -228,6 +233,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.4)",
   },
   sheet: {
+    flexShrink: 1,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -256,7 +262,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    maxHeight: SCREEN_HEIGHT * 0.4,
+    flexShrink: 1,
   },
   row: {
     flexDirection: "row",
