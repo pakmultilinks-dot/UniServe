@@ -325,7 +325,8 @@ describe("OrdersPage — open details after collection", () => {
     await waitFor(() => expect(within(dialog).getByText(/^completed$/i)).toBeInTheDocument());
     expect(within(dialog).queryByRole("button", { name: "Collect" })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "Delay" })).not.toBeInTheDocument();
-    expect(within(dialog).queryByText(/Computed ETA/)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/Estimated pickup:/)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("ETA:")).not.toBeInTheDocument();
     expect(apiMock.collectOrder).toHaveBeenCalledWith({ order_number: 991 });
   });
 });

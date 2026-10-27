@@ -500,8 +500,8 @@ try:
             from zoneinfo import ZoneInfo
             cafe = api('GET', f'/cafeterias/{cid}', student)
             local_now = datetime.now(ZoneInfo(cafe.get('timezone') or 'Asia/Karachi'))
-            slot = (local_now + timedelta(minutes=90)).replace(second=0, microsecond=0)
-            slot += timedelta(minutes=(-slot.minute) % 30)
+            slot = (local_now + timedelta(minutes=35)).replace(second=0, microsecond=0)
+            slot += timedelta(minutes=(-slot.minute) % 5)
             hours = cafe.get('operating_hours') or ''
             scheduled = bool(re.fullmatch(r'\d{2}:\d{2}-\d{2}:\d{2}', hours) and slot.date() == local_now.date() and hours[:5] <= slot.strftime('%H:%M') <= hours[6:])
             payload = {'payment_method': 'cash', 'order_type': 'scheduled' if scheduled else 'immediate',

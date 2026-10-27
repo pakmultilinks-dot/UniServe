@@ -125,7 +125,7 @@ export default function LoginScreen() {
       setError(message === "Request timed out"
         ? "UniServe took too long to respond. Check your connection and try again."
         : /network|fetch failed|SocketException|connection abort/i.test(message)
-          ? "Connection interrupted. Check your internet connection and try again. The free server may still be waking up."
+          ? "Connection interrupted. Check your internet connection and try again."
           : message);
       // Clear password on failure for security (audit recommendation)
       if (!/network|fetch failed|SocketException|connection abort|timed out/i.test(message)) {
@@ -262,7 +262,7 @@ export default function LoginScreen() {
 
               {isLoading && isConnectingSlowly ? (
                 <Text accessibilityRole="text" style={[styles.connectionNotice, { color: tcSec }]}>
-                  Connecting to UniServe… The server may be waking up after being idle.
+                  Connecting securely to UniServe. Please wait.
                   Your sign-in is still in progress.
                 </Text>
               ) : null}
