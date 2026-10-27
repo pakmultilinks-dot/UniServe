@@ -630,7 +630,7 @@ export default function ReportsPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Reports & Analytics"
-        description="Order, revenue, and cafeteria analytics from live backend data"
+        description="Order, revenue, and cafeteria performance"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -1060,7 +1060,7 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
             <Section
               title="Cancellation Reasons"
-              subtitle="Recorded reasons on cancelled orders · backend order events"
+              subtitle="Reasons recorded for cancelled orders"
             >
               {Object.keys(report.cancellation.cancellation_reasons).length > 0 ? (
                 <div className="space-y-1.5">
@@ -1080,7 +1080,7 @@ export default function ReportsPage() {
             </Section>
             <Section
               title="Hourly Order Volume"
-              subtitle="Orders by hour of day (created_at) · respects filters"
+              subtitle="Orders by hour of day · respects filters"
             >
               {report.volume.hourly.some((h) => h.order_count > 0) ? (
                 <HourlyStrip hours={report.volume.hourly} />
@@ -1358,13 +1358,13 @@ export default function ReportsPage() {
                   )}
                   <p className="text-[11px] text-[var(--text-muted)] mt-3">
                     Restock = sum of positive adjustments · Usage = absolute sum of negative
-                    adjustments · backend inventory adjustment records.
+                    adjustments, based on recorded stock changes.
                   </p>
                 </Section>
 
                 <Section
                   title="Peak Hours"
-                  subtitle={`Orders by hour of day (created_at) · ${rangeLabel}`}
+                  subtitle={`Orders by hour of day · ${rangeLabel}`}
                 >
                   <p className="text-[11px] text-[var(--text-muted)] mb-3">
                     Cafeteria timezone: {report.inventory.peakHours.timezone}
@@ -1383,11 +1383,10 @@ export default function ReportsPage() {
             <div className="mb-6">
               <Section
                 title="Inventory & Peak-Hour Reports"
-                subtitle="Cafeteria-scoped backend reports"
+                subtitle="Inventory and demand by cafeteria"
               >
                 <p className="text-sm text-[var(--text-muted)]">
-                  Stock levels, low stock, inventory turnover, and peak-hour reports are served
-                  per cafeteria by the backend. Select a specific cafeteria above to view them.
+                  Select a cafeteria above to view stock levels, low stock, inventory turnover and peak-hour reports.
                 </p>
               </Section>
             </div>

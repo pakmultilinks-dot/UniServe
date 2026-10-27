@@ -18,10 +18,6 @@ import {
 import type { ApiErrorInfo } from "@/lib/api";
 import type { Session } from "@uniserve/shared-types";
 
-// Version sourced from the repository's authoritative package.json files
-// (all packages report 0.1.0). Kept as a constant so the label cannot
-// drift from the deployed artifact without an intentional code change.
-const PLATFORM_VERSION = "0.1.0";
 
 function formatTimestamp(value: string | null | undefined): string {
   if (!value) return "—";
@@ -368,7 +364,7 @@ export default function SettingsPage() {
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Notifications</h3>
           <p className="text-xs text-[var(--text-muted)]">
             Notification preferences are managed in your mobile app profile settings.
-            The web console displays notifications received from the backend.
+            Your notifications are available in the notification center.
           </p>
           <button
             onClick={() => router.push("/dashboard/notifications")}
@@ -405,10 +401,6 @@ export default function SettingsPage() {
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5 shadow-card">
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Platform</h3>
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <span className="text-[var(--text-muted)]">Version</span>
-              <p className="text-[var(--text-primary)] font-medium">{PLATFORM_VERSION}</p>
-            </div>
             <div>
               <span className="text-[var(--text-muted)]">Role</span>
               <p className="text-[var(--text-primary)] font-medium capitalize">{user?.role?.replace(/_/g, " ")}</p>

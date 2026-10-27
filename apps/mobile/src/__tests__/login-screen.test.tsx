@@ -91,7 +91,7 @@ describe("LoginScreen — sign-in flow", () => {
     );
   });
 
-  it("explains an idle-server delay while the sign-in request is in progress", async () => {
+  it("keeps the user informed while sign-in is in progress", async () => {
     jest.useFakeTimers();
     mockLogin.mockImplementation(() => new Promise(() => undefined));
     try {
@@ -102,7 +102,7 @@ describe("LoginScreen — sign-in flow", () => {
       await act(async () => {
         jest.advanceTimersByTime(12_100);
       });
-      expect(screen.getByText(/The server may be waking up after being idle/)).toBeTruthy();
+      expect(screen.getByText(/Connecting securely to UniServe/)).toBeTruthy();
     } finally {
       jest.useRealTimers();
     }

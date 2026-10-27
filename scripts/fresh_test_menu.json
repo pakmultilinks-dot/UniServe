@@ -1,5 +1,5 @@
 {
-  "purpose": "Fresh dummy-account testing menu. Opening quantities are sample stock, not physical stock counts.",
+  "purpose": "Campus presentation menu with reviewed dish photographs.",
   "cafeterias": {
     "Student Cafeteria": [
       {
@@ -181,6 +181,26 @@
         "description": "Two warm gulab jamun in syrup.",
         "preparation_time_minutes": 3,
         "initial_quantity": 60
+      },
+      {
+        "name": "Egg on Toast",
+        "category": "breakfast",
+        "price": 12000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/omelette.jpg",
+        "description": "Freshly fried egg served on crisp toast.",
+        "preparation_time_minutes": 7,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Plain Paratha",
+        "category": "breakfast",
+        "price": 6000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/paratha-v2.jpg",
+        "description": "Freshly cooked layered paratha, served warm.",
+        "preparation_time_minutes": 7,
+        "initial_quantity": 60
       }
     ],
     "Faculty Cafe": [
@@ -302,6 +322,26 @@
         "image_url": "/api/v1/static/food/gulab-jamun-v2.jpg",
         "description": "Two warm gulab jamun in syrup.",
         "preparation_time_minutes": 3,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Egg on Toast",
+        "category": "breakfast",
+        "price": 12000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/omelette.jpg",
+        "description": "Freshly fried egg served on crisp toast.",
+        "preparation_time_minutes": 7,
+        "initial_quantity": 60
+      },
+      {
+        "name": "Plain Paratha",
+        "category": "breakfast",
+        "price": 6000,
+        "currency": "PKR",
+        "image_url": "/api/v1/static/food/paratha-v2.jpg",
+        "description": "Freshly cooked layered paratha, served warm.",
+        "preparation_time_minutes": 7,
         "initial_quantity": 60
       }
     ]

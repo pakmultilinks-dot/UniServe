@@ -19,7 +19,7 @@ const CATEGORY_ICONS: Record<string, IoniconName> = {
   main_course: "restaurant-outline",
   side_dish: "leaf-outline",
   dessert: "ice-cream-outline",
-  beverage: "beer-outline",
+  beverage: "cafe-outline",
   snack: "pizza-outline",
   salad: "nutrition-outline",
   soup: "flask-outline",

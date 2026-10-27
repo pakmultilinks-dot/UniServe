@@ -481,9 +481,6 @@ export default function OrdersPage() {
           Pending → Confirm → Prepare → Ready for pickup → Collected.
           {" "}Choose the correct cafeteria and status, then use the action on each order card.
         </p>
-        <p className="shrink-0 text-xs text-[var(--text-muted)]" title="Web build revision; compare with the deployed GitHub commit">
-          Web build: {(process.env.UNISERVE_BUILD_SHA || "local").slice(0, 8)}
-        </p>
       </div>
 
       {/* Phase 46 — cafeteria selector load failure (compact, retryable) */}
@@ -774,8 +771,7 @@ export default function OrdersPage() {
               inventory, and sets the cafeteria to CLOSED. Affected customers are notified.
             </p>
             <p className="text-xs text-[var(--text-muted)] mb-4">
-              Ready and completed orders are unaffected. The backend rejects this action unless you
-              are a manager assigned to this cafeteria.
+              Ready and completed orders are unaffected. Only authorized cafeteria administrators can close the day.
             </p>
             <label className="block text-sm text-[var(--text-secondary)] mb-1">
               Notes (optional)
@@ -963,7 +959,7 @@ export default function OrdersPage() {
                       <span className="text-[var(--text-primary)]">{formatDate(detailsModal.detail.pickup_deadline)}</span>
                     </div>
                   )}
-                  {detailsModal.detail.eta_minutes != null && (
+                  {["pending", "preparing"].includes(detailsModal.detail.status) && detailsModal.eta == null && detailsModal.detail.eta_minutes != null && (
                     <div>
                       <span className="text-[var(--text-muted)]">ETA: </span>
                       <span className="text-[var(--text-primary)]">{detailsModal.detail.eta_minutes} min</span>
@@ -971,7 +967,7 @@ export default function OrdersPage() {
                   )}
                   {detailsModal.eta != null && (
                     <div className="col-span-2 mt-1 px-2.5 py-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800">
-                      <span className="text-[var(--text-muted)]">Computed ETA: </span>
+                      <span className="text-[var(--text-muted)]">Estimated pickup: </span>
                       <span className="font-semibold text-[var(--text-primary)]">
                         {detailsModal.eta.eta_minutes} min
                       </span>
@@ -1016,20 +1012,8 @@ export default function OrdersPage() {
                   )}
                 </div>
 
-                {(detailsModal.detail.note || detailsModal.detail.collection_token) && (
-                  <div className="space-y-1.5 text-xs">
-                    {detailsModal.detail.note && (
-                      <p className="text-[var(--text-secondary)] italic">&quot;{detailsModal.detail.note}&quot;</p>
-                    )}
-                    {detailsModal.detail.collection_token && (
-                      <p className="text-[var(--text-muted)]">
-                        Collection token:{" "}
-                        <span className="font-mono text-[var(--text-secondary)]" title="Full token hidden for security">
-                          {String(detailsModal.detail.collection_token).slice(0, 8)}…
-                        </span>
-                      </p>
-                    )}
-                  </div>
+                {detailsModal.detail.note && (
+                  <p className="text-xs text-[var(--text-secondary)] italic">&quot;{detailsModal.detail.note}&quot;</p>
                 )}
               </div>
             ) : null}
@@ -1148,8 +1132,7 @@ export default function OrdersPage() {
               ))}
             </select>
             <p className="text-xs text-[var(--text-muted)] mt-1">
-              Reason values match the backend contract (capacity, item_unavailable,
-              cafeteria_issue, operational_issue, other).
+              Choose the reason that best explains why this order cannot be prepared.
             </p>
             <label className="block text-sm text-[var(--text-secondary)] mt-3 mb-1">
               Note (optional)
