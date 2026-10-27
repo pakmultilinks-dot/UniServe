@@ -29,7 +29,15 @@ try:
         adb("shell", "input", "keyevent", "4")
         _, root = dump(); tap(labelled_nodes(root, "Log In")[0])
         wait_text("Current cafeteria:", 160)
-        snap("presentation-" + role + "-home")
+        root = snap("presentation-" + role + "-home")
+        hearts = [n for n in root.iter("node") if n.attrib.get("content-desc") == "Add to favorites"]
+        assert hearts, "Menu favorite action missing"
+        tap(hearts[0]); time.sleep(3)
+        link("favorites"); root = wait_text("Remove from favorites", 45)
+        snap("presentation-" + role + "-favorite-added")
+        tap(labelled_nodes(root, "Remove from favorites")[0])
+        wait_text("No favorites yet", 45)
+        print("PASS fresh native favorite add/remove:", role, flush=True)
         link("orders"); root = wait_text("Orders", 45)
         snap("presentation-" + role + "-clean-orders")
         link("profile"); wait_text(ACCOUNTS[role]["email"], 45)

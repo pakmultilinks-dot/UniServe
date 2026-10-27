@@ -162,6 +162,20 @@ try:
         page.goto(WEB+'/dashboard/admin/overview',wait_until='networkidle',timeout=60000)
         page.screenshot(path=str(OUT/'04-admin-overview.png'),full_page=True)
         assert 'Access restricted' not in page.inner_text('body')
+        for path,title in [
+            ('cafeterias','Cafeterias'),('orders','Order Queue'),
+            ('admin/reports','Reports & Analytics'),('admin/users','Members'),
+            ('admin/broadcasts','Broadcasts'),('admin/refunds','Refund Management'),
+            ('admin/audit','Audit Log'),('admin/settings','Settings'),
+        ]:
+            page.goto(WEB+'/dashboard/'+path,wait_until='networkidle',timeout=60000)
+            page.get_by_role('heading',name=title,exact=True).wait_for(timeout=30000)
+            body=page.inner_text('body')
+            assert not any(label in body for label in ('Web build:', 'Computed ETA:', 'Collection token:', 'backend contract', 'live backend data'))
+            assert 'Access restricted' not in body
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Admin panel overflow: '+path
+            page.screenshot(path=str(OUT/('presentation-admin-'+path.replace('/','-')+'.png')),full_page=True)
+        print('PASS presentation admin panels and removal of developer labels',flush=True)
         browser.close()
     print('PASS actual browser manager price, availability, image upload, staff permissions and admin overview',flush=True)
 finally:
